@@ -1,7 +1,190 @@
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN python -c "from app import init_db" || true
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "2"]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Redstone PDM — My Jobs</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+  }
+  .topbar {
+    background: #1a2332;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-left { display: flex; flex-direction: column; }
+  .topbar-name { color: white; font-size: 16px; font-weight: 700; }
+  .topbar-sub  { color: #c0392b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 1px; }
+  .logout { color: #7f8c8d; font-size: 13px; text-decoration: none; padding: 6px 12px;
+            border: 1px solid #2c3e50; border-radius: 6px; color: #bdc3c7; }
+  .week-banner {
+    background: linear-gradient(135deg, #c0392b, #e74c3c);
+    color: white;
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .content { padding: 16px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #7f8c8d;
+    margin: 16px 0 10px;
+  }
+  .job-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    text-decoration: none;
+    display: block;
+    border-left: 4px solid #e0e0e0;
+    position: relative;
+  }
+  .job-card.callout  { border-left-color: #c0392b; }
+  .job-card.quote    { border-left-color: #2980b9; }
+  .job-card.miv      { border-left-color: #27ae60; }
+  .job-card.ppm      { border-left-color: #8e44ad; }
+  .job-card.done     { border-left-color: #27ae60; opacity: 0.7; }
+  .job-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .job-number { font-size: 12px; color: #7f8c8d; font-weight: 600; }
+  .job-date   { font-size: 11px; color: #bdc3c7; }
+  .job-site   { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
+  .job-desc   { font-size: 13px; color: #555; line-height: 1.4; margin-bottom: 8px;
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .job-meta   { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-type    { background: #f0f2f5; color: #7f8c8d; }
+  .badge-post    { background: #eaf4fb; color: #2980b9; }
+  .badge-due     { background: #fdf2f2; color: #c0392b; }
+  .badge-done    { background: #eafaf1; color: #27ae60; }
+  .arrow { position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+           color: #bdc3c7; font-size: 18px; }
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #bdc3c7;
+    font-size: 14px;
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 8px; }
+  .recent-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .recent-left { flex: 1; }
+  .recent-job  { font-size: 13px; font-weight: 600; color: #1a2332; }
+  .recent-site { font-size: 12px; color: #7f8c8d; margin-top: 2px; }
+  .status-pill {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+  .status-submitted { background: #fef9e7; color: #f39c12; }
+  .status-approved  { background: #eafaf1; color: #27ae60; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-name">{{ contractor.name }}</div>
+    <div class="topbar-sub">Field Engineer</div>
+  </div>
+  <a href="/logout" class="logout">Sign out</a>
+</div>
+
+<div class="week-banner">
+  📅 Week commencing {{ week_start.strftime('%d %B %Y') }}
+</div>
+
+<div class="content">
+
+  <div class="section-title">This Week's Jobs</div>
+
+  {% if jobs %}
+    {% set days = {} %}
+    {% for job in jobs %}
+      {% set day_key = job.day_date.strftime('%A %d %b') %}
+      {% if day_key not in days %}
+        {% set _ = days.update({day_key: []}) %}
+      {% endif %}
+    {% endfor %}
+
+    {% set current_day = namespace(value='') %}
+    {% for job in jobs %}
+      {% set day_label = job.day_date.strftime('%A %d %b') %}
+      {% if day_label != current_day.value %}
+        {% set current_day.value = day_label %}
+        <div class="section-title" style="margin-top:20px;">{{ day_label }}</div>
+      {% endif %}
+
+      {% set tab = job.tab | lower %}
+      {% set is_done = job.card_id is not none %}
+      <a href="/job/{{ job.job_id }}/{{ job.day_date.strftime('%Y-%m-%d') }}"
+         class="job-card {{ tab }} {% if is_done %}done{% endif %}">
+        <div class="job-top">
+          <span class="job-number">{{ job.job_id }}</span>
+          <span class="job-date">{{ job.day_date.strftime('%a %d %b') }}</span>
+        </div>
+        <div class="job-site">{{ job.pub_name }}</div>
+        <div class="job-desc">{{ job.description }}</div>
+        <div class="job-meta">
+          <span class="badge badge-type">{{ job.tab }}</span>
+          {% if job.postcode %}<span class="badge badge-post">{{ job.postcode }}</span>{% endif %}
+          {% if job.due_date %}<span class="badge badge-due">Due {{ job.due_date[:10] }}</span>{% endif %}
+          {% if is_done %}<span class="badge badge-done">✓ Submitted</span>{% endif %}
+        </div>
+        {% if not is_done %}<span class="arrow">›</span>{% endif %}
+      </a>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📋</div>
+      No jobs allocated for this week yet.<br>Check back once the planner has been updated.
+    </div>
+  {% endif %}
+
+  {% if recent_cards %}
+  <div class="section-title" style="margin-top: 28px;">Recent Submissions</div>
+  {% for card in recent_cards %}
+  <div class="recent-card">
+    <div class="recent-left">
+      <div class="recent-job">{{ card.job_id }} · {{ card.card_date.strftime('%d %b') }}</div>
+      <div class="recent-site">{{ card.site_name }} · £{{ '%.2f'|format(card.invoice_total) }}</div>
+    </div>
+    <span class="status-pill status-{{ card.status }}">{{ card.status }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+</div>
+</body>
+</html>
