@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Redstone PDM Job Cards</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+  }
+  .topbar {
+    background: #1a2332;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .topbar h1 { color: white; font-size: 18px; font-weight: 700; }
+  .topbar span { color: #c0392b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .logout { color: #bdc3c7; font-size: 13px; text-decoration: none; }
+
+  .content { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .page-title { font-size: 22px; font-weight: 700; color: #1a2332; margin-bottom: 6px; }
+  .page-sub   { font-size: 13px; color: #7f8c8d; margin-bottom: 24px; }
+
+  .filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1.5px solid #e0e0e0;
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #555;
+  }
+  .filter-btn.active { background: #1a2332; color: white; border-color: #1a2332; }
+
+  table { width: 100%; border-collapse: collapse; background: white;
+          border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  thead { background: #1a2332; }
+  th { color: white; padding: 12px 16px; text-align: left; font-size: 11px;
+       text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+  td { padding: 14px 16px; border-bottom: 1px solid #f0f2f5; font-size: 13px; color: #333; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+
+  .contractor-name { font-weight: 600; color: #1a2332; }
+  .job-id { font-family: monospace; font-size: 12px; color: #7f8c8d; }
+  .site-name { font-weight: 500; }
+  .amount { font-weight: 700; color: #1a2332; }
+  .cis { color: #c0392b; font-size: 12px; }
+  .net { color: #27ae60; font-weight: 700; }
+
+  .status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .status-submitted { background: #fef9e7; color: #f39c12; }
+  .status-approved  { background: #eafaf1; color: #27ae60; }
+
+  .actions { display: flex; gap: 8px; }
+  .btn-approve {
+    padding: 6px 14px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-approve:hover { background: #219a52; }
+  .btn-pdf {
+    padding: 6px 14px;
+    background: #1a2332;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .summary-label { font-size: 11px; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 6px; }
+  .summary-value { font-size: 24px; font-weight: 700; color: #1a2332; }
+  .summary-sub   { font-size: 12px; color: #7f8c8d; margin-top: 2px; }
+
+  .empty { text-align: center; padding: 60px; color: #bdc3c7; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>Redstone PDM</h1>
+    <span>Admin · Job Cards</span>
+  </div>
+  <a href="/logout" class="logout">Sign out</a>
+</div>
+
+<div class="content">
+  <div class="page-title">Job Card Review</div>
+  <div class="page-sub">Review, approve and download job cards submitted by field engineers.</div>
+
+  <!-- Summary -->
+  {% set pending = cards | selectattr('status', 'eq', 'submitted') | list %}
+  {% set approved = cards | selectattr('status', 'eq', 'approved') | list %}
+  {% set total_value = cards | sum(attribute='invoice_total') %}
+  {% set total_cis = cards | sum(attribute='cis_deduction') %}
+
+  <div class="summary-cards">
+    <div class="summary-card">
+      <div class="summary-label">Pending Approval</div>
+      <div class="summary-value">{{ pending | length }}</div>
+      <div class="summary-sub">job cards</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Approved This Period</div>
+      <div class="summary-value">{{ approved | length }}</div>
+      <div class="summary-sub">job cards</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total Invoice Value</div>
+      <div class="summary-value">£{{ '%.2f'|format(total_value) }}</div>
+      <div class="summary-sub">gross</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total CIS Deductions</div>
+      <div class="summary-value">£{{ '%.2f'|format(total_cis) }}</div>
+      <div class="summary-sub">to remit to HMRC</div>
+    </div>
+  </div>
+
+  {% if cards %}
+  <table>
+    <thead>
+      <tr>
+        <th>Engineer</th>
+        <th>Job / Date</th>
+        <th>Site</th>
+        <th>Labour</th>
+        <th>Gross</th>
+        <th>CIS</th>
+        <th>Net Pay</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for card in cards %}
+      <tr id="row_{{ card.id }}">
+        <td class="contractor-name">
+          {{ contractors[card.contractor_key].name if card.contractor_key in contractors else card.contractor_key }}
+        </td>
+        <td>
+          <div class="job-id">{{ card.job_id }}</div>
+          <div style="font-size:12px;color:#555;margin-top:2px;">{{ card.card_date.strftime('%d %b %Y') }}</div>
+        </td>
+        <td class="site-name">
+          {{ card.site_name }}<br>
+          <span style="font-size:11px;color:#7f8c8d;">{{ card.postcode }}</span>
+        </td>
+        <td>
+          £{{ '%.2f'|format(card.labour_cost) }}<br>
+          <span style="font-size:11px;color:#7f8c8d;">{{ card.labour_type }}</span>
+        </td>
+        <td class="amount">£{{ '%.2f'|format(card.invoice_total) }}</td>
+        <td class="cis">-£{{ '%.2f'|format(card.cis_deduction) }}</td>
+        <td class="net">£{{ '%.2f'|format(card.net_payment) }}</td>
+        <td>
+          <span class="status-pill status-{{ card.status }}" id="status_{{ card.id }}">
+            {{ card.status }}
+          </span>
+        </td>
+        <td>
+          <div class="actions">
+            {% if card.status == 'submitted' %}
+            <button class="btn-approve" onclick="approveCard({{ card.id }})">Approve</button>
+            {% endif %}
+            <a href="/card/{{ card.id }}/jobcard.pdf" class="btn-pdf" target="_blank">PDF</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">No job cards submitted yet.</div>
+  {% endif %}
+
+</div>
+
+<script>
+async function approveCard(id) {
+  if (!confirm('Approve this job card?')) return;
+  const resp = await fetch(`/admin/approve/${id}`, { method: 'POST' });
+  if (resp.ok) {
+    document.getElementById(`status_${id}`).textContent = 'approved';
+    document.getElementById(`status_${id}`).className = 'status-pill status-approved';
+    document.querySelector(`#row_${id} .btn-approve`)?.remove();
+  }
+}
+</script>
+
+</body>
+</html>
