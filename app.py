@@ -99,7 +99,7 @@ CONTRACTORS = {
         "password": "chambers2024",
     },
     "ash_everett": {
-        "name": "Ash Everett",
+        "name": "Ashley Everett",
         "email": "asheverett03@gmail.com",
         "phone": "07917524608",
         "address": "30 Mill Close, Elsenham, Bishops Stortford, CM22 6EG",
