@@ -710,7 +710,7 @@ def dashboard():
         LEFT JOIN job_cards jc ON jc.job_id = a.job_id
             AND jc.contractor_key = %s
             AND jc.card_date = a.day_date
-        WHERE a.contractor_name = %s
+        WHERE a.contractor = %s
         AND a.day_date BETWEEN %s AND %s
         ORDER BY a.day_date, a.id
     """, (key, contractor["name"], week_start, week_end))
