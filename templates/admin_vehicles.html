@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet & Vehicles — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; margin-left: 16px; }
+  .topbar-right a:hover { color: white; }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+  .btn { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-primary { background: #c0392b; color: white; }
+  .btn-primary:hover { background: #a93226; }
+  .btn-secondary { background: #1a2332; color: white; }
+  .btn-secondary:hover { background: #0f1923; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+  .vehicle-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 18px;
+  }
+
+  .vehicle-card {
+    background: white; border-radius: 12px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-left: 4px solid #e0e0e0;
+  }
+  .vehicle-card.mot-valid    { border-left-color: #1a7a4a; }
+  .vehicle-card.mot-due_soon { border-left-color: #e6a817; }
+  .vehicle-card.mot-expired  { border-left-color: #c0392b; }
+  .vehicle-card.mot-unknown  { border-left-color: #adb5bd; }
+
+  .vc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .vc-reg { font-size: 20px; font-weight: 800; color: #1a2332; letter-spacing: 1px; font-family: monospace; }
+  .vc-make { font-size: 13px; color: #666; margin-top: 2px; }
+  .mot-badge {
+    padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
+  }
+  .mot-badge.valid    { background: #d1e7dd; color: #0a5c36; }
+  .mot-badge.due_soon { background: #fff3cd; color: #856404; }
+  .mot-badge.expired  { background: #f8d7da; color: #842029; }
+  .mot-badge.unknown  { background: #f0f2f5; color: #555; }
+
+  .vc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .vc-stat { }
+  .vc-stat-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .vc-stat-value { font-size: 14px; color: #1a2332; font-weight: 600; margin-top: 2px; }
+  .vc-stat-value.red { color: #c0392b; }
+  .vc-stat-value.amber { color: #c77a10; }
+
+  /* Service progress bar */
+  .service-bar-wrap { margin-bottom: 14px; }
+  .service-bar-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .service-bar { height: 8px; background: #f0f2f5; border-radius: 4px; overflow: hidden; }
+  .service-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .service-fill.green { background: #1a7a4a; }
+  .service-fill.amber { background: #e6a817; }
+  .service-fill.red   { background: #c0392b; }
+
+  .vc-driver { font-size: 13px; color: #555; margin-bottom: 14px; }
+  .vc-driver strong { color: #1a2332; }
+
+  .vc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Edit modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: white; border-radius: 14px; padding: 28px;
+    width: 100%; max-width: 440px; box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+  }
+  .modal h3 { font-size: 18px; color: #1a2332; margin-bottom: 18px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
+  input, textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 14px; font-family: inherit; color: #1a2332;
+  }
+  input:focus, textarea:focus { outline: none; border-color: #c0392b; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  .btn-cancel { background: #f0f2f5; color: #333; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/jobcards">Job Cards</a>
+    <a href="/admin/contractors">Contractors</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <h2>Fleet & Vehicles</h2>
+    <button class="btn btn-secondary" onclick="refreshAllMOT()">🔄 Refresh All MOT Status</button>
+  </div>
+
+  <div class="vehicle-grid">
+    {% for v in vehicles %}
+    {% set mot_status = v.mot_status or 'unknown' %}
+    {% set miles_since = (v.current_mileage or 0) - (v.last_service_mileage or 0) %}
+    {% set interval = v.service_interval_miles or 12000 %}
+    {% set service_pct = [[(miles_since / interval * 100)|int, 0]|max, 100]|min %}
+    {% set service_color = 'red' if service_pct >= 90 else ('amber' if service_pct >= 70 else 'green') %}
+
+    <div class="vehicle-card mot-{{ mot_status }}" id="vcard-{{ v.id }}">
+      <div class="vc-top">
+        <div>
+          <div class="vc-reg">{{ v.van_reg }}</div>
+          <div class="vc-make">{{ v.make_model or 'Unknown' }}{% if v.year %} ({{ v.year }}){% endif %}</div>
+        </div>
+        <span class="mot-badge {{ mot_status }}" id="mot-badge-{{ v.id }}">
+          {% if mot_status == 'valid' %}✓ MOT Valid
+          {% elif mot_status == 'due_soon' %}⚠ MOT Due Soon
+          {% elif mot_status == 'expired' %}✗ MOT Expired
+          {% else %}MOT Unknown{% endif %}
+        </span>
+      </div>
+
+      <div class="vc-driver">Driver: <strong>{{ v.driver_name or 'Unassigned' }}</strong>
+        {% if not v.redstone_vehicle %} <span style="font-size:11px;color:#888">(own vehicle)</span>{% endif %}
+      </div>
+
+      <div class="vc-stats">
+        <div class="vc-stat">
+          <div class="vc-stat-label">MOT Expiry</div>
+          <div class="vc-stat-value {% if mot_status == 'expired' %}red{% elif mot_status == 'due_soon' %}amber{% endif %}"
+               id="mot-expiry-{{ v.id }}">
+            {% if v.mot_expiry %}{{ v.mot_expiry.strftime('%d %b %Y') }}{% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="vc-stat">
+          <div class="vc-stat-label">Current Mileage</div>
+          <div class="vc-stat-value">{{ '{:,}'.format(v.current_mileage or 0) }}</div>
+        </div>
+        <div class="vc-stat">
+          <div class="vc-stat-label">Last Serviced At</div>
+          <div class="vc-stat-value">{{ '{:,}'.format(v.last_service_mileage or 0) }} mi</div>
+        </div>
+        <div class="vc-stat">
+          <div class="vc-stat-label">Since Service</div>
+          <div class="vc-stat-value {% if service_pct >= 90 %}red{% elif service_pct >= 70 %}amber{% endif %}">
+            {{ '{:,}'.format(miles_since) }} mi
+          </div>
+        </div>
+      </div>
+
+      <div class="service-bar-wrap">
+        <div class="service-bar-label">
+          <span>Service due in {{ '{:,}'.format([interval - miles_since, 0]|max) }} miles</span>
+          <span>{{ service_pct }}%</span>
+        </div>
+        <div class="service-bar">
+          <div class="service-fill {{ service_color }}" style="width:{{ service_pct }}%"></div>
+        </div>
+      </div>
+
+      <div class="vc-actions">
+        <button class="btn btn-secondary btn-sm" onclick="refreshMOT({{ v.id }}, '{{ v.van_reg }}')">Check MOT</button>
+        <button class="btn btn-sm" style="background:#f0f2f5;color:#333" onclick="editVehicle({{ v.id }}, '{{ v.make_model or '' }}', {{ v.year or 'null' }}, {{ v.last_service_mileage or 0 }}, {{ v.service_interval_miles or 12000 }}, '{{ v.notes or '' }}')">Edit</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Vehicle</h3>
+    <input type="hidden" id="edit-vid">
+    <div class="form-group">
+      <label>Make & Model</label>
+      <input type="text" id="edit-make">
+    </div>
+    <div class="form-group">
+      <label>Year</label>
+      <input type="number" id="edit-year" min="1990" max="2030">
+    </div>
+    <div class="form-group">
+      <label>Last Serviced At (miles)</label>
+      <input type="number" id="edit-service-at">
+    </div>
+    <div class="form-group">
+      <label>Service Interval (miles)</label>
+      <input type="number" id="edit-interval">
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="edit-notes" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveVehicle()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function refreshMOT(vid, reg) {
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = 'Checking...';
+    const res = await fetch(`/admin/vehicles/${vid}/refresh_mot`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      const badge = document.getElementById(`mot-badge-${vid}`);
+      const expiry = document.getElementById(`mot-expiry-${vid}`);
+      const card = document.getElementById(`vcard-${vid}`);
+      const statusMap = { valid: '✓ MOT Valid', due_soon: '⚠ MOT Due Soon', expired: '✗ MOT Expired', unknown: 'MOT Unknown' };
+      badge.textContent = statusMap[data.status] || 'MOT Unknown';
+      badge.className = `mot-badge ${data.status}`;
+      card.className = `vehicle-card mot-${data.status}`;
+      expiry.textContent = data.expiry || '—';
+    } else {
+      alert('Could not fetch MOT data: ' + (data.error || 'Unknown error'));
+    }
+    btn.disabled = false; btn.textContent = 'Check MOT';
+  }
+
+  async function refreshAllMOT() {
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = 'Refreshing all...';
+    const res = await fetch('/admin/vehicles/refresh_all_mot', { method: 'POST' });
+    const data = await res.json();
+    btn.disabled = false; btn.textContent = '🔄 Refresh All MOT Status';
+    if (data.ok) location.reload();
+  }
+
+  function editVehicle(vid, make, year, serviceAt, interval, notes) {
+    document.getElementById('edit-vid').value = vid;
+    document.getElementById('edit-make').value = make;
+    document.getElementById('edit-year').value = year || '';
+    document.getElementById('edit-service-at').value = serviceAt;
+    document.getElementById('edit-interval').value = interval;
+    document.getElementById('edit-notes').value = notes;
+    document.getElementById('edit-modal').classList.add('show');
+  }
+
+  function closeModal() {
+    document.getElementById('edit-modal').classList.remove('show');
+  }
+
+  async function saveVehicle() {
+    const vid = document.getElementById('edit-vid').value;
+    const form = new FormData();
+    form.append('make_model', document.getElementById('edit-make').value);
+    form.append('year', document.getElementById('edit-year').value);
+    form.append('last_service_mileage', document.getElementById('edit-service-at').value);
+    form.append('service_interval_miles', document.getElementById('edit-interval').value);
+    form.append('notes', document.getElementById('edit-notes').value);
+    const res = await fetch(`/admin/vehicles/${vid}/update`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) { closeModal(); location.reload(); }
+  }
+
+  document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+</script>
+
+</body>
+</html>
