@@ -386,9 +386,7 @@
         <span>Total Mileage</span>
         <span id="journey_total_miles">0 miles — £0.00</span>
       </div>
-      <div style="font-size:12px;color:#7f8c8d;margin-top:8px;">
-        Rate: {{ (contractor.mileage_rate * 100)|int }}p per mile
-      </div>
+
     </div>
   </div>
   {% else %}
@@ -564,7 +562,8 @@ async function calcLegMiles(id, type) {
     const miles = data.miles || 0;
     const cost = (miles * MILEAGE_RATE).toFixed(2);
     el.className = 'leg-miles';
-    el.textContent = `${miles} miles — £${cost}`;
+    const paidMileage = document.querySelector('[name=contractor_paid_mileage]')?.value === '1';
+    el.textContent = paidMileage ? `${miles} miles — £${cost}` : `${miles} miles`;
     updateLeg(id, type, from, to, miles, parseFloat(cost));
   } catch(e) {
     el.textContent = 'Could not calculate — check connection';
@@ -589,12 +588,15 @@ function removeLeg(id) {
 
 function updateJourneyTotal() {
   const total = legs.reduce((s, l) => s + (l.miles || 0), 0);
-  const cost = (total * MILEAGE_RATE).toFixed(2);
   document.getElementById('total_miles').value = total.toFixed(1);
   const el = document.getElementById('journey_total');
   if (total > 0) {
     el.style.display = 'flex';
-    document.getElementById('journey_total_miles').textContent = `${total.toFixed(1)} miles — £${cost}`;
+    const paidMileage = document.querySelector('[name=contractor_paid_mileage]')?.value === '1';
+    const label = paidMileage
+      ? `${total.toFixed(1)} miles — £${(total * MILEAGE_RATE).toFixed(2)}`
+      : `${total.toFixed(1)} miles (HMRC record)`;
+    document.getElementById('journey_total_miles').textContent = label;
   } else {
     el.style.display = 'none';
   }
