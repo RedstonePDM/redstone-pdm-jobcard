@@ -816,6 +816,7 @@ def submit_job_card(job_id, card_date):
     # Detect job type from job_id prefix
     job_prefix = str(job_id)[:4] if job_id else "1000"
     is_ppm = job_prefix == "2000"  # PPM jobs always full day rate
+    # 1000/3000 = reactive hourly, 2000 = PPM full day, 5000/8000 = quoted hourly
 
     if is_ppm:
         # PPM: full day rate + any logged overtime
