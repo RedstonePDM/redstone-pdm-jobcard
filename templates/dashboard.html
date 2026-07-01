@@ -38,8 +38,9 @@
   .hero-week { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 3px; font-weight: 600; }
 
   /* 3 main tiles */
-  .tile-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
-  @media (max-width: 600px) { .tile-row { grid-template-columns: 1fr; } }
+  .tile-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  @media (max-width: 800px) { .tile-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 480px) { .tile-row { grid-template-columns: 1fr; } }
 
   .main-tile {
     background: white; border-radius: 14px; padding: 22px 18px;
@@ -180,6 +181,13 @@
       <span class="mt-badge badge-grey">View profile</span>
     </a>
 
+    <div class="main-tile" onclick="showSection('reminders')" id="tile-reminders">
+      <div class="mt-icon">📌</div>
+      <div class="mt-title">Notes from Redstone</div>
+      <div class="mt-desc">Instructions and reminders from the office for this week</div>
+      <span class="mt-badge badge-grey" id="reminder-badge">Loading...</span>
+    </div>
+
   </div>
 
   <!-- This week section -->
@@ -239,6 +247,17 @@
     {% endif %}
   </div>
 
+  <!-- Reminders section -->
+  <div id="section-reminders" class="section-card" style="display:none">
+    <div class="section-title">
+      <span>📌 Notes from Redstone</span>
+      <span style="font-size:13px;color:#888;font-weight:400">w/c {{ week_start.strftime('%d %B') }}</span>
+    </div>
+    <div id="reminder-content">
+      <div class="empty-state" style="color:#bbb">Loading...</div>
+    </div>
+  </div>
+
   <!-- My Job Cards section -->
   <div id="section-my-cards" class="section-card" style="display:none">
     <div class="section-title">
@@ -276,6 +295,25 @@
     // Highlight active tile
     document.querySelectorAll('.main-tile').forEach(t => t.style.borderColor = '');
   }
+
+  // Load weekly note
+  fetch('/api/my_note').then(r => r.json()).then(data => {
+    const badge = document.getElementById('reminder-badge');
+    const content = document.getElementById('reminder-content');
+    if (data.note) {
+      badge.textContent = '📌 You have a note';
+      badge.className = 'mt-badge badge-red';
+      content.innerHTML = `<div style="background:#fff8ef;border:1px solid #ffd89b;border-radius:10px;padding:18px 20px;font-size:14px;line-height:1.7;color:#5c3d00;white-space:pre-wrap">${data.note}</div>`;
+      // Flash the tile
+      document.getElementById('tile-reminders').style.borderColor = '#c0392b';
+    } else {
+      badge.textContent = 'No notes this week';
+      badge.className = 'mt-badge badge-grey';
+      content.innerHTML = '<div class="empty-state">No notes from Redstone this week.</div>';
+    }
+  }).catch(() => {
+    document.getElementById('reminder-badge').textContent = 'Unavailable';
+  });
 
   // Show this week by default
   showSection('this-week');
