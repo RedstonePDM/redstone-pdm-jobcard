@@ -804,6 +804,16 @@ def submit_job_card(job_id, card_date):
     except Exception:
         journey_legs = []
 
+    # Recalculate billable miles server-side — exclude nextjob legs
+    billable_miles = sum(
+        float(l.get("miles", 0))
+        for l in journey_legs
+        if l.get("type") != "nextjob"
+    )
+    # Override client-submitted total with server-calculated value
+    if journey_legs:
+        mileage_miles = round(billable_miles, 1)
+
     # Parse parking charges
     parking = 0.0
     parking_items = []
