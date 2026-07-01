@@ -118,11 +118,33 @@
     <div class="topbar-name">{{ contractor.name }}</div>
     <div class="topbar-sub">Field Engineer</div>
   </div>
-  <a href="/logout" class="logout">Sign out</a>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <a href="/profile" style="color:#bdc3c7;font-size:13px;text-decoration:none;padding:6px 12px;border:1px solid #2c3e50;border-radius:6px;">My Profile</a>
+    <a href="/logout" class="logout">Sign out</a>
+  </div>
 </div>
 
 <div class="week-banner">
   📅 Week commencing {{ week_start.strftime('%d %B %Y') }}
+</div>
+
+<!-- Odometer banner — only shown for van contractors who haven't submitted this week -->
+<div id="odo_banner" style="display:none;background:#fff8e1;border-bottom:2px solid #f39c12;padding:14px 20px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;max-width:600px;margin:0 auto;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#856404;margin-bottom:2px;">📍 Weekly Odometer Reading Required</div>
+      <div style="font-size:12px;color:#a07000;" id="odo_banner_text">Enter your odometer reading to start the week.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="number" id="odo_banner_input" placeholder="Current miles"
+             style="width:140px;padding:10px 12px;border:1.5px solid #f39c12;border-radius:8px;font-size:15px;font-weight:700;color:#1a2332;outline:none;"
+             inputmode="numeric">
+      <button onclick="submitOdometerBanner()"
+              style="padding:10px 16px;background:#f39c12;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+        Submit ✓
+      </button>
+    </div>
+  </div>
 </div>
 
 <div class="content">
@@ -186,5 +208,43 @@
   {% endif %}
 
 </div>
+<script>
+async function checkOdometerBanner() {
+  try {
+    const resp = await fetch('/api/odometer_needed');
+    const data = await resp.json();
+    if (data.needed) {
+      document.getElementById('odo_banner').style.display = 'block';
+      document.getElementById('odo_banner_text').textContent =
+        `Week commencing ${data.week_commencing} · ${data.van_reg} · Enter your current mileage`;
+    }
+  } catch(e) {}
+}
+
+async function submitOdometerBanner() {
+  const reading = document.getElementById('odo_banner_input').value;
+  if (!reading || parseInt(reading) < 1) {
+    document.getElementById('odo_banner_input').style.borderColor = '#c0392b';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/odometer_submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reading: parseInt(reading) })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      const banner = document.getElementById('odo_banner');
+      banner.style.background = '#eafaf1';
+      banner.style.borderColor = '#27ae60';
+      banner.innerHTML = '<div style="text-align:center;padding:4px;font-size:14px;font-weight:700;color:#27ae60;">✓ Odometer reading saved — thank you!</div>';
+      setTimeout(() => banner.style.display = 'none', 2500);
+    }
+  } catch(e) {}
+}
+
+checkOdometerBanner();
+</script>
 </body>
 </html>
