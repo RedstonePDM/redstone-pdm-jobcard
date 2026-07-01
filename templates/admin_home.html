@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Redstone PDM — Admin</title>
+<title>Redstone PDM — Admin HQ</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
-
   .topbar {
     background: #1a2332; color: white; padding: 0 24px;
     display: flex; align-items: center; justify-content: space-between;
@@ -16,39 +15,42 @@
   }
   .topbar-brand { font-weight: 700; font-size: 18px; letter-spacing: 0.5px; }
   .topbar-brand span { color: #c0392b; }
-  .topbar-right { display: flex; align-items: center; gap: 16px; }
-  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; }
-  .topbar-right a:hover { color: white; }
+  .topbar-right { display: flex; align-items: center; gap: 4px; }
+  .topbar-right a {
+    color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px;
+    padding: 7px 12px; border-radius: 6px; transition: all 0.15s;
+  }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
   .page { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
 
-  .welcome { margin-bottom: 32px; }
-  .welcome h1 { font-size: 26px; color: #1a2332; font-weight: 700; }
+  .welcome { margin-bottom: 28px; }
+  .welcome h1 { font-size: 26px; color: #1a2332; font-weight: 800; }
   .welcome p { color: #666; margin-top: 4px; font-size: 15px; }
 
   /* Alert bar */
   .alert-bar {
     background: white; border-radius: 10px; padding: 14px 20px;
-    margin-bottom: 28px; display: flex; gap: 20px; flex-wrap: wrap;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom: 28px; display: flex; gap: 12px; flex-wrap: wrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08); align-items: center;
   }
   .alert-chip {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 13px; font-weight: 600; padding: 6px 14px;
-    border-radius: 20px; cursor: default;
+    display: flex; align-items: center; gap: 7px;
+    font-size: 13px; font-weight: 600; padding: 5px 14px;
+    border-radius: 20px;
   }
   .alert-chip.warn { background: #fff3cd; color: #856404; }
   .alert-chip.ok   { background: #d1e7dd; color: #0a5c36; }
-  .alert-chip.info { background: #cfe2ff; color: #084298; }
-  .alert-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .alert-chip.warn .dot { background: #e6a817; }
-  .alert-chip.ok   .dot { background: #198754; }
-  .alert-chip.info .dot { background: #0d6efd; }
+  .alert-chip.info { background: #e8eaf6; color: #3949ab; }
+  .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .warn .chip-dot { background: #e6a817; }
+  .ok   .chip-dot { background: #198754; }
+  .info .chip-dot { background: #3949ab; }
 
   /* Tile grid */
   .tile-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
     gap: 20px;
   }
 
@@ -56,21 +58,14 @@
     background: white; border-radius: 14px; padding: 28px 24px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     text-decoration: none; color: inherit;
-    display: flex; flex-direction: column; gap: 12px;
+    display: flex; flex-direction: column; gap: 10px;
     border: 2px solid transparent;
     transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
-    cursor: pointer;
   }
-  .tile:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    border-color: #c0392b;
-  }
-  .tile-icon {
-    width: 52px; height: 52px; border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 26px;
-  }
+  .tile:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); border-color: #c0392b; }
+  .tile.disabled { opacity: 0.55; pointer-events: none; }
+
+  .tile-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
   .tile-icon.red    { background: #fdf0ef; }
   .tile-icon.blue   { background: #eff4ff; }
   .tile-icon.green  { background: #effdf4; }
@@ -79,49 +74,27 @@
   .tile-icon.teal   { background: #effbff; }
 
   .tile-title { font-size: 17px; font-weight: 700; color: #1a2332; }
-  .tile-desc  { font-size: 13px; color: #666; line-height: 1.5; }
+  .tile-desc  { font-size: 13px; color: #666; line-height: 1.5; flex: 1; }
+
   .tile-badge {
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 12px; font-weight: 700; padding: 3px 10px;
-    border-radius: 12px; width: fit-content; margin-top: 4px;
+    border-radius: 12px; width: fit-content;
   }
-  .tile-badge.red    { background: #fdf0ef; color: #c0392b; }
-  .tile-badge.green  { background: #effdf4; color: #1a7a4a; }
-  .tile-badge.amber  { background: #fff8ef; color: #c77a10; }
-  .tile-badge.grey   { background: #f0f2f5; color: #555; }
-  .tile-badge.blue   { background: #eff4ff; color: #1a4fa0; }
+  .badge-red    { background: #fdf0ef; color: #c0392b; }
+  .badge-green  { background: #effdf4; color: #1a7a4a; }
+  .badge-amber  { background: #fff8ef; color: #c77a10; }
+  .badge-grey   { background: #f0f2f5; color: #555; }
+  .badge-blue   { background: #eff4ff; color: #1a4fa0; }
 
-  .tile-arrow { color: #c0392b; font-size: 18px; margin-top: auto; align-self: flex-end; }
-
-  /* Week status bar */
-  .week-bar {
-    background: white; border-radius: 10px; padding: 16px 20px;
-    margin-bottom: 20px; display: flex; align-items: center;
-    justify-content: space-between; flex-wrap: wrap; gap: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  }
-  .week-bar-left { font-size: 14px; color: #333; }
-  .week-bar-left strong { color: #1a2332; }
-  .week-status-pill {
-    padding: 5px 16px; border-radius: 20px; font-size: 13px; font-weight: 700;
-  }
-  .week-status-pill.draft     { background: #f0f2f5; color: #666; }
-  .week-status-pill.published { background: #effdf4; color: #1a7a4a; }
-  .btn-sm {
-    padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-    cursor: pointer; border: none; text-decoration: none; display: inline-block;
-  }
-  .btn-primary { background: #c0392b; color: white; }
-  .btn-primary:hover { background: #a93226; }
-  .btn-secondary { background: #1a2332; color: white; }
-  .btn-secondary:hover { background: #0f1923; }
+  .tile-arrow { color: #c0392b; font-size: 18px; align-self: flex-end; margin-top: 4px; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/admin" style="text-decoration:none">
-    <div class="topbar-brand">Redstone <span>PDM</span></div>
+  <a href="/admin" style="text-decoration:none;color:white">
+    <div class="topbar-brand">Redstone <span>PDM</span> &nbsp;<span style="font-size:12px;opacity:0.5;font-weight:400">Admin HQ</span></div>
   </a>
   <div class="topbar-right">
     <a href="/admin/jobcards">Job Cards</a>
@@ -135,68 +108,52 @@
 <div class="page">
 
   <div class="welcome">
-    <h1>Admin Dashboard</h1>
-    <p>Redstone PDM — Operations Platform</p>
+    <h1>Admin HQ</h1>
+    <p>Redstone PDM — Operations Command Centre</p>
   </div>
 
-  <!-- Alert bar -->
+  <!-- Status bar -->
   <div class="alert-bar">
     {% if pending_cards > 0 %}
-    <div class="alert-chip warn"><div class="dot"></div>{{ pending_cards }} job card{{ 's' if pending_cards != 1 }} awaiting review</div>
+    <div class="alert-chip warn"><div class="chip-dot"></div>{{ pending_cards }} job card{{ 's' if pending_cards != 1 }} pending review</div>
     {% else %}
-    <div class="alert-chip ok"><div class="dot"></div>All job cards reviewed</div>
+    <div class="alert-chip ok"><div class="chip-dot"></div>All job cards reviewed</div>
     {% endif %}
 
     {% if pending_changes > 0 %}
-    <div class="alert-chip warn"><div class="dot"></div>{{ pending_changes }} profile change{{ 's' if pending_changes != 1 }} pending</div>
+    <div class="alert-chip warn"><div class="chip-dot"></div>{{ pending_changes }} profile change{{ 's' if pending_changes != 1 }} pending</div>
     {% endif %}
 
     {% if mot_alerts > 0 %}
-    <div class="alert-chip warn"><div class="dot"></div>{{ mot_alerts }} MOT alert{{ 's' if mot_alerts != 1 }}</div>
+    <div class="alert-chip warn"><div class="chip-dot"></div>{{ mot_alerts }} MOT alert{{ 's' if mot_alerts != 1 }}</div>
     {% else %}
-    <div class="alert-chip ok"><div class="dot"></div>All MOTs clear</div>
+    <div class="alert-chip ok"><div class="chip-dot"></div>Fleet MOTs clear</div>
     {% endif %}
 
-    <div class="alert-chip info"><div class="dot"></div>Week: <strong style="margin-left:4px">{{ week_status|capitalize }}</strong></div>
-  </div>
-
-  <!-- This week schedule -->
-  <div class="week-bar">
-    <div class="week-bar-left">
-      This week's schedule is currently
-      <span class="week-status-pill {{ week_status }}">{{ week_status|upper }}</span>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <a href="{{ planner_url }}" target="_blank" class="btn-sm btn-secondary">Open Planner ↗</a>
-      {% if week_status == 'draft' %}
-      <button class="btn-sm btn-primary" onclick="publishWeek()">Publish This Week</button>
-      {% else %}
-      <button class="btn-sm" style="background:#6c757d;color:white" onclick="reopenWeek()">Re-open for Editing</button>
-      {% endif %}
-    </div>
+    <div class="alert-chip info"><div class="chip-dot"></div>Week schedule: <strong style="margin-left:3px">{{ week_status|upper }}</strong></div>
   </div>
 
   <!-- Tiles -->
   <div class="tile-grid">
 
-    <a href="{{ planner_url }}" target="_blank" class="tile">
+    <a href="{{ planner_url }}" class="tile">
       <div class="tile-icon blue">📅</div>
       <div class="tile-title">Weekly Planner</div>
-      <div class="tile-desc">Allocate jobs to engineers across the week. Publish when ready to release to the team.</div>
-      <div class="tile-badge {{ 'green' if week_status == 'published' else 'grey' }}">
-        {{ '✓ Published' if week_status == 'published' else 'Draft' }}
+      <div class="tile-desc">Allocate jobs to engineers, publish the week's schedule. Publish and reopen controls are inside the planner.</div>
+      <div class="tile-badge badge-{{ 'green' if week_status == 'published' else 'grey' }}">
+        {{ '✓ Published' if week_status == 'published' else '⏳ Draft' }}
       </div>
-      <div class="tile-arrow">↗</div>
+      <div class="tile-arrow">→</div>
     </a>
 
     <a href="/admin/jobcards" class="tile">
       <div class="tile-icon red">📋</div>
       <div class="tile-title">Job Cards</div>
-      <div class="tile-desc">Review submitted job cards, approve invoices, and track weekly engineer run rates.</div>
+      <div class="tile-desc">Review submitted job cards, approve invoices, track engineer run rates and flag overdue submissions.</div>
       {% if pending_cards > 0 %}
-      <div class="tile-badge red">⚠ {{ pending_cards }} pending</div>
+      <div class="tile-badge badge-red">⚠ {{ pending_cards }} pending</div>
       {% else %}
-      <div class="tile-badge green">✓ All clear</div>
+      <div class="tile-badge badge-green">✓ All clear</div>
       {% endif %}
       <div class="tile-arrow">→</div>
     </a>
@@ -204,11 +161,11 @@
     <a href="/admin/contractors" class="tile">
       <div class="tile-icon green">👷</div>
       <div class="tile-title">Contractors</div>
-      <div class="tile-desc">Manage engineer profiles, rates, bank details, and approve profile change requests.</div>
+      <div class="tile-desc">Manage engineer profiles, rates, bank details and approve profile change requests.</div>
       {% if pending_changes > 0 %}
-      <div class="tile-badge amber">{{ pending_changes }} change request{{ 's' if pending_changes != 1 }}</div>
+      <div class="tile-badge badge-amber">{{ pending_changes }} change request{{ 's' if pending_changes != 1 }}</div>
       {% else %}
-      <div class="tile-badge grey">8 active engineers</div>
+      <div class="tile-badge badge-grey">8 active engineers</div>
       {% endif %}
       <div class="tile-arrow">→</div>
     </a>
@@ -216,11 +173,11 @@
     <a href="/admin/vehicles" class="tile">
       <div class="tile-icon orange">🚐</div>
       <div class="tile-title">Fleet & Vehicles</div>
-      <div class="tile-desc">Track MOT status, mileage, and service intervals for all Redstone vehicles.</div>
+      <div class="tile-desc">Track MOT status, mileage and service intervals. Add or remove vehicles from the fleet.</div>
       {% if mot_alerts > 0 %}
-      <div class="tile-badge red">⚠ {{ mot_alerts }} MOT alert{{ 's' if mot_alerts != 1 }}</div>
+      <div class="tile-badge badge-red">⚠ {{ mot_alerts }} MOT alert{{ 's' if mot_alerts != 1 }}</div>
       {% else %}
-      <div class="tile-badge green">✓ Fleet OK</div>
+      <div class="tile-badge badge-green">✓ Fleet OK</div>
       {% endif %}
       <div class="tile-arrow">→</div>
     </a>
@@ -228,54 +185,20 @@
     <a href="/admin/payroll" class="tile">
       <div class="tile-icon purple">💷</div>
       <div class="tile-title">Payments & Payroll</div>
-      <div class="tile-desc">Weekly payment summary for all contractors. Export EEBS payroll one-pager.</div>
-      <div class="tile-badge grey">Weekly summary</div>
+      <div class="tile-desc">Weekly payment summary for all contractors. Print the EEBS payroll one-pager.</div>
+      <div class="tile-badge badge-grey">Weekly summary</div>
       <div class="tile-arrow">→</div>
     </a>
 
-    <a href="#" class="tile" style="opacity:0.6;cursor:default" onclick="return false">
+    <div class="tile disabled">
       <div class="tile-icon teal">📊</div>
       <div class="tile-title">Reports</div>
-      <div class="tile-desc">Per-site profitability, contractor efficiency, and fleet cost reporting.</div>
-      <div class="tile-badge grey">Coming — Module 6</div>
+      <div class="tile-desc">Per-site profitability, contractor efficiency and fleet cost reporting.</div>
+      <div class="tile-badge badge-grey">Coming — Module 6</div>
       <div class="tile-arrow" style="color:#ccc">→</div>
-    </a>
+    </div>
 
   </div>
 </div>
-
-<script>
-  function getThisMonday() {
-    const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff);
-    return d.toISOString().split('T')[0];
-  }
-
-  async function publishWeek() {
-    if (!confirm('Publish this week\'s schedule? All engineers will receive their job list by email.')) return;
-    const res = await fetch('/admin/schedule/publish', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ week_commencing: getThisMonday() })
-    });
-    const data = await res.json();
-    if (data.ok) location.reload();
-    else alert('Error publishing schedule');
-  }
-
-  async function reopenWeek() {
-    if (!confirm('Re-open this week for editing? Engineers will NOT be notified — republish when done.')) return;
-    const res = await fetch('/admin/schedule/reopen', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ week_commencing: getThisMonday() })
-    });
-    const data = await res.json();
-    if (data.ok) location.reload();
-  }
-</script>
-
 </body>
 </html>
