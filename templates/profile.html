@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>My Profile — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+  .topbar {
+    background: #1a2332;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .back { color: #bdc3c7; font-size: 22px; text-decoration: none; line-height: 1; }
+  .topbar-title { color: white; font-size: 16px; font-weight: 700; }
+  .topbar-sub { color: #c0392b; font-size: 11px; margin-top: 1px; }
+
+  .avatar {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, #c0392b, #e74c3c);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 700; color: white;
+    margin: 24px auto 8px;
+  }
+  .name-display {
+    text-align: center;
+    font-size: 20px; font-weight: 700; color: #1a2332;
+    margin-bottom: 4px;
+  }
+  .role-display {
+    text-align: center;
+    font-size: 12px; color: #c0392b;
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-bottom: 24px;
+  }
+
+  .content { padding: 0 16px; }
+  .section {
+    background: white;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .section-head {
+    background: #1a2332;
+    color: white;
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .info-row {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f5f5f5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: #7f8c8d; min-width: 110px;
+  }
+  .info-value { font-size: 14px; color: #1a2332; font-weight: 500; flex: 1; }
+  .info-value.sensitive { letter-spacing: 1px; }
+  .edit-btn {
+    background: none; border: 1px solid #e0e0e0;
+    border-radius: 6px; padding: 5px 10px;
+    font-size: 11px; color: #7f8c8d;
+    cursor: pointer; white-space: nowrap;
+  }
+  .edit-btn:active { background: #f5f5f5; }
+
+  .notice {
+    background: #eaf4fb;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #2980b9;
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  /* Change request modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(26,35,50,0.85); z-index: 999;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white; border-radius: 16px;
+    padding: 28px 24px; width: 100%; max-width: 400px;
+  }
+  .modal-title { font-size: 17px; font-weight: 700; color: #1a2332; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: #7f8c8d; margin-bottom: 20px; }
+  label {
+    display: block; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: #7f8c8d; margin-bottom: 6px;
+  }
+  input[type=text], input[type=email], input[type=tel], textarea {
+    width: 100%; padding: 12px 14px;
+    border: 1.5px solid #e8e8e8; border-radius: 10px;
+    font-size: 15px; color: #1a2332;
+    -webkit-appearance: none; outline: none; margin-bottom: 14px;
+  }
+  input:focus, textarea:focus { border-color: #c0392b; }
+  textarea { min-height: 70px; resize: none; font-family: inherit; }
+  .modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .btn-submit {
+    padding: 13px; background: #c0392b; color: white;
+    border: none; border-radius: 10px; font-size: 14px;
+    font-weight: 700; cursor: pointer;
+  }
+  .btn-cancel {
+    padding: 13px; background: white; color: #7f8c8d;
+    border: 1.5px solid #e0e0e0; border-radius: 10px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+
+  /* Pending changes */
+  .change-row {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 13px;
+  }
+  .change-row:last-child { border-bottom: none; }
+  .change-field { font-weight: 600; color: #1a2332; }
+  .change-new { color: #c0392b; }
+  .change-status {
+    display: inline-block; padding: 2px 8px;
+    border-radius: 20px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase;
+  }
+  .status-pending { background: #fef9e7; color: #f39c12; }
+  .status-approved { background: #eafaf1; color: #27ae60; }
+  .status-rejected { background: #fdf2f2; color: #c0392b; }
+
+  .success-msg {
+    display: none; background: #eafaf1; border-radius: 10px;
+    padding: 14px 16px; text-align: center;
+    color: #27ae60; font-weight: 600; font-size: 14px;
+    margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/dashboard" class="back">‹</a>
+  <div>
+    <div class="topbar-title">My Profile</div>
+    <div class="topbar-sub">Redstone PDM</div>
+  </div>
+</div>
+
+<div class="avatar">{{ contractor.name[0] }}</div>
+<div class="name-display">{{ contractor.name }}</div>
+<div class="role-display">Field Engineer</div>
+
+<div class="content">
+
+  <div class="notice">
+    To update any of your details, tap <strong>Edit</strong> next to the field.
+    Changes are sent to Redstone for approval — usually confirmed within 1 working day.
+    Bank detail changes take effect on your next pay run after approval.
+  </div>
+
+  <div class="success-msg" id="success_msg">✓ Change request sent — we'll confirm shortly.</div>
+
+  <!-- Personal Details -->
+  <div class="section">
+    <div class="section-head">👤 Personal Details</div>
+    <div class="info-row">
+      <span class="info-label">Name</span>
+      <span class="info-value">{{ contractor.name }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Phone</span>
+      <span class="info-value">{{ contractor.phone or '—' }}</span>
+      <button class="edit-btn" onclick="openEdit('phone', 'Phone Number', '{{ contractor.phone }}', 'tel')">Edit</button>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Email</span>
+      <span class="info-value">{{ contractor.email or '—' }}</span>
+      <button class="edit-btn" onclick="openEdit('email', 'Email Address', '{{ contractor.email }}', 'email')">Edit</button>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Home Address</span>
+      <span class="info-value">{{ contractor.address or '—' }}</span>
+      <button class="edit-btn" onclick="openEdit('address', 'Home Address', '{{ contractor.address }}', 'text')">Edit</button>
+    </div>
+  </div>
+
+  <!-- Tax & Reference -->
+  <div class="section">
+    <div class="section-head">📋 Tax & Reference</div>
+    <div class="info-row">
+      <span class="info-label">UTR</span>
+      <span class="info-value sensitive">{{ contractor.utr or '—' }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">NI Number</span>
+      <span class="info-value sensitive">{{ contractor.ni or '—' }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">CIS Rate</span>
+      <span class="info-value">{{ (contractor.cis_rate * 100)|int }}%</span>
+    </div>
+  </div>
+
+  <!-- Bank Details -->
+  <div class="section">
+    <div class="section-head">🏦 Bank Details</div>
+    <div class="info-row">
+      <span class="info-label">Sort Code</span>
+      <span class="info-value sensitive">{{ contractor.sort_code or '—' }}</span>
+      <button class="edit-btn" onclick="openEdit('sort_code', 'Sort Code', '{{ contractor.sort_code }}', 'text')">Edit</button>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Account No</span>
+      <span class="info-value sensitive">{{ contractor.account_no or '—' }}</span>
+      <button class="edit-btn" onclick="openEdit('account_no', 'Account Number', '{{ contractor.account_no }}', 'text')">Edit</button>
+    </div>
+  </div>
+
+  <!-- Vehicle -->
+  <div class="section">
+    <div class="section-head">🚐 Vehicle</div>
+    <div class="info-row">
+      <span class="info-label">Vehicle</span>
+      <span class="info-value">
+        {% if contractor.redstone_vehicle %}Redstone Van{% else %}Own Vehicle{% endif %}
+      </span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Registration</span>
+      <span class="info-value">{{ contractor.van_reg or '—' }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Mileage Rate</span>
+      <span class="info-value">
+        {% if contractor.mileage_rate > 0 %}{{ (contractor.mileage_rate * 100)|int }}p per mile{% else %}N/A — Redstone pays fuel{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- Pay -->
+  <div class="section">
+    <div class="section-head">💷 Pay Rates</div>
+    <div class="info-row">
+      <span class="info-label">Day Rate</span>
+      <span class="info-value">£{{ contractor.day_rate }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">OT Rate</span>
+      <span class="info-value">£{{ contractor.overtime_rate }}/hr</span>
+    </div>
+  </div>
+
+  <!-- Pending changes -->
+  {% if changes %}
+  <div class="section">
+    <div class="section-head">📝 Recent Change Requests</div>
+    {% for c in changes %}
+    <div class="change-row">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span class="change-field">{{ c.field_name }}</span>
+        <span class="change-status status-{{ c.status }}">{{ c.status }}</span>
+      </div>
+      <div style="color:#7f8c8d;font-size:12px;">→ <span class="change-new">{{ c.new_value }}</span></div>
+      <div style="color:#bdc3c7;font-size:11px;margin-top:2px;">{{ c.requested_at.strftime('%d %b %Y') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Edit modal -->
+<div class="modal-overlay" id="edit_modal">
+  <div class="modal-box">
+    <div class="modal-title" id="modal_title">Update Detail</div>
+    <div class="modal-sub">Your request will be sent to Redstone for approval.</div>
+    <label>Current Value</label>
+    <input type="text" id="modal_current" readonly style="background:#f8f8f8;color:#888;">
+    <label id="modal_new_label">New Value</label>
+    <input type="text" id="modal_new_input" placeholder="Enter new value...">
+    <label>Reason for Change (optional)</label>
+    <textarea id="modal_reason" placeholder="e.g. Moved house, changed bank..."></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
+      <button class="btn-submit" onclick="submitChange()">Send Request</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentField = '';
+
+function openEdit(field, label, currentVal, inputType) {
+  currentField = field;
+  document.getElementById('modal_title').textContent = `Update ${label}`;
+  document.getElementById('modal_new_label').textContent = `New ${label}`;
+  document.getElementById('modal_current').value = currentVal || '—';
+  const input = document.getElementById('modal_new_input');
+  input.type = inputType;
+  input.value = '';
+  input.placeholder = `Enter new ${label.toLowerCase()}...`;
+  document.getElementById('modal_reason').value = '';
+  document.getElementById('edit_modal').classList.add('open');
+  setTimeout(() => input.focus(), 100);
+}
+
+function closeEdit() {
+  document.getElementById('edit_modal').classList.remove('open');
+}
+
+async function submitChange() {
+  const newVal = document.getElementById('modal_new_input').value.trim();
+  const reason = document.getElementById('modal_reason').value.trim();
+  if (!newVal) {
+    document.getElementById('modal_new_input').style.borderColor = '#c0392b';
+    return;
+  }
+  try {
+    const resp = await fetch('/profile/request_change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: currentField, new_value: newVal, reason })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      closeEdit();
+      const msg = document.getElementById('success_msg');
+      msg.style.display = 'block';
+      setTimeout(() => msg.style.display = 'none', 4000);
+    }
+  } catch(e) {
+    alert('Could not send request — please try again.');
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('edit_modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+</script>
+
+</body>
+</html>
