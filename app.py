@@ -650,9 +650,11 @@ def send_email(to_addresses, subject, body_html, attachments=None):
                 message.add_attachment(attachment)
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
+        print(f"EMAIL SENT: status={response.status_code} to={to_addresses}")
         return response.status_code in (200, 202)
     except Exception as e:
-        print(f"Email error: {e}")
+        print(f"EMAIL ERROR: {type(e).__name__}: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 
@@ -750,9 +752,10 @@ def dashboard():
 def job_card_form(job_id, card_date):
     key = session["contractor_key"]
     contractor = CONTRACTORS[key]
+    job_id = str(job_id)  # ensure string, never int
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
+    cur.execute("SELECT * FROM jobs WHERE job_id::text = %s", (job_id,))
     job = cur.fetchone()
     cur.execute("""
         SELECT * FROM job_cards
@@ -1660,8 +1663,13 @@ def api_last_location():
     row = cur.fetchone()
     cur.close()
     conn.close()
-    if row and row["updated_at"] and row["updated_at"].date() == today and row["last_location"]:
-        return jsonify({"location": row["last_location"], "job_id": row["last_job_id"], "from_last_job": True})
+    if row and row["updated_at"] and row["last_location"]:
+        try:
+            last_date = row["updated_at"].date()
+        except Exception:
+            last_date = None
+        if last_date == today:
+            return jsonify({"location": row["last_location"], "job_id": row["last_job_id"], "from_last_job": True})
     return jsonify({"location": contractor["address"], "job_id": None, "from_last_job": False})
 
 
