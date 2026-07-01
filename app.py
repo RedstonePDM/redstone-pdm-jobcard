@@ -1052,10 +1052,9 @@ def api_mileage():
 
     try:
         if not GMAPS_API_KEY:
-            return jsonify({"miles": 0, "cost": 0, "error": "No API key"})
+            return jsonify({"miles": 0, "cost": 0, "error": "No API key configured"})
 
         def get_miles(a, b):
-            # Distance Matrix API accepts addresses, postcodes, and place names
             url = "https://maps.googleapis.com/maps/api/distancematrix/json"
             params = {
                 "origins": a,
@@ -1066,21 +1065,34 @@ def api_mileage():
             }
             r = requests.get(url, params=params, timeout=10)
             data = r.json()
-            log.info(f"Distance Matrix: {a} -> {b}: {data.get('rows', [{}])[0].get('elements', [{}])[0]}")
+            status = data.get("status", "UNKNOWN")
+            if status != "OK":
+                log.error(f"Distance Matrix API error: {status} — {data.get('error_message', '')}")
+                return 0, f"API error: {status}"
             el = data["rows"][0]["elements"][0]
-            if el["status"] != "OK":
-                return 0
-            return round(el["distance"]["value"] / 1609.34, 1)
+            el_status = el.get("status", "UNKNOWN")
+            log.info(f"Distance Matrix {a} -> {b}: {el_status}")
+            if el_status != "OK":
+                log.error(f"Element error: {el_status}")
+                return 0, f"Route error: {el_status}"
+            miles = round(el["distance"]["value"] / 1609.34, 1)
+            return miles, None
 
-        miles = get_miles(origin, dest)
+        miles, err = get_miles(origin, dest)
+        if err:
+            return jsonify({"miles": 0, "cost": 0, "error": err})
 
         # Materials run: merchant → site return leg
         if return_to_site and site:
-            miles += get_miles(dest, site)
+            extra, err2 = get_miles(dest, site)
+            if not err2:
+                miles += extra
 
         cost = round(miles * contractor["mileage_rate"], 2)
+        log.info(f"Mileage API: {origin} -> {dest} = {miles} miles, £{cost}")
         return jsonify({"miles": miles, "cost": cost})
     except Exception as e:
+        log.error(f"Mileage API exception: {e}")
         return jsonify({"miles": 0, "cost": 0, "error": str(e)})
 
 
