@@ -525,13 +525,18 @@ function addLeg(type) {
     </div>
     ${type === 'materials' ? `
     <div class="field" style="margin-top:8px;">
-      <label>Return to site after?</label>
+      <label>Did you return to site after the materials run?</label>
       <select id="leg_return_${id}" onchange="calcLegMiles(${id}, 'materials')">
-        <option value="yes">Yes — returned to site</option>
-        <option value="no">No — went straight home / next job</option>
+        <option value="yes">Yes — returned to site (return leg included in mileage above)</option>
+        <option value="no">No — went straight home or to next job</option>
       </select>
+      <div style="font-size:11px;color:#7f8c8d;margin-top:4px;">
+        The return journey is automatically included in the mileage calculation above.
+        Do not add another Travel to Site leg after a materials run.
+      </div>
     </div>` : ''}
     <div class="leg-miles calculating" id="leg_miles_${id}">Calculating...</div>
+    ${type === 'materials' ? '<div style="font-size:11px;color:#7f8c8d;margin-top:4px;text-align:center;">Round trip automatically included if returning to site</div>' : ''}
   `;
   container.appendChild(div);
 
