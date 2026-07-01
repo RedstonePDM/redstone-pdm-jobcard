@@ -1067,14 +1067,13 @@ def api_mileage():
             data = r.json()
             status = data.get("status", "UNKNOWN")
             if status != "OK":
-                log.error(f"Distance Matrix API error: {status} — {data.get('error_message', '')}")
-                return 0, f"API error: {status}"
+                print(f"Distance Matrix API error: {status} — {data.get('error_message', '')}")
+                return 0, f"API error: {status} — {data.get('error_message', '')}"
             el = data["rows"][0]["elements"][0]
             el_status = el.get("status", "UNKNOWN")
-            log.info(f"Distance Matrix {a} -> {b}: {el_status}")
+            print(f"Distance Matrix {a} -> {b}: {el_status}")
             if el_status != "OK":
-                log.error(f"Element error: {el_status}")
-                return 0, f"Route error: {el_status}"
+                return 0, f"Route not found: {el_status}"
             miles = round(el["distance"]["value"] / 1609.34, 1)
             return miles, None
 
@@ -1089,10 +1088,10 @@ def api_mileage():
                 miles += extra
 
         cost = round(miles * contractor["mileage_rate"], 2)
-        log.info(f"Mileage API: {origin} -> {dest} = {miles} miles, £{cost}")
+        print(f"Mileage API: {origin} -> {dest} = {miles} miles, £{cost}")
         return jsonify({"miles": miles, "cost": cost})
     except Exception as e:
-        log.error(f"Mileage API exception: {e}")
+        print(f"Mileage API exception: {e}")
         return jsonify({"miles": 0, "cost": 0, "error": str(e)})
 
 
