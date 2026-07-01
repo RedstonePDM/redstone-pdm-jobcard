@@ -883,7 +883,6 @@ def submit_job_card(job_id, card_date):
         "parking_cost": parking, "materials_json": materials,
         "materials_total": materials_total, "reimburse_total": reimburse_total,
         "odometer": odometer, "only_job_today": only_job,
-        "parking_fines_flagged": parking_fines_total,
         "invoice_total": invoice_total, "cis_deduction": cis_deduction,
         "net_payment": net_payment, "photo_paths": photo_paths,
         "parking_photo_path": parking_photo_path, "receipt_photo_paths": receipt_photos,
