@@ -812,8 +812,25 @@ def submit_job_card(job_id, card_date):
             parking += cost
             if payment != "Redstone Card":
                 reimburse_parking += cost
-    labour_cost  = float(contractor["day_rate"]) + (overtime_h * float(contractor["overtime_rate"]))
-    mileage_cost = round(mileage_miles * contractor["mileage_rate"], 2)
+    # ── Labour calculation by job type ──────────────────────────────────────
+    # Detect job type from job_id prefix
+    job_prefix = str(job_id)[:4] if job_id else "1000"
+    is_ppm = job_prefix == "2000"  # PPM jobs always full day rate
+
+    if is_ppm:
+        # PPM: full day rate + any logged overtime
+        base_labour   = float(contractor["day_rate"])
+        labour_type   = "PPM Full Day"
+    else:
+        # Reactive (1000/3000) and Quoted (5000): hourly rate = day_rate ÷ 10
+        hourly_rate   = float(contractor["day_rate"]) / 10
+        base_labour   = round(hours * hourly_rate, 2)
+        labour_type   = f"Hourly ({hours}hrs × £{hourly_rate:.2f}/hr)"
+
+    # Overtime: anything logged above 8hrs on site
+    overtime_cost = round(overtime_h * float(contractor["overtime_rate"]), 2)
+    labour_cost   = round(base_labour + overtime_cost, 2)
+    mileage_cost  = round(mileage_miles * contractor["mileage_rate"], 2)
     materials = []
     reimburse_total = 0.0
     mat_count = int(request.form.get("material_count", 0))
@@ -859,13 +876,14 @@ def submit_job_card(job_id, card_date):
         "description_planned": desc_planned or (job["description"] if job else ""),
         "description_actual": desc_actual,
         "time_start": time_start, "time_finish": time_finish,
-        "hours_on_site": hours, "labour_type": f"Full Day + {overtime_h}hrs OT" if overtime_h else "Full Day",
+        "hours_on_site": hours, "labour_type": f"{labour_type} + {overtime_h}hrs OT" if overtime_h else labour_type,
         "base_day_rate": contractor["day_rate"], "overtime_hours": overtime_h,
         "overtime_rate": contractor["overtime_rate"], "labour_cost": labour_cost,
         "mileage_miles": mileage_miles, "mileage_cost": mileage_cost,
         "parking_cost": parking, "materials_json": materials,
         "materials_total": materials_total, "reimburse_total": reimburse_total,
         "odometer": odometer, "only_job_today": only_job,
+        "parking_fines_flagged": parking_fines_total,
         "invoice_total": invoice_total, "cis_deduction": cis_deduction,
         "net_payment": net_payment, "photo_paths": photo_paths,
         "parking_photo_path": parking_photo_path, "receipt_photo_paths": receipt_photos,
@@ -1148,8 +1166,9 @@ def approve_card(card_id):
 
 
 @app.route("/card/<int:card_id>/jobcard.pdf")
-@admin_required
+@login_required
 def download_job_card(card_id):
+    """Download job card PDF — accessible by admin or the contractor who owns it."""
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM job_cards WHERE id=%s", (card_id,))
@@ -1158,6 +1177,11 @@ def download_job_card(card_id):
     conn.close()
     if not card:
         return "Not found", 404
+    # Allow admin or the owning contractor
+    role = session.get("role")
+    key  = session.get("contractor_key")
+    if role != "admin" and card["contractor_key"] != key:
+        return redirect(url_for("login"))
     contractor = CONTRACTORS.get(card["contractor_key"], {})
     pdf = build_job_card_pdf(card, contractor)
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=f"jobcard_{card_id}.pdf")
