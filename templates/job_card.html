@@ -663,18 +663,23 @@ function updateLeg(id, type, from, to, miles, cost) {
 
 function removeLeg(id) {
   const leg = document.getElementById(`leg_${id}`);
-  const badge = leg?.querySelector('.leg-type-badge')?.textContent || '';
+  if (!leg) return;
+  const legData = legs.find(l => l.id === id);
+  const type = legData?.type || '';
 
-  // If removing a closing leg (home or next job), unlock journey
-  if (badge.includes('Travel Home') || badge.includes('Drive to Next Job')) {
+  // If removing a closing leg, use unlockJourney which handles everything cleanly
+  if (type === 'home' || type === 'nextjob') {
     unlockJourney();
+    return;
   }
+
   // If removing travel to site, show that button again
-  if (badge.includes('Travel to Site')) {
+  if (type === 'travel') {
     const btn = document.getElementById('btn_travel');
     if (btn) btn.style.display = '';
   }
-  leg?.remove();
+
+  leg.remove();
   legs = legs.filter(l => l.id !== id);
   document.getElementById('journey_json').value = JSON.stringify(legs);
   updateJourneyTotal();
@@ -694,12 +699,23 @@ function closeJourney() {
 
 function unlockJourney() {
   journeyClosed = false;
+
+  // Remove the closing leg (home or nextjob) from the DOM and legs array
+  const closingTypes = ['home', 'nextjob'];
+  legs.filter(l => closingTypes.includes(l.type)).forEach(l => {
+    document.getElementById(`leg_${l.id}`)?.remove();
+  });
+  legs = legs.filter(l => !closingTypes.includes(l.type));
+  document.getElementById('journey_json').value = JSON.stringify(legs);
+  updateJourneyTotal();
+
+  // Restore buttons
+  const hasTravelLeg = legs.some(l => l.type === 'travel');
   const btns = document.getElementById('leg_buttons');
   if (btns) {
-    const travelVisible = !legs.some(l => l.type === 'travel' && legs.indexOf(l) === 0);
     btns.innerHTML = `
       <div class="add-leg-btns" id="btn_travel_row">
-        <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')" ${legs.some(l => l.type === 'travel') ? 'style="display:none"' : ''}>🚗 Travel to Site</button>
+        <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')" ${hasTravelLeg ? 'style="display:none"' : ''}>🚗 Travel to Site</button>
         <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
       </div>
       <div class="add-leg-btns" style="margin-top:8px;">
