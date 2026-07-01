@@ -3,348 +3,498 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Contractors — Redstone PDM Admin</title>
+<title>Contractors — Redstone PDM</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
-  .topbar { background: #1a2332; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
-  .topbar h1 { color: white; font-size: 18px; font-weight: 700; }
-  .topbar-links { display: flex; gap: 16px; align-items: center; }
-  .topbar-links a { color: #bdc3c7; font-size: 13px; text-decoration: none; }
-  .content { padding: 24px; max-width: 1100px; margin: 0 auto; }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-  .page-title { font-size: 22px; font-weight: 700; color: #1a2332; }
-  .add-btn { padding: 10px 20px; background: #c0392b; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
-
-  /* Contractor cards */
-  .contractors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 32px; }
-  .contractor-card {
-    background: white; border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    overflow: hidden;
-    border-left: 4px solid #27ae60;
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
-  .contractor-card.archived { border-left-color: #bdc3c7; opacity: 0.7; }
-  .card-head { padding: 16px; display: flex; justify-content: space-between; align-items: flex-start; }
-  .card-name { font-size: 16px; font-weight: 700; color: #1a2332; margin-bottom: 3px; }
-  .card-sub { font-size: 12px; color: #7f8c8d; }
-  .card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
-  .badge-van { background: #eaf4fb; color: #2980b9; }
-  .badge-own { background: #fef9e7; color: #f39c12; }
-  .badge-cis { background: #f5eef8; color: #8e44ad; }
-  .badge-exempt { background: #eafaf1; color: #27ae60; }
-  .badge-archived { background: #f5f5f5; color: #7f8c8d; }
-  .card-details { padding: 0 16px 12px; border-top: 1px solid #f5f5f5; }
-  .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f9f9f9; font-size: 13px; }
-  .detail-row:last-child { border-bottom: none; }
-  .detail-label { color: #7f8c8d; font-weight: 600; }
-  .detail-value { color: #1a2332; font-weight: 500; text-align: right; }
-  .card-actions { padding: 12px 16px; background: #fafafa; display: flex; gap: 8px; border-top: 1px solid #f0f0f0; }
-  .btn-edit { flex: 1; padding: 9px; background: #1a2332; color: white; border: none; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; }
-  .btn-archive { padding: 9px 14px; background: white; color: #c0392b; border: 1.5px solid #c0392b; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; }
-  .btn-restore { padding: 9px 14px; background: #27ae60; color: white; border: none; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
-  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7f8c8d; margin-bottom: 12px; margin-top: 8px; }
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+  h3 { font-size: 16px; color: #1a2332; font-weight: 700; margin-bottom: 14px; }
+
+  .btn { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-primary { background: #c0392b; color: white; }
+  .btn-primary:hover { background: #a93226; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-secondary { background: #1a2332; color: white; }
+  .btn-edit   { background: #f0f2f5; color: #333; }
+  .btn-danger { background: #f8d7da; color: #842029; }
+  .btn-restore { background: #d1e7dd; color: #0a5c36; }
+
+  /* Contractor grid */
+  .contractor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-bottom: 36px; }
+
+  .contractor-card {
+    background: white; border-radius: 12px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-top: 3px solid #1a2332;
+  }
+  .contractor-card.archived { border-top-color: #adb5bd; opacity: 0.8; }
+
+  .cc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .cc-avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #1a2332; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 700; flex-shrink: 0;
+  }
+  .cc-avatar.archived { background: #adb5bd; }
+  .cc-name { font-size: 15px; font-weight: 700; color: #1a2332; }
+  .cc-rate { font-size: 12px; color: #888; margin-top: 2px; }
+
+  .cc-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .cc-detail-label { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; }
+  .cc-detail-value { font-size: 12px; color: #333; margin-top: 1px; font-weight: 500; }
+
+  .cc-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cc-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 8px; }
+  .badge-van   { background: #eff4ff; color: #1a4fa0; }
+  .badge-own   { background: #fff8ef; color: #c77a10; }
+  .badge-card  { background: #effdf4; color: #1a7a4a; }
+  .badge-reimb { background: #fdf0ef; color: #c0392b; }
+  .badge-cis   { background: #f4efff; color: #6a1fa0; }
+  .badge-archived { background: #f0f2f5; color: #888; }
+
+  .cc-actions { display: flex; gap: 8px; }
+
+  /* Archived section */
+  .archived-section { margin-top: 8px; }
+  .archived-toggle {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    padding: 12px 16px; background: white; border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 16px;
+    font-size: 14px; font-weight: 600; color: #555;
+    border: none; width: 100%; text-align: left;
+  }
+  .archived-toggle:hover { background: #fafbfc; }
+  .toggle-arrow { transition: transform 0.2s; }
+  .toggle-arrow.open { transform: rotate(90deg); }
 
   /* Modal */
-  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,35,50,0.85); z-index: 999; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; }
-  .modal-overlay.open { display: flex; }
-  .modal-box { background: white; border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 560px; margin: auto; }
-  .modal-title { font-size: 18px; font-weight: 700; color: #1a2332; margin-bottom: 20px; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .form-grid .full { grid-column: 1 / -1; }
-  .field label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #7f8c8d; margin-bottom: 5px; }
-  .field input, .field select { width: 100%; padding: 11px 13px; border: 1.5px solid #e8e8e8; border-radius: 9px; font-size: 14px; color: #1a2332; outline: none; }
-  .field input:focus, .field select:focus { border-color: #c0392b; }
-  .modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-  .btn-submit { padding: 13px; background: #c0392b; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
-  .btn-cancel { padding: 13px; background: white; color: #7f8c8d; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .section-divider { height: 1px; background: #f0f0f0; margin: 14px 0; }
-  .form-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7f8c8d; margin-bottom: 12px; margin-top: 4px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: white; border-radius: 14px; padding: 28px; width: 100%; max-width: 540px; box-shadow: 0 8px 40px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 18px; color: #1a2332; margin-bottom: 18px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
+  input, select { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; color: #1a2332; }
+  input:focus, select:focus { outline: none; border-color: #c0392b; }
+  .modal-section { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #f0f2f5; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  .btn-cancel { background: #f0f2f5; color: #333; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <h1>Redstone PDM — Contractors</h1>
-  <div class="topbar-links">
-    <a href="/admin">Job Cards</a>
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/jobcards">Job Cards</a>
+    <a href="/admin/vehicles">Vehicles</a>
     <a href="/admin/profile_changes">Profile Changes</a>
-    <a href="/logout">Sign out</a>
+    <a href="/logout">Sign Out</a>
   </div>
 </div>
 
-<div class="content">
+<div class="page">
   <div class="page-header">
-    <div class="page-title">Contractor Management</div>
-    <button class="add-btn" onclick="openAddModal()">+ Add New Contractor</button>
+    <h2>Contractor Management</h2>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Contractor</button>
   </div>
 
   <!-- Active contractors -->
-  {% set active = contractors | selectattr('status', 'eq', 'active') | list %}
-  {% set archived = contractors | selectattr('status', 'eq', 'archived') | list %}
-
-  <div class="section-label">Active Contractors ({{ active | length }})</div>
-  <div class="contractors-grid">
-    {% for c in active %}
-    <div class="contractor-card" id="card_{{ c.contractor_key }}">
-      <div class="card-head">
+  <h3>Active Engineers</h3>
+  <div class="contractor-grid">
+    {% for c in contractors if c.status == 'active' %}
+    <div class="contractor-card">
+      <div class="cc-header">
+        <div class="cc-avatar">{{ c.name[0] }}</div>
         <div>
-          <div class="card-name">{{ c.name }}</div>
-          <div class="card-sub">{{ c.email or '—' }} · {{ c.phone or '—' }}</div>
-          <div class="card-badges">
-            {% if c.redstone_vehicle %}
-            <span class="badge badge-van">🚐 Redstone Van ({{ c.van_reg or '?' }})</span>
-            {% else %}
-            <span class="badge badge-own">🚗 Own Vehicle · 25p/mile</span>
-            {% endif %}
-            {% if c.cis_rate == 0 %}
-            <span class="badge badge-exempt">CIS Exempt</span>
-            {% else %}
-            <span class="badge badge-cis">CIS {{ (c.cis_rate * 100)|int }}%</span>
-            {% endif %}
-          </div>
+          <div class="cc-name">{{ c.name }}</div>
+          <div class="cc-rate">£{{ c.day_rate }}/day</div>
         </div>
       </div>
-      <div class="card-details">
-        <div class="detail-row">
-          <span class="detail-label">Day Rate</span>
-          <span class="detail-value">£{{ c.day_rate }}</span>
+
+      <div class="cc-badges">
+        {% if c.redstone_vehicle %}<span class="cc-badge badge-van">🚐 Redstone Van</span>
+        {% else %}<span class="cc-badge badge-own">🚗 Own Vehicle</span>{% endif %}
+        {% if c.redstone_card %}<span class="cc-badge badge-card">💳 Redstone Card</span>
+        {% else %}<span class="cc-badge badge-reimb">💵 Reimburse</span>{% endif %}
+        {% if c.cis_rate == 0 %}<span class="cc-badge badge-cis">CIS Exempt</span>
+        {% else %}<span class="cc-badge badge-cis">CIS {{ (c.cis_rate * 100)|int }}%</span>{% endif %}
+      </div>
+
+      <div class="cc-details">
+        <div>
+          <div class="cc-detail-label">Van Reg</div>
+          <div class="cc-detail-value" style="font-family:monospace">{{ c.van_reg or '—' }}</div>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">OT Rate</span>
-          <span class="detail-value">£{{ c.overtime_rate }}/hr</span>
+        <div>
+          <div class="cc-detail-label">Mileage Rate</div>
+          <div class="cc-detail-value">{% if c.mileage_rate > 0 %}{{ (c.mileage_rate * 100)|int }}p/mi{% else %}N/A{% endif %}</div>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">Sort Code / Account</span>
-          <span class="detail-value">{{ c.sort_code or '—' }} / {{ c.account_no or '—' }}</span>
+        <div>
+          <div class="cc-detail-label">Phone</div>
+          <div class="cc-detail-value">{{ c.phone or '—' }}</div>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">UTR / NI</span>
-          <span class="detail-value">{{ c.utr or '—' }} / {{ c.ni or '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Address</span>
-          <span class="detail-value" style="max-width:180px;text-align:right;">{{ c.address or '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Materials Card</span>
-          <span class="detail-value">{{ 'Redstone Card' if c.redstone_card else 'Own Card (Reimburse)' }}</span>
+        <div>
+          <div class="cc-detail-label">UTR</div>
+          <div class="cc-detail-value">{{ c.utr or '—' }}</div>
         </div>
       </div>
-      <div class="card-actions">
-        <button class="btn-edit" onclick="openEditModal('{{ c.contractor_key }}')">Edit Details</button>
-        <button class="btn-archive" onclick="archiveContractor('{{ c.contractor_key }}', '{{ c.name }}')">Archive</button>
+
+      <div class="cc-actions">
+        <button class="btn btn-edit btn-sm" onclick="openEditModal('{{ c.contractor_key }}', {{ c | tojson | replace("'", "\\'") }})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveContractor('{{ c.contractor_key }}', '{{ c.name }}')">Archive</button>
       </div>
     </div>
+    {% else %}
+    <div style="grid-column:1/-1;color:#999;padding:30px;text-align:center">No active contractors.</div>
     {% endfor %}
   </div>
 
+  <!-- Archived contractors -->
+  {% set archived = contractors | selectattr('status', 'equalto', 'archived') | list %}
   {% if archived %}
-  <div class="section-label" style="margin-top:24px;">Archived Contractors ({{ archived | length }})</div>
-  <div class="contractors-grid">
-    {% for c in archived %}
-    <div class="contractor-card archived" id="card_{{ c.contractor_key }}">
-      <div class="card-head">
-        <div>
-          <div class="card-name">{{ c.name }} <span class="badge badge-archived">Archived</span></div>
-          <div class="card-sub">{{ c.email or '—' }}</div>
-          {% if c.archived_at %}<div class="card-sub">Archived {{ c.archived_at.strftime('%d %b %Y') }}</div>{% endif %}
+  <div class="archived-section">
+    <button class="archived-toggle" onclick="toggleArchived(this)">
+      <span class="toggle-arrow">▶</span>
+      Archived Contractors ({{ archived | length }})
+    </button>
+    <div id="archived-list" style="display:none">
+      <div class="contractor-grid">
+        {% for c in archived %}
+        <div class="contractor-card archived">
+          <div class="cc-header">
+            <div class="cc-avatar archived">{{ c.name[0] }}</div>
+            <div>
+              <div class="cc-name" style="color:#666">{{ c.name }}</div>
+              <div class="cc-rate">Archived {% if c.archived_at %}{{ c.archived_at.strftime('%d %b %Y') }}{% endif %}</div>
+            </div>
+          </div>
+          <div class="cc-badges">
+            <span class="cc-badge badge-archived">Archived</span>
+            <span class="cc-badge badge-cis">£{{ c.day_rate }}/day</span>
+          </div>
+          <div class="cc-details">
+            <div>
+              <div class="cc-detail-label">Phone</div>
+              <div class="cc-detail-value">{{ c.phone or '—' }}</div>
+            </div>
+            <div>
+              <div class="cc-detail-label">Van Reg</div>
+              <div class="cc-detail-value" style="font-family:monospace">{{ c.van_reg or '—' }}</div>
+            </div>
+          </div>
+          <div class="cc-actions">
+            <button class="btn btn-restore btn-sm" onclick="restoreContractor('{{ c.contractor_key }}', '{{ c.name }}')">Restore</button>
+          </div>
         </div>
-      </div>
-      <div class="card-actions">
-        <button class="btn-restore" onclick="restoreContractor('{{ c.contractor_key }}', '{{ c.name }}')">Restore</button>
+        {% endfor %}
       </div>
     </div>
-    {% endfor %}
   </div>
   {% endif %}
 </div>
 
-<!-- Add/Edit Modal -->
-<div class="modal-overlay" id="contractor_modal">
-  <div class="modal-box">
-    <div class="modal-title" id="modal_title">Add New Contractor</div>
-    <form id="contractor_form" method="POST" action="/admin/contractors/add">
-      <input type="hidden" id="form_action_key" name="_key" value="">
-
-      <div class="form-section-title">Personal Details</div>
-      <div class="form-grid">
-        <div class="field full">
-          <label>Full Name *</label>
-          <input type="text" name="name" id="f_name" required>
-        </div>
-        <div class="field">
-          <label>Phone</label>
-          <input type="tel" name="phone" id="f_phone">
-        </div>
-        <div class="field">
-          <label>Email</label>
-          <input type="email" name="email" id="f_email">
-        </div>
-        <div class="field full">
-          <label>Home Address</label>
-          <input type="text" name="address" id="f_address">
-        </div>
+<!-- Add Contractor Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <h3>Add Contractor</h3>
+    <div class="form-group">
+      <label>Full Name *</label>
+      <input type="text" id="add-name" placeholder="First Last">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="add-email">
       </div>
-
-      <div class="section-divider"></div>
-      <div class="form-section-title">Tax & Compliance</div>
-      <div class="form-grid">
-        <div class="field">
-          <label>UTR Number</label>
-          <input type="text" name="utr" id="f_utr">
-        </div>
-        <div class="field">
-          <label>NI Number</label>
-          <input type="text" name="ni" id="f_ni">
-        </div>
-        <div class="field">
-          <label>CIS Rate</label>
-          <select name="cis_rate" id="f_cis_rate">
-            <option value="0.20">20% (Standard)</option>
-            <option value="0">0% (Exempt / Director)</option>
-            <option value="0.30">30% (Unverified)</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="add-phone">
       </div>
-
-      <div class="section-divider"></div>
-      <div class="form-section-title">Pay & Vehicle</div>
-      <div class="form-grid">
-        <div class="field">
-          <label>Day Rate (£)</label>
-          <input type="number" name="day_rate" id="f_day_rate" min="0" step="0.01">
-        </div>
-        <div class="field">
-          <label>Vehicle</label>
-          <select name="redstone_vehicle" id="f_vehicle">
-            <option value="yes">Redstone Van</option>
-            <option value="no">Own Vehicle (25p/mile)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Van / Vehicle Reg</label>
-          <input type="text" name="van_reg" id="f_van_reg" style="text-transform:uppercase;">
-        </div>
-        <div class="field">
-          <label>Materials Card</label>
-          <select name="redstone_card" id="f_card">
-            <option value="yes">Redstone Company Card</option>
-            <option value="no">Own Card (Reimburse)</option>
-          </select>
-        </div>
+    </div>
+    <div class="form-group">
+      <label>Home Address</label>
+      <input type="text" id="add-address">
+    </div>
+    <div class="modal-section">Pay & CIS</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Day Rate (£)</label>
+        <input type="number" id="add-day-rate" placeholder="180">
       </div>
-
-      <div class="section-divider"></div>
-      <div class="form-section-title">Bank Details</div>
-      <div class="form-grid">
-        <div class="field">
-          <label>Sort Code</label>
-          <input type="text" name="sort_code" id="f_sort_code" placeholder="XX-XX-XX">
-        </div>
-        <div class="field">
-          <label>Account Number</label>
-          <input type="text" name="account_no" id="f_account_no">
-        </div>
+      <div class="form-group">
+        <label>CIS Rate</label>
+        <select id="add-cis">
+          <option value="0.20">20% (standard)</option>
+          <option value="0">Exempt (Director)</option>
+        </select>
       </div>
-
-      <div class="section-divider"></div>
-      <div class="form-section-title">Portal Access</div>
-      <div class="form-grid">
-        <div class="field full">
-          <label>Login Password</label>
-          <input type="text" name="password" id="f_password" placeholder="Set a password for their portal login">
-        </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>UTR Number</label>
+        <input type="text" id="add-utr">
       </div>
-
-      <div class="modal-btns">
-        <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn-submit" id="modal_submit_btn">Add Contractor</button>
+      <div class="form-group">
+        <label>NI Number</label>
+        <input type="text" id="add-ni">
       </div>
-    </form>
+    </div>
+    <div class="modal-section">Vehicle</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Redstone Vehicle?</label>
+        <select id="add-van" onchange="toggleMileage(this.value, 'add')">
+          <option value="yes">Yes — Redstone Van</option>
+          <option value="no">No — Own Vehicle</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Van Registration</label>
+        <input type="text" id="add-van-reg" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="modal-section">Bank Details</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Sort Code</label>
+        <input type="text" id="add-sort" placeholder="00-00-00">
+      </div>
+      <div class="form-group">
+        <label>Account Number</label>
+        <input type="text" id="add-account">
+      </div>
+    </div>
+    <div class="modal-section">Login</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Redstone Card?</label>
+        <select id="add-card">
+          <option value="yes">Yes</option>
+          <option value="no">No — Reimburse</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="text" id="add-password" placeholder="Surname2024!">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-primary" onclick="addContractor()">Add Contractor</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Contractor Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Contractor</h3>
+    <input type="hidden" id="edit-key">
+    <div class="form-group">
+      <label>Full Name</label>
+      <input type="text" id="edit-name">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="edit-email">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="edit-phone">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Home Address</label>
+      <input type="text" id="edit-address">
+    </div>
+    <div class="modal-section">Pay & CIS</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Day Rate (£)</label>
+        <input type="number" id="edit-day-rate">
+      </div>
+      <div class="form-group">
+        <label>CIS Rate</label>
+        <select id="edit-cis">
+          <option value="0.20">20% (standard)</option>
+          <option value="0">Exempt (Director)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>UTR Number</label>
+        <input type="text" id="edit-utr">
+      </div>
+      <div class="form-group">
+        <label>NI Number</label>
+        <input type="text" id="edit-ni">
+      </div>
+    </div>
+    <div class="modal-section">Vehicle</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Redstone Vehicle?</label>
+        <select id="edit-van">
+          <option value="yes">Yes — Redstone Van</option>
+          <option value="no">No — Own Vehicle</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Van Registration</label>
+        <input type="text" id="edit-van-reg" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="modal-section">Bank Details</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Sort Code</label>
+        <input type="text" id="edit-sort">
+      </div>
+      <div class="form-group">
+        <label>Account Number</label>
+        <input type="text" id="edit-account">
+      </div>
+    </div>
+    <div class="modal-section">Login</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Redstone Card?</label>
+        <select id="edit-card">
+          <option value="yes">Yes</option>
+          <option value="no">No — Reimburse</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="text" id="edit-password">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveContractor()">Save Changes</button>
+    </div>
   </div>
 </div>
 
 <script>
-// Contractor data for pre-filling edit modal
-const contractorData = {
-  {% for c in contractors %}
-  "{{ c.contractor_key }}": {
-    name: "{{ c.name|replace('"', '\\"') }}",
-    phone: "{{ c.phone or '' }}",
-    email: "{{ c.email or '' }}",
-    address: "{{ (c.address or '')|replace('"', '\\"') }}",
-    utr: "{{ c.utr or '' }}",
-    ni: "{{ c.ni or '' }}",
-    cis_rate: "{{ c.cis_rate }}",
-    day_rate: "{{ c.day_rate }}",
-    redstone_vehicle: {{ 'true' if c.redstone_vehicle else 'false' }},
-    van_reg: "{{ c.van_reg or '' }}",
-    redstone_card: {{ 'true' if c.redstone_card else 'false' }},
-    sort_code: "{{ c.sort_code or '' }}",
-    account_no: "{{ c.account_no or '' }}",
-    password: "{{ c.password or '' }}"
-  },
-  {% endfor %}
-};
+  function closeModals() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
+  }
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) closeModals(); });
+  });
 
-function openAddModal() {
-  document.getElementById('modal_title').textContent = 'Add New Contractor';
-  document.getElementById('modal_submit_btn').textContent = 'Add Contractor';
-  document.getElementById('contractor_form').action = '/admin/contractors/add';
-  document.getElementById('form_action_key').value = '';
-  document.getElementById('contractor_form').reset();
-  document.getElementById('contractor_modal').classList.add('open');
-}
+  function toggleArchived(btn) {
+    const list = document.getElementById('archived-list');
+    const arrow = btn.querySelector('.toggle-arrow');
+    const isOpen = list.style.display !== 'none';
+    list.style.display = isOpen ? 'none' : 'block';
+    arrow.classList.toggle('open', !isOpen);
+  }
 
-function openEditModal(key) {
-  const c = contractorData[key];
-  if (!c) return;
-  document.getElementById('modal_title').textContent = `Edit — ${c.name}`;
-  document.getElementById('modal_submit_btn').textContent = 'Save Changes';
-  document.getElementById('contractor_form').action = `/admin/contractors/${key}/edit`;
-  document.getElementById('form_action_key').value = key;
+  function openAddModal() {
+    document.getElementById('add-modal').classList.add('show');
+  }
 
-  document.getElementById('f_name').value = c.name;
-  document.getElementById('f_phone').value = c.phone;
-  document.getElementById('f_email').value = c.email;
-  document.getElementById('f_address').value = c.address;
-  document.getElementById('f_utr').value = c.utr;
-  document.getElementById('f_ni').value = c.ni;
-  document.getElementById('f_cis_rate').value = c.cis_rate;
-  document.getElementById('f_day_rate').value = c.day_rate;
-  document.getElementById('f_vehicle').value = c.redstone_vehicle ? 'yes' : 'no';
-  document.getElementById('f_van_reg').value = c.van_reg;
-  document.getElementById('f_card').value = c.redstone_card ? 'yes' : 'no';
-  document.getElementById('f_sort_code').value = c.sort_code;
-  document.getElementById('f_account_no').value = c.account_no;
-  document.getElementById('f_password').value = c.password;
+  async function addContractor() {
+    const name = document.getElementById('add-name').value.trim();
+    if (!name) { alert('Name is required'); return; }
+    const form = new FormData();
+    form.append('name', name);
+    form.append('email', document.getElementById('add-email').value);
+    form.append('phone', document.getElementById('add-phone').value);
+    form.append('address', document.getElementById('add-address').value);
+    form.append('day_rate', document.getElementById('add-day-rate').value);
+    form.append('cis_rate', document.getElementById('add-cis').value);
+    form.append('utr', document.getElementById('add-utr').value);
+    form.append('ni', document.getElementById('add-ni').value);
+    form.append('redstone_vehicle', document.getElementById('add-van').value);
+    form.append('van_reg', document.getElementById('add-van-reg').value);
+    form.append('sort_code', document.getElementById('add-sort').value);
+    form.append('account_no', document.getElementById('add-account').value);
+    form.append('redstone_card', document.getElementById('add-card').value);
+    form.append('password', document.getElementById('add-password').value);
+    const res = await fetch('/admin/contractors/add', { method: 'POST', body: form });
+    if (res.redirected || res.ok) { closeModals(); location.reload(); }
+  }
 
-  document.getElementById('contractor_modal').classList.add('open');
-}
+  function openEditModal(key, data) {
+    document.getElementById('edit-key').value = key;
+    document.getElementById('edit-name').value = data.name || '';
+    document.getElementById('edit-email').value = data.email || '';
+    document.getElementById('edit-phone').value = data.phone || '';
+    document.getElementById('edit-address').value = data.address || '';
+    document.getElementById('edit-day-rate').value = data.day_rate || '';
+    document.getElementById('edit-cis').value = data.cis_rate == 0 ? '0' : '0.20';
+    document.getElementById('edit-utr').value = data.utr || '';
+    document.getElementById('edit-ni').value = data.ni || '';
+    document.getElementById('edit-van').value = data.redstone_vehicle ? 'yes' : 'no';
+    document.getElementById('edit-van-reg').value = data.van_reg || '';
+    document.getElementById('edit-sort').value = data.sort_code || '';
+    document.getElementById('edit-account').value = data.account_no || '';
+    document.getElementById('edit-card').value = data.redstone_card ? 'yes' : 'no';
+    document.getElementById('edit-password').value = data.password || '';
+    document.getElementById('edit-modal').classList.add('show');
+  }
 
-function closeModal() {
-  document.getElementById('contractor_modal').classList.remove('open');
-}
+  async function saveContractor() {
+    const key = document.getElementById('edit-key').value;
+    const form = new FormData();
+    ['name','email','phone','address','utr','ni','sort_code','account_no','password'].forEach(f => {
+      const el = document.getElementById('edit-' + f.replace('_','-').replace('_no','-account').replace('sort_code','sort').replace('account_no','account'));
+      if (el) form.append(f, el.value);
+    });
+    form.append('name', document.getElementById('edit-name').value);
+    form.append('email', document.getElementById('edit-email').value);
+    form.append('phone', document.getElementById('edit-phone').value);
+    form.append('address', document.getElementById('edit-address').value);
+    form.append('day_rate', document.getElementById('edit-day-rate').value);
+    form.append('cis_rate', document.getElementById('edit-cis').value);
+    form.append('utr', document.getElementById('edit-utr').value);
+    form.append('ni', document.getElementById('edit-ni').value);
+    form.append('redstone_vehicle', document.getElementById('edit-van').value);
+    form.append('van_reg', document.getElementById('edit-van-reg').value);
+    form.append('sort_code', document.getElementById('edit-sort').value);
+    form.append('account_no', document.getElementById('edit-account').value);
+    form.append('redstone_card', document.getElementById('edit-card').value);
+    form.append('password', document.getElementById('edit-password').value);
+    const res = await fetch(`/admin/contractors/${key}/edit`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) { closeModals(); location.reload(); }
+  }
 
-async function archiveContractor(key, name) {
-  if (!confirm(`Archive ${name}? They will no longer be able to log in. Their job history is retained.`)) return;
-  const resp = await fetch(`/admin/contractors/${key}/archive`, { method: 'POST' });
-  if ((await resp.json()).ok) location.reload();
-}
+  async function archiveContractor(key, name) {
+    if (!confirm(`Archive ${name}? They won't be able to log in but their records are kept. You can restore them anytime.`)) return;
+    const res = await fetch(`/admin/contractors/${key}/archive`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) location.reload();
+  }
 
-async function restoreContractor(key, name) {
-  if (!confirm(`Restore ${name} as an active contractor?`)) return;
-  const resp = await fetch(`/admin/contractors/${key}/restore`, { method: 'POST' });
-  if ((await resp.json()).ok) location.reload();
-}
-
-document.getElementById('contractor_modal').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
+  async function restoreContractor(key, name) {
+    if (!confirm(`Restore ${name} to active status?`)) return;
+    const res = await fetch(`/admin/contractors/${key}/restore`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) location.reload();
+  }
 </script>
-
 </body>
 </html>
