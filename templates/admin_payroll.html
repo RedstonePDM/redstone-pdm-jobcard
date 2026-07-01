@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payroll Summary — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; margin-left: 16px; }
+  .topbar-right a:hover { color: white; }
+  .page { max-width: 900px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+
+  .week-select { display: flex; align-items: center; gap: 10px; }
+  .week-select label { font-size: 13px; font-weight: 600; color: #555; }
+  .week-select select { padding: 7px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
+  .btn { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-print { background: #1a2332; color: white; }
+  .btn-print:hover { background: #0f1923; }
+
+  /* Payroll card — printable */
+  .payroll-card {
+    background: white; border-radius: 12px; padding: 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .payroll-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid #1a2332; }
+  .payroll-header h1 { font-size: 22px; color: #1a2332; }
+  .payroll-header .meta { font-size: 13px; color: #666; margin-top: 4px; }
+  .payroll-header .logo { font-size: 24px; font-weight: 800; color: #1a2332; }
+  .payroll-header .logo span { color: #c0392b; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+  thead th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+  thead th:not(:first-child) { text-align: right; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; }
+  td:not(:first-child) { text-align: right; }
+  tr:hover td { background: #fafbfc; }
+  .grand-row td { background: #1a2332; color: white; font-weight: 700; font-size: 14px; border: none; }
+
+  .payroll-footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e0e0e0; }
+  .footer-note { font-size: 11px; color: #888; line-height: 1.6; }
+  .footer-note strong { color: #555; }
+
+  .cis-tag { font-size: 11px; color: #888; }
+
+  @media print {
+    .topbar, .page-header, .week-select { display: none !important; }
+    body { background: white; }
+    .payroll-card { box-shadow: none; border-radius: 0; padding: 20px; }
+    .page { padding: 0; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/jobcards">Job Cards</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <h2>Payroll Summary</h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="week-select">
+        <label>Week:</label>
+        <select onchange="location.href='/admin/payroll?week='+this.value">
+          <option value="{{ selected_week }}">w/c {{ selected_week.strftime('%d %b %Y') }}</option>
+          {% for pw in past_weeks %}
+          <option value="{{ pw.wc }}" {% if pw.wc == selected_week %}selected{% endif %}>
+            w/c {{ pw.wc.strftime('%d %b %Y') }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <div class="payroll-card" id="payroll-printable">
+    <div class="payroll-header">
+      <div>
+        <h1>EEBS Payroll Submission</h1>
+        <div class="meta">Week commencing {{ selected_week.strftime('%d %B %Y') }} — {{ week_end.strftime('%d %B %Y') }}</div>
+        <div class="meta" style="margin-top:4px">Redstone PDM Ltd &nbsp;|&nbsp; Company No: 10070131 &nbsp;|&nbsp; CIS Registered</div>
+      </div>
+      <div class="logo">Redstone <span>PDM</span></div>
+    </div>
+
+    {% if summaries %}
+    <table>
+      <thead>
+        <tr>
+          <th>Engineer</th>
+          <th>Jobs</th>
+          <th>Labour</th>
+          <th>Mileage</th>
+          <th>Reimburse</th>
+          <th>Gross</th>
+          <th>CIS (20%)</th>
+          <th>Net Payment</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in summaries %}
+        <tr>
+          <td>
+            <div style="font-weight:600;color:#1a2332">{{ s.name }}</div>
+            {% if s.cis_rate == 0 %}
+            <div class="cis-tag">CIS Exempt (Director)</div>
+            {% endif %}
+          </td>
+          <td>{{ s.job_count }}</td>
+          <td>£{{ '%.2f'|format(s.total_labour|float) }}</td>
+          <td>£{{ '%.2f'|format(s.total_mileage|float) }}</td>
+          <td>£{{ '%.2f'|format((s.total_reimburse or 0)|float) }}</td>
+          <td style="font-weight:600">£{{ '%.2f'|format(s.gross_total|float) }}</td>
+          <td style="color:{% if s.cis_rate > 0 %}#c0392b{% else %}#888{% endif %}">
+            {% if s.cis_rate > 0 %}-£{{ '%.2f'|format(s.total_cis|float) }}{% else %}—{% endif %}
+          </td>
+          <td style="font-weight:700;color:#1a2332">£{{ '%.2f'|format(s.net_total|float) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="grand-row">
+          <td>TOTALS</td>
+          <td></td>
+          <td>£{{ '%.2f'|format(grand.labour) }}</td>
+          <td>£{{ '%.2f'|format(grand.mileage) }}</td>
+          <td></td>
+          <td>£{{ '%.2f'|format(grand.gross) }}</td>
+          <td>-£{{ '%.2f'|format(grand.cis) }}</td>
+          <td>£{{ '%.2f'|format(grand.net) }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="payroll-footer">
+      <div class="footer-note">
+        <strong>Payment instructions:</strong> Please process net payments to each engineer as listed above.
+        CIS deductions at 20% have been calculated on labour elements only. Mileage and materials reimbursements are not subject to CIS.
+        Dave Duppa (Director) is CIS exempt. All payments to be processed via EEBS under IR35 regulations.
+        <br><br>
+        <strong>Generated:</strong> {{ now().strftime('%d %B %Y at %H:%M') if now else '' }}
+        &nbsp;|&nbsp; <strong>Prepared by:</strong> Redstone PDM Ltd
+      </div>
+    </div>
+
+    {% else %}
+    <div style="padding:40px;text-align:center;color:#999;font-size:14px">
+      No approved job cards found for the week commencing {{ selected_week.strftime('%d %B %Y') }}.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // Make the now() work client-side for print
+  document.querySelector('.footer-note strong:last-of-type + *') && null; // no-op
+</script>
+
+</body>
+</html>
