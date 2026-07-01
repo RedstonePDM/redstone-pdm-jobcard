@@ -43,15 +43,6 @@
   .job-header h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
   .job-header p { font-size: 13px; opacity: 0.85; }
 
-  /* Labour info box */
-  .labour-info {
-    background: #1a2332; color: white;
-    border-radius: 10px; padding: 14px 16px;
-    margin-bottom: 14px; font-size: 13px; line-height: 1.6;
-  }
-  .labour-info strong { color: #c0392b; font-size: 15px; display: block; margin-bottom: 4px; }
-  .labour-rate { font-size: 18px; font-weight: 800; color: white; }
-
   .content { padding: 16px; }
   .section {
     background: white;
@@ -365,21 +356,7 @@
 </div>
 {% else %}
 
-<!-- Labour rate info box -->
 {% set prefix = job.job_id[:4] %}
-{% if prefix == '2000' %}
-<div class="labour-info">
-  <strong>PPM Job — Full Day Rate Applied</strong>
-  <span class="labour-rate">£{{ contractor.day_rate }}</span> day rate
-  {% if contractor.overtime_rate > 0 %}+ £{{ contractor.overtime_rate }}/hr overtime above 8hrs on site{% endif %}
-</div>
-{% else %}
-<div class="labour-info">
-  <strong>Hourly Rate — £{{ '%.2f'|format(contractor.day_rate / 10) }}/hr</strong>
-  Based on your day rate (£{{ contractor.day_rate }} ÷ 10hr day).
-  Overtime: £{{ contractor.overtime_rate }}/hr above 8hrs on site.
-</div>
-{% endif %}
 
 <form method="POST" action="/job/{{ job.job_id }}/{{ card_date }}/submit"
       enctype="multipart/form-data" id="jobForm">
@@ -451,8 +428,7 @@
       <div class="hours-display" id="hours_display">Hours on site: —</div>
       <input type="hidden" name="hours_on_site" id="hours_on_site">
 
-      <!-- Live labour cost preview -->
-      <div id="labour_preview" style="display:none;background:#effdf4;border-radius:8px;padding:10px 14px;font-size:13px;color:#1a7a4a;font-weight:600;margin-top:10px;text-align:center;"></div>
+
 
       <div class="field" style="margin-top:14px;">
         <label>Overtime Hours (above 8hrs on site)</label>
@@ -619,12 +595,9 @@
 </div>
 
 <script>
-// ── Job type for labour preview
+// Job type detection
 const JOB_PREFIX = "{{ job.job_id[:4] }}";
-const DAY_RATE = {{ contractor.day_rate }};
-const OVERTIME_RATE = {{ contractor.overtime_rate }};
 const IS_PPM = JOB_PREFIX === '2000';
-const HOURLY_RATE = DAY_RATE / 10;
 
 // ── Confirmation Modal ─────────────────────────────────────
 function openConfirm() {
@@ -961,29 +934,12 @@ function calcHours() {
   document.getElementById('hours_display').className = 'hours-display has-hours';
   document.getElementById('hours_on_site').value = hrs;
 
-  // Live labour cost preview
-  const ot = parseFloat(document.getElementById('overtime_hours')?.value || 0);
-  let labourCost, labourDesc;
-  if (IS_PPM) {
-    labourCost = DAY_RATE + (ot * OVERTIME_RATE);
-    labourDesc = `PPM Full Day: £${DAY_RATE.toFixed(2)}${ot > 0 ? ` + ${ot}hr OT: £${(ot*OVERTIME_RATE).toFixed(2)}` : ''}`;
-  } else {
-    const base = hrs * HOURLY_RATE;
-    const otCost = ot * OVERTIME_RATE;
-    labourCost = base + otCost;
-    labourDesc = `${hrs}hrs × £${HOURLY_RATE.toFixed(2)}/hr = £${base.toFixed(2)}${ot > 0 ? ` + ${ot}hr OT = £${otCost.toFixed(2)}` : ''}`;
-  }
-
-  const preview = document.getElementById('labour_preview');
-  preview.style.display = 'block';
-  preview.textContent = `Labour: ${labourDesc} → Total: £${labourCost.toFixed(2)}`;
+  // Flag overtime prompt if over 8hrs
   if (hrs > 8) {
-    preview.style.background = '#fff3cd';
-    preview.style.color = '#856404';
-    preview.textContent += ' ⚠ Over 8hrs — add overtime hours above';
-  } else {
-    preview.style.background = '#effdf4';
-    preview.style.color = '#1a7a4a';
+    const display = document.getElementById('hours_display');
+    display.textContent = `Hours on site: ${hrs} hrs ⚠ Add overtime hours below`;
+    display.style.background = '#fff3cd';
+    display.style.color = '#856404';
   }
 }
 
