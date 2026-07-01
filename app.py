@@ -60,7 +60,7 @@ CONTRACTORS = {
         "mileage_rate": 0,
         "redstone_card": True,
         "cis_rate": 0,        # Director - exempt
-        "password": "duppa2024",
+        "password": "Duppa2024!",
     },
     "mark_ashpool": {
         "name": "Mark Ashpool",
@@ -78,7 +78,7 @@ CONTRACTORS = {
         "mileage_rate": 0.25,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "ashpool2024",
+        "password": "Ashpool2024!",
     },
     "richard_chambers": {
         "name": "Richard Chambers",
@@ -96,7 +96,7 @@ CONTRACTORS = {
         "mileage_rate": 0,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "chambers2024",
+        "password": "Chambers2024!",
     },
     "ash_everett": {
         "name": "Ashley Everett",
@@ -114,7 +114,7 @@ CONTRACTORS = {
         "mileage_rate": 0,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "everett2024",
+        "password": "Everett2024!",
     },
     "cassius_kwarteng": {
         "name": "Cassius Kwarteng",
@@ -132,7 +132,7 @@ CONTRACTORS = {
         "mileage_rate": 0,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "cassius2024",
+        "password": "Cassius2024!",
     },
     "dave_lefevre": {
         "name": "Dave Lefevre",
@@ -150,7 +150,7 @@ CONTRACTORS = {
         "mileage_rate": 0,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "lefevre2024",
+        "password": "Lefevre2024!",
     },
     "aziz_rehman": {
         "name": "Aziz Rehman",
@@ -168,7 +168,7 @@ CONTRACTORS = {
         "mileage_rate": 0.25,
         "redstone_card": True,
         "cis_rate": 0.20,
-        "password": "aziz2024",
+        "password": "Aziz2024!",
     },
     "james_rutland": {
         "name": "James Rutland",
@@ -186,7 +186,7 @@ CONTRACTORS = {
         "mileage_rate": 0.25,
         "redstone_card": False,   # Uses own card - reimburse
         "cis_rate": 0.20,
-        "password": "james2024",
+        "password": "Rutland2024!",
     },
 }
 
@@ -778,16 +778,38 @@ def submit_job_card(job_id, card_date):
     contractor = CONTRACTORS[key]
 
     # Parse form data
-    time_start  = request.form.get("time_start", "")
-    time_finish = request.form.get("time_finish", "")
-    hours       = float(request.form.get("hours_on_site", 0) or 0)
-    overtime_h  = float(request.form.get("overtime_hours", 0) or 0)
-    parking     = float(request.form.get("parking_cost", 0) or 0)
-    odometer    = request.form.get("odometer") or None
-    only_job    = request.form.get("only_job_today") == "yes"
-    desc_actual = request.form.get("description_actual", "")
-    desc_planned= request.form.get("description_planned", "")
-    mileage_miles = float(request.form.get("mileage_miles", 0) or 0)
+    time_start    = request.form.get("time_start", "")
+    time_finish   = request.form.get("time_finish", "")
+    hours         = float(request.form.get("hours_on_site", 0) or 0)
+    overtime_h    = float(request.form.get("overtime_hours", 0) or 0)
+    odometer      = request.form.get("odometer") or None
+    only_job      = request.form.get("only_job_today") == "yes"
+    desc_actual   = request.form.get("description_actual", "")
+    desc_planned  = request.form.get("description_planned", "")
+    mileage_miles = float(request.form.get("total_miles", 0) or 0)
+    card_date_str = request.form.get("card_date", card_date)
+
+    # Parse journey legs
+    journey_json = request.form.get("journey_json", "[]")
+    try:
+        journey_legs = json.loads(journey_json)
+    except Exception:
+        journey_legs = []
+
+    # Parse parking charges
+    parking = 0.0
+    parking_items = []
+    park_count = int(request.form.get("parking_count", 0))
+    reimburse_parking = 0.0
+    for i in range(1, park_count + 1):
+        desc = request.form.get(f"park_desc_{i}", "").strip()
+        cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
+        payment = request.form.get(f"park_payment_{i}", "Redstone Card")
+        if cost > 0:
+            parking_items.append({"description": desc, "cost": cost, "payment": payment})
+            parking += cost
+            if payment != "Redstone Card":
+                reimburse_parking += cost
 
     # Labour cost: full day rate + overtime
     labour_cost = float(contractor["day_rate"]) + (overtime_h * float(contractor["overtime_rate"]))
@@ -819,8 +841,11 @@ def submit_job_card(job_id, card_date):
 
     materials_total = sum(m["total"] for m in materials)
 
-    # Invoice total = labour + mileage + parking + reimbursable materials
-    invoice_total = labour_cost + mileage_cost + parking + reimburse_total
+    # Invoice total = labour + mileage + parking (reimburse only) + reimbursable materials
+    reimburse_total_all = reimburse_total + reimburse_parking
+    invoice_total = labour_cost + mileage_cost + reimburse_total_all
+    # Redstone card parking is a company cost not on contractor invoice
+    redstone_parking = parking - reimburse_parking
     cis_deduction = round(labour_cost * contractor["cis_rate"], 2)
     net_payment   = round(invoice_total - cis_deduction, 2)
 
@@ -1017,12 +1042,39 @@ def download_job_card(card_id):
 def api_mileage():
     key = session["contractor_key"]
     contractor = CONTRACTORS[key]
-    postcode = request.args.get("postcode", "")
-    if not postcode or contractor["mileage_rate"] == 0:
+    origin = request.args.get("from", "")
+    dest   = request.args.get("to", "")
+    return_to_site = request.args.get("return_to_site", "false") == "true"
+    site   = request.args.get("site", "")
+
+    if not origin or not dest:
         return jsonify({"miles": 0, "cost": 0})
-    miles, _ = calculate_mileage(contractor["address"], postcode)
-    cost = round(miles * contractor["mileage_rate"], 2)
-    return jsonify({"miles": miles, "cost": cost})
+
+    try:
+        if not GMAPS_API_KEY:
+            return jsonify({"miles": 0, "cost": 0, "error": "No API key"})
+
+        def get_miles(a, b):
+            url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+            params = {"origins": a, "destinations": b,
+                      "units": "imperial", "key": GMAPS_API_KEY}
+            r = requests.get(url, params=params, timeout=10)
+            data = r.json()
+            el = data["rows"][0]["elements"][0]
+            if el["status"] != "OK":
+                return 0
+            return round(el["distance"]["value"] / 1609.34, 1)
+
+        miles = get_miles(origin, dest)
+
+        # Materials run: merchant → site return leg
+        if return_to_site and site:
+            miles += get_miles(dest, site)
+
+        cost = round(miles * contractor["mileage_rate"], 2)
+        return jsonify({"miles": miles, "cost": cost})
+    except Exception as e:
+        return jsonify({"miles": 0, "cost": 0, "error": str(e)})
 
 
 if __name__ == "__main__":
