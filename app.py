@@ -31,6 +31,8 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "redstone-jobcard-2024")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = False
 
 DATABASE_URL     = os.environ["DATABASE_URL"]
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
@@ -336,6 +338,15 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if "contractor_key" not in session:
             return redirect(url_for("login"))
+        if session.get("role") == "contractor":
+            now = datetime.now()
+            login_time = session.get("login_time")
+            if login_time:
+                logged_in_at = datetime.fromisoformat(login_time)
+                today_1am = now.replace(hour=1, minute=0, second=0, microsecond=0)
+                if logged_in_at < today_1am and now >= today_1am:
+                    session.clear()
+                    return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
 
@@ -657,6 +668,7 @@ def login():
            request.form.get("password") == os.environ.get("ADMIN_PASSWORD", "redstone2024"):
             session["role"] = "admin"
             session["contractor_key"] = "admin"
+            session.permanent = False
             return redirect(url_for("admin_home"))
         password = request.form.get("password", "")
         name_input = request.form.get("name", "").strip().lower()
@@ -665,6 +677,8 @@ def login():
             if c["name"].lower() == name_input and c.get("password") == password:
                 session["contractor_key"] = key
                 session["role"] = "contractor"
+                session.permanent = True
+                session["login_time"] = datetime.now().isoformat()
                 return redirect(url_for("dashboard"))
         error = "Name or password not recognised."
     return render_template("login.html", error=error)
