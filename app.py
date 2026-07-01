@@ -586,8 +586,12 @@ def build_invoice_pdf(card, contractor):
     cost_data.append(["Labour", f"£{card['labour_cost']:.2f}"])
     if card.get("mileage_cost", 0):
         cost_data.append([f"Mileage ({card['mileage_miles']} miles @ {int(contractor['mileage_rate']*100)}p/mile)", f"£{card['mileage_cost']:.2f}"])
-    if card.get("parking_cost", 0):
-        cost_data.append(["Parking", f"£{card['parking_cost']:.2f}"])
+    if float(card.get("parking_cost", 0)) > 0:
+        # parking_cost = total parking logged; only own-card portion on invoice
+        # reimburse_parking stored separately in card dict
+        reimb_park = float(card.get("reimburse_parking", 0) or card.get("parking_cost", 0))
+        if reimb_park > 0:
+            cost_data.append(["Parking (Own Card)", f"£{reimb_park:.2f}"])
     if card.get("reimburse_total", 0):
         cost_data.append(["Materials (To Be Reimbursed)", f"£{card['reimburse_total']:.2f}"])
     cost_table = Table(cost_data, colWidths=[140*mm, 40*mm])
@@ -806,15 +810,19 @@ def submit_job_card(job_id, card_date):
     parking_items = []
     park_count = int(request.form.get("parking_count", 0))
     reimburse_parking = 0.0
+    redstone_parking = 0.0  # Redstone card parking — company cost, NOT on contractor invoice
     for i in range(1, park_count + 1):
         desc = request.form.get(f"park_desc_{i}", "").strip()
         cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
         payment = request.form.get(f"park_payment_{i}", "Redstone Card")
+        is_fine = request.form.get(f"park_is_fine_{i}") == "yes"
         if cost > 0:
-            parking_items.append({"description": desc, "cost": cost, "payment": payment})
-            parking += cost
-            if payment != "Redstone Card":
-                reimburse_parking += cost
+            parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
+            parking += cost  # total parking for record keeping
+            if payment == "Redstone Card":
+                redstone_parking += cost  # company expense only
+            else:
+                reimburse_parking += cost  # on contractor invoice
     # ── Labour calculation by job type ──────────────────────────────────────
     # Detect job type from job_id prefix
     job_prefix = str(job_id)[:4] if job_id else "1000"
@@ -850,8 +858,12 @@ def submit_job_card(job_id, card_date):
         if payment != "Redstone Card":
             reimburse_total += total
     materials_total = sum(m["total"] for m in materials)
+    # Only reimburse parking paid on own card (not Redstone card, not fines pending approval)
+    # Contractor invoice: labour + mileage + own-card parking + own-card materials
+    # Redstone card parking is a company expense — NOT on contractor invoice
     reimburse_total_all = reimburse_total + reimburse_parking
     invoice_total = labour_cost + mileage_cost + reimburse_total_all
+    # parking_fines within reimburse_parking are flagged for admin approval at sign-off
     cis_deduction = round(labour_cost * contractor["cis_rate"], 2)
     net_payment   = round(invoice_total - cis_deduction, 2)
     def save_files(field_name):
@@ -884,7 +896,9 @@ def submit_job_card(job_id, card_date):
         "base_day_rate": contractor["day_rate"], "overtime_hours": overtime_h,
         "overtime_rate": contractor["overtime_rate"], "labour_cost": labour_cost,
         "mileage_miles": mileage_miles, "mileage_cost": mileage_cost,
-        "parking_cost": parking, "materials_json": materials,
+        "parking_cost": parking,
+        "reimburse_parking": reimburse_parking,
+        "materials_json": materials,
         "materials_total": materials_total, "reimburse_total": reimburse_total,
         "odometer": odometer, "only_job_today": only_job,
         "invoice_total": invoice_total, "cis_deduction": cis_deduction,
@@ -915,15 +929,15 @@ def submit_job_card(job_id, card_date):
     conn.commit()
     try:
         loc_cur = conn.cursor()
-        # If contractor travelled home, clear location so next card starts from home
-        went_home = any(l.get("type") in ("home",) for l in journey_legs)
-        if went_home:
-            # Reset to home address
-            new_location = contractor["address"]
-            new_job_id = None
-        else:
+        # ONLY carry forward site location if contractor explicitly used Drive to Next Job
+        # In ALL other cases (Travel Home, no journey, end of day) reset to home
+        has_next_job_leg = any(l.get("type") == "nextjob" for l in journey_legs)
+        if has_next_job_leg:
             new_location = job.get("postcode","") + " " + job.get("pub_name","")
             new_job_id = job_id
+        else:
+            new_location = contractor["address"]
+            new_job_id = None
         loc_cur.execute("""
             INSERT INTO contractor_locations (contractor_key, last_location, last_job_id, updated_at)
             VALUES (%s, %s, %s, NOW())
@@ -1672,13 +1686,15 @@ def api_last_location():
     row = cur.fetchone()
     cur.close()
     conn.close()
-    if row and row["updated_at"] and row["last_location"]:
+    if row and row["updated_at"] and row["last_location"] and row["last_job_id"]:
         try:
             last_date = row["updated_at"].date()
         except Exception:
             last_date = None
-        if last_date == today:
+        # Only use last location if it was set TODAY AND there's an active next-job chain
+        if last_date == today and row["last_job_id"] is not None:
             return jsonify({"location": row["last_location"], "job_id": row["last_job_id"], "from_last_job": True})
+    # Default: always start from home
     return jsonify({"location": contractor["address"], "job_id": None, "from_last_job": False})
 
 
