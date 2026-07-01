@@ -768,7 +768,8 @@ def job_card_form(job_id, card_date):
                            job=job,
                            card_date=card_date,
                            mileage_miles=mileage_miles,
-                           existing_card=existing_card)
+                           existing_card=existing_card,
+                           gmaps_key=GMAPS_API_KEY)
 
 
 @app.route("/job/<job_id>/<card_date>/submit", methods=["POST"])
