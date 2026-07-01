@@ -748,7 +748,8 @@ def login():
     error = None
     if request.method == "POST":
         # Admin login
-        if request.form.get("username") == "admin" and \
+        name_or_user = request.form.get("name", "") or request.form.get("username", "")
+        if name_or_user.lower().strip() == "admin" and \
            request.form.get("password") == os.environ.get("ADMIN_PASSWORD", "redstone2024"):
             session["role"] = "admin"
             session["contractor_key"] = "admin"
