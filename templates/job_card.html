@@ -661,8 +661,14 @@ function updateLeg(id, type, from, to, miles, cost) {
 
 function removeLeg(id) {
   const leg = document.getElementById(`leg_${id}`);
-  if (leg && leg.classList.contains('travel') && leg.querySelector('.leg-type-badge')?.textContent?.includes('Travel to Site')) {
-    // Show travel to site button again if that leg is removed
+  const badge = leg?.querySelector('.leg-type-badge')?.textContent || '';
+
+  // If removing a closing leg (home or next job), unlock journey
+  if (badge.includes('Travel Home') || badge.includes('Drive to Next Job')) {
+    unlockJourney();
+  }
+  // If removing travel to site, show that button again
+  if (badge.includes('Travel to Site')) {
     const btn = document.getElementById('btn_travel');
     if (btn) btn.style.display = '';
   }
@@ -676,7 +682,31 @@ function closeJourney() {
   journeyClosed = true;
   const btns = document.getElementById('leg_buttons');
   if (btns) {
-    btns.innerHTML = '<div style="background:#eafaf1;border-radius:8px;padding:12px 14px;font-size:13px;color:#27ae60;font-weight:600;margin-top:8px;">✓ Journey complete — fill in the rest of the form and submit.</div>';
+    btns.innerHTML = `
+      <div style="background:#eafaf1;border-radius:8px;padding:12px 14px;font-size:13px;color:#27ae60;font-weight:600;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+        <span>✓ Journey complete — fill in the rest of the form and submit.</span>
+        <button type="button" onclick="unlockJourney()" style="background:none;border:1px solid #27ae60;border-radius:6px;color:#27ae60;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:12px;white-space:nowrap;">Undo</button>
+      </div>`;
+  }
+}
+
+function unlockJourney() {
+  journeyClosed = false;
+  const btns = document.getElementById('leg_buttons');
+  if (btns) {
+    const travelVisible = !legs.some(l => l.type === 'travel' && legs.indexOf(l) === 0);
+    btns.innerHTML = `
+      <div class="add-leg-btns" id="btn_travel_row">
+        <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')" ${legs.some(l => l.type === 'travel') ? 'style="display:none"' : ''}>🚗 Travel to Site</button>
+        <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
+      </div>
+      <div class="add-leg-btns" style="margin-top:8px;">
+        <button type="button" class="add-leg-btn" onclick="addLeg('home')">🏠 Travel Home</button>
+        <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
+      </div>
+      <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">
+        "Drive to Next Job" closes mileage for this card — that journey is logged on your next job card as "Travel to Site".
+      </div>`;
   }
 }
 
