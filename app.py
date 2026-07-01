@@ -500,16 +500,23 @@ def build_job_card_pdf(card, contractor):
         story.append(Paragraph(" MATERIALS", section_style))
         story.append(Spacer(1, 4))
         mat_data = [["#","Description","Qty","Unit Cost","Total","Payment"]]
+        mat_grand_total = 0.0
         for i, m in enumerate(materials, 1):
+            line_total = float(m.get("total", 0))
+            mat_grand_total += line_total
             mat_data.append([str(i), m.get("description",""), str(m.get("qty","")),
-                             f"£{float(m.get('unit_cost',0)):.2f}", f"£{float(m.get('total',0)):.2f}",
+                             f"£{float(m.get('unit_cost',0)):.2f}", f"£{line_total:.2f}",
                              m.get("payment","Redstone Card")])
+        # Add totals row
+        mat_data.append(["", "TOTAL MATERIALS", "", "", f"£{mat_grand_total:.2f}", ""])
         mat_table = Table(mat_data, colWidths=[8*mm,60*mm,15*mm,22*mm,22*mm,33*mm])
         mat_table.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8),
             ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, REDSTONE_LIGHT]),
+            ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white, REDSTONE_LIGHT]),
+            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
+            ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
             ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
             ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
         ]))
@@ -533,14 +540,73 @@ def build_job_card_pdf(card, contractor):
     if card.get("parking_cost", 0):
         story.append(Paragraph(" PARKING", section_style))
         story.append(Spacer(1, 4))
-        parking = Table([field_row("PARKING COST", f"£{card['parking_cost']:.2f}")], colWidths=[55*mm, 125*mm])
-        parking.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT),
-            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-            ("LEFTPADDING",(0,0),(-1,-1),6),
-            ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]))
-        story.append(parking)
+        parking_items_stored = card.get("parking_items_json") or []
+        if parking_items_stored:
+            park_data = [["Description", "Amount", "Payment", "Reimbursable?"]]
+            for p in parking_items_stored:
+                reimb = "Pending approval" if p.get("is_fine") else ("Yes" if p.get("payment") != "Redstone Card" else "No — company expense")
+                park_data.append([
+                    p.get("description",""),
+                    f"£{float(p.get('cost',0)):.2f}",
+                    p.get("payment",""),
+                    reimb
+                ])
+            park_data.append(["TOTAL PARKING", f"£{float(card['parking_cost']):.2f}", "", ""])
+            park_table = Table(park_data, colWidths=[65*mm, 25*mm, 45*mm, 45*mm])
+            park_table.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+                ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8),
+                ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+                ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white, REDSTONE_LIGHT]),
+                ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
+                ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+                ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
+                ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
+            ]))
+            story.append(park_table)
+        else:
+            parking = Table([field_row("PARKING COST", f"£{card['parking_cost']:.2f}")], colWidths=[55*mm, 125*mm])
+            parking.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT),
+                ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+                ("LEFTPADDING",(0,0),(-1,-1),6),
+                ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ]))
+            story.append(parking)
+
+    # ── Grand Total section ──────────────────────────────────────────────────
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(" JOB COST SUMMARY", section_style))
+    story.append(Spacer(1, 4))
+    grand_labour  = float(card.get("labour_cost", 0))
+    grand_mileage = float(card.get("mileage_cost", 0))
+    grand_park    = float(card.get("parking_cost", 0))
+    grand_mats    = float(card.get("materials_total", 0))
+    grand_total   = grand_labour + grand_mileage + grand_park + grand_mats
+    grand_data = []
+    grand_data.append(["Labour", f"£{grand_labour:.2f}"])
+    if grand_mileage > 0:
+        grand_data.append(["Mileage", f"£{grand_mileage:.2f}"])
+    if grand_park > 0:
+        grand_data.append(["Parking", f"£{grand_park:.2f}"])
+    if grand_mats > 0:
+        grand_data.append(["Materials", f"£{grand_mats:.2f}"])
+    grand_data.append(["TOTAL JOB COST", f"£{grand_total:.2f}"])
+    grand_table = Table(grand_data, colWidths=[140*mm, 40*mm])
+    grand_table.setStyle(TableStyle([
+        ("ALIGN",(1,0),(1,-1),"RIGHT"),
+        ("FONTSIZE",(0,0),(-1,-1),9),
+        ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+        ("ROWBACKGROUNDS",(0,0),(-1,-2),[colors.white, REDSTONE_LIGHT]),
+        ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_DARK),
+        ("TEXTCOLOR",(0,-1),(-1,-1),colors.white),
+        ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+        ("FONTSIZE",(0,-1),(-1,-1),11),
+        ("TOPPADDING",(0,0),(-1,-1),5), ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("LINEABOVE",(0,-1),(-1,-1),1.5,REDSTONE_RED),
+    ]))
+    story.append(grand_table)
     doc.build(story)
     buf.seek(0)
     return buf.read()
@@ -556,8 +622,9 @@ def build_invoice_pdf(card, contractor):
     value_style = ParagraphStyle("value", fontSize=10, textColor=REDSTONE_DARK, fontName="Helvetica")
     head_style  = ParagraphStyle("head", fontSize=16, textColor=REDSTONE_DARK, fontName="Helvetica-Bold")
     story.append(Paragraph("Redstone PDM", head_style))
-    story.append(Paragraph("Reverse Self-Billing Invoice", ParagraphStyle("sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica")))
-    story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceAfter=8))
+    story.append(Paragraph("Reverse Self-Billing Invoice", ParagraphStyle(
+        "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
+    story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
     parties = Table([[
         Paragraph(f"<b>Engineer:</b> {contractor['name']}<br/>{contractor['address']}<br/>"
                   f"UTR: {contractor.get('utr','—')}<br/>NI: {contractor.get('ni','—')}<br/>"
@@ -593,7 +660,18 @@ def build_invoice_pdf(card, contractor):
         if reimb_park > 0:
             cost_data.append(["Parking (Own Card)", f"£{reimb_park:.2f}"])
     if card.get("reimburse_total", 0):
-        cost_data.append(["Materials (To Be Reimbursed)", f"£{card['reimburse_total']:.2f}"])
+        # Itemise each reimbursable material line
+        materials_list = card.get("materials_json") or []
+        reimb_items = [m for m in materials_list if m.get("payment","") != "Redstone Card"]
+        if reimb_items:
+            for m in reimb_items:
+                cost_data.append([
+                    f"Materials — {m.get('description','')} (x{m.get('qty',1)})",
+                    f"£{float(m.get('total',0)):.2f}"
+                ])
+            cost_data.append(["Materials Reimbursement Total", f"£{float(card['reimburse_total']):.2f}"])
+        else:
+            cost_data.append(["Materials (To Be Reimbursed)", f"£{card['reimburse_total']:.2f}"])
     cost_table = Table(cost_data, colWidths=[140*mm, 40*mm])
     cost_table.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
@@ -898,6 +976,7 @@ def submit_job_card(job_id, card_date):
         "mileage_miles": mileage_miles, "mileage_cost": mileage_cost,
         "parking_cost": parking,
         "reimburse_parking": reimburse_parking,
+        "parking_items_json": parking_items,
         "materials_json": materials,
         "materials_total": materials_total, "reimburse_total": reimburse_total,
         "odometer": odometer, "only_job_today": only_job,
