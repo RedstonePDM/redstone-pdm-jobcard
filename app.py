@@ -285,10 +285,68 @@ def init_db():
             reviewed_at     TIMESTAMPTZ,
             reviewed_by     TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS contractors_db (
+            contractor_key  TEXT PRIMARY KEY,
+            name            TEXT NOT NULL,
+            email           TEXT,
+            phone           TEXT,
+            address         TEXT,
+            utr             TEXT,
+            ni              TEXT,
+            sort_code       TEXT,
+            account_no      TEXT,
+            day_rate        NUMERIC(8,2),
+            overtime_rate   NUMERIC(8,2),
+            redstone_vehicle BOOLEAN DEFAULT TRUE,
+            van_reg         TEXT,
+            mileage_rate    NUMERIC(5,3) DEFAULT 0,
+            redstone_card   BOOLEAN DEFAULT TRUE,
+            cis_rate        NUMERIC(5,3) DEFAULT 0.20,
+            password        TEXT,
+            status          TEXT DEFAULT 'active',
+            archived_at     TIMESTAMPTZ,
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        );
     """)
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_contractor(key):
+    """Get contractor data from DB, falling back to hardcoded dict."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM contractors_db WHERE contractor_key = %s AND status = 'active'", (key,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return dict(row)
+    except Exception as e:
+        print(f"DB contractor lookup failed: {e}")
+    return CONTRACTORS.get(key)
+
+
+def get_all_contractors(include_archived=False):
+    """Get all contractors from DB."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if include_archived:
+            cur.execute("SELECT * FROM contractors_db ORDER BY status, name")
+        else:
+            cur.execute("SELECT * FROM contractors_db WHERE status = 'active' ORDER BY name")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return {r["contractor_key"]: dict(r) for r in rows}
+    except Exception as e:
+        print(f"DB contractors lookup failed: {e}")
+        return CONTRACTORS
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -696,11 +754,12 @@ def login():
             session["contractor_key"] = "admin"
             return redirect(url_for("admin_dashboard"))
 
-        # Contractor login — match by name
+        # Contractor login — check DB first, fallback to dict
         password = request.form.get("password", "")
         name_input = request.form.get("name", "").strip().lower()
-        for key, c in CONTRACTORS.items():
-            if c["name"].lower() == name_input and c["password"] == password:
+        all_contractors = get_all_contractors()
+        for key, c in all_contractors.items():
+            if c["name"].lower() == name_input and c.get("password") == password:
                 session["contractor_key"] = key
                 session["role"] = "contractor"
                 return redirect(url_for("dashboard"))
@@ -1120,6 +1179,120 @@ def request_profile_change():
         """
     )
 
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/contractors")
+@admin_required
+def admin_contractors():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM contractors_db ORDER BY status, name")
+    contractors = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("admin_contractors.html", contractors=contractors)
+
+
+@app.route("/admin/contractors/add", methods=["POST"])
+@admin_required
+def admin_add_contractor():
+    data = request.form
+    import re
+    key = re.sub(r'[^a-z0-9]', '_', data.get("name", "").lower().strip())
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO contractors_db (
+            contractor_key, name, email, phone, address,
+            utr, ni, sort_code, account_no,
+            day_rate, overtime_rate, redstone_vehicle, van_reg,
+            mileage_rate, redstone_card, cis_rate, password, status
+        ) VALUES (
+            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active'
+        ) ON CONFLICT (contractor_key) DO UPDATE SET
+            name=EXCLUDED.name, email=EXCLUDED.email,
+            updated_at=NOW()
+    """, (
+        key, data.get("name"), data.get("email"), data.get("phone"),
+        data.get("address"), data.get("utr"), data.get("ni"),
+        data.get("sort_code"), data.get("account_no"),
+        float(data.get("day_rate") or 0),
+        float(data.get("day_rate") or 0) / 10,
+        data.get("redstone_vehicle") == "yes",
+        data.get("van_reg"),
+        0.25 if data.get("redstone_vehicle") != "yes" else 0,
+        data.get("redstone_card") == "yes",
+        float(data.get("cis_rate") or 0.20),
+        data.get("password")
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for("admin_contractors"))
+
+
+@app.route("/admin/contractors/<key>/edit", methods=["POST"])
+@admin_required
+def admin_edit_contractor(key):
+    data = request.form
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE contractors_db SET
+            name=%s, email=%s, phone=%s, address=%s,
+            utr=%s, ni=%s, sort_code=%s, account_no=%s,
+            day_rate=%s, overtime_rate=%s,
+            redstone_vehicle=%s, van_reg=%s,
+            mileage_rate=%s, redstone_card=%s,
+            cis_rate=%s, password=%s, updated_at=NOW()
+        WHERE contractor_key=%s
+    """, (
+        data.get("name"), data.get("email"), data.get("phone"),
+        data.get("address"), data.get("utr"), data.get("ni"),
+        data.get("sort_code"), data.get("account_no"),
+        float(data.get("day_rate") or 0),
+        float(data.get("day_rate") or 0) / 10,
+        data.get("redstone_vehicle") == "yes",
+        data.get("van_reg"),
+        0.25 if data.get("redstone_vehicle") != "yes" else 0,
+        data.get("redstone_card") == "yes",
+        float(data.get("cis_rate") or 0.20),
+        data.get("password"), key
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/contractors/<key>/archive", methods=["POST"])
+@admin_required
+def admin_archive_contractor(key):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE contractors_db SET status='archived', archived_at=NOW()
+        WHERE contractor_key=%s
+    """, (key,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/contractors/<key>/restore", methods=["POST"])
+@admin_required
+def admin_restore_contractor(key):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE contractors_db SET status='active', archived_at=NULL
+        WHERE contractor_key=%s
+    """, (key,))
+    conn.commit()
     cur.close()
     conn.close()
     return jsonify({"ok": True})
