@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Cards — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; letter-spacing: 0.5px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; margin-left: 16px; }
+  .topbar-right a:hover { color: white; }
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; margin-bottom: 20px; }
+  h3 { font-size: 16px; color: #1a2332; font-weight: 700; margin-bottom: 14px; }
+
+  /* Engineer run rate cards */
+  .run-rate-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 28px;
+  }
+  .run-card {
+    background: white; border-radius: 10px; padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .run-card-name { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 8px; }
+  .run-card-stats { display: flex; flex-direction: column; gap: 4px; }
+  .run-stat { font-size: 12px; color: #555; }
+  .run-stat strong { color: #1a2332; }
+  .run-bar { height: 5px; background: #eee; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .run-fill { height: 100%; background: #c0392b; border-radius: 3px; transition: width 0.3s; }
+  .run-fill.green  { background: #1a7a4a; }
+  .run-fill.amber  { background: #e6a817; }
+
+  /* Overdue alerts */
+  .overdue-section { background: #fff3cd; border: 1px solid #ffecb5; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
+  .overdue-title { font-size: 14px; font-weight: 700; color: #856404; margin-bottom: 10px; }
+  .overdue-item { font-size: 13px; color: #5c4a00; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+  .overdue-item:last-child { border-bottom: none; }
+  .overdue-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-left: 8px; }
+  .badge-sat { background: #f8d7da; color: #842029; }
+  .badge-24 { background: #ffe5d0; color: #8c4a00; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid #e0e0e0; }
+  .tab-btn {
+    padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+    background: none; border: none; color: #666; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
+  }
+  .tab-btn.active { color: #c0392b; border-bottom-color: #c0392b; }
+
+  /* Cards table */
+  .card-section { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+  tr:hover td { background: #fafbfc; }
+  .status-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
+  }
+  .status-submitted { background: #fff3cd; color: #856404; }
+  .status-approved  { background: #d1e7dd; color: #0a5c36; }
+  .btn { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-approve { background: #1a7a4a; color: white; }
+  .btn-approve:hover { background: #155d38; }
+  .btn-pdf { background: #1a2332; color: white; text-decoration: none; display: inline-block; }
+  .btn-pdf:hover { background: #0f1923; }
+  .empty { padding: 40px; text-align: center; color: #999; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/contractors">Contractors</a>
+    <a href="/admin/vehicles">Vehicles</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <h2>Job Cards — w/c {{ week_start.strftime('%d %B %Y') }}</h2>
+
+  <!-- Engineer run rate -->
+  <h3>Engineer Overview This Week</h3>
+  <div class="run-rate-grid">
+    {% for e in engineer_overview %}
+    {% set pct = ((e.submitted or 0) / (e.allocated or 1) * 100)|int %}
+    <div class="run-card">
+      <div class="run-card-name">{{ e.contractor }}</div>
+      <div class="run-card-stats">
+        <div class="run-stat">Allocated: <strong>{{ e.allocated or 0 }}</strong></div>
+        <div class="run-stat">Submitted: <strong>{{ e.submitted or 0 }}</strong></div>
+        {% if e.week_net %}
+        <div class="run-stat">Net Pay: <strong>£{{ '%.2f'|format(e.week_net|float) }}</strong></div>
+        {% endif %}
+      </div>
+      <div class="run-bar">
+        <div class="run-fill {% if pct == 100 %}green{% elif pct >= 50 %}amber{% endif %}"
+             style="width:{{ pct }}%"></div>
+      </div>
+    </div>
+    {% else %}
+    <div style="grid-column:1/-1;color:#999;font-size:13px;padding:16px 0">No allocations found for this week.</div>
+    {% endfor %}
+  </div>
+
+  <!-- Overdue alerts -->
+  {% if overdue %}
+  <div class="overdue-section">
+    <div class="overdue-title">⚠ Overdue Job Cards</div>
+    {% for o in overdue %}
+    <div class="overdue-item">
+      <strong>{{ o.contractor }}</strong> — {{ o.pub_name }} ({{ o.day_date.strftime('%a %d %b') }})
+      {% if o.flag == 'saturday' %}
+      <span class="overdue-badge badge-sat">Past Saturday 6pm</span>
+      {% else %}
+      <span class="overdue-badge badge-24">{{ o.hrs_since }}hrs overdue</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Job cards table -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('submitted', this)">Pending Review</button>
+    <button class="tab-btn" onclick="showTab('approved', this)">Approved</button>
+    <button class="tab-btn" onclick="showTab('all', this)">All</button>
+  </div>
+
+  <div class="card-section">
+    <table id="cards-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Engineer</th>
+          <th>Job / Site</th>
+          <th>Labour</th>
+          <th>Invoice</th>
+          <th>Net Pay</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for card in cards %}
+        <tr data-status="{{ card.status }}">
+          <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</td>
+          <td>{{ contractors.get(card.contractor_key, {}).get('name', card.contractor_key) }}</td>
+          <td>
+            <div style="font-weight:600">{{ card.job_id }}</div>
+            <div style="color:#666;font-size:12px">{{ card.site_name }}</div>
+          </td>
+          <td>£{{ '%.2f'|format(card.labour_cost|float) }}</td>
+          <td>£{{ '%.2f'|format(card.invoice_total|float) }}</td>
+          <td>£{{ '%.2f'|format(card.net_payment|float) }}</td>
+          <td>
+            <span class="status-badge status-{{ card.status }}">{{ card.status|upper }}</span>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;align-items:center">
+              {% if card.status == 'submitted' %}
+              <button class="btn btn-approve" onclick="approveCard({{ card.id }}, this)">Approve</button>
+              {% endif %}
+              <a class="btn btn-pdf" href="/card/{{ card.id }}/jobcard.pdf" target="_blank">PDF</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No job cards submitted yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function showTab(status, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#cards-table tbody tr[data-status]').forEach(row => {
+      if (status === 'all') row.style.display = '';
+      else row.style.display = row.dataset.status === status ? '' : 'none';
+    });
+  }
+  // Default: show submitted only
+  showTab('submitted', document.querySelector('.tab-btn.active'));
+
+  async function approveCard(id, btn) {
+    btn.disabled = true; btn.textContent = '...';
+    const res = await fetch(`/admin/approve/${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      const row = btn.closest('tr');
+      row.querySelector('.status-badge').textContent = 'APPROVED';
+      row.querySelector('.status-badge').className = 'status-badge status-approved';
+      btn.remove();
+      row.dataset.status = 'approved';
+    }
+  }
+</script>
+
+</body>
+</html>
