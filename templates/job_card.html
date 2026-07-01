@@ -534,7 +534,7 @@ function addLeg(type) {
     fromVal = JOB_POSTCODE;
     fromReadonly = true;
     badge = '➡️ Drive to Next Job'; badgeClass = 'badge-travel'; cssClass = 'travel';
-    label = 'Site → Next Job (log on next card)';
+    label = 'Site → Next Job';
     closeJourney();
   }
 
@@ -576,6 +576,7 @@ function addLeg(type) {
     </div>` : ''}
     <div class="leg-miles calculating" id="leg_miles_${id}">Calculating...</div>
     ${type === 'materials' ? '<div style="font-size:11px;color:#7f8c8d;margin-top:4px;text-align:center;">Round trip automatically included if returning to site</div>' : ''}
+    ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this job — they will be Travel to Site on your next job card</div>' : ''}
   `;
   container.appendChild(div);
 
@@ -653,7 +654,8 @@ async function calcLegMiles(id, type) {
 
 function updateLeg(id, type, from, to, miles, cost) {
   const existing = legs.findIndex(l => l.id === id);
-  const leg = { id, type, from, to, miles, cost };
+  // nextjob: miles recorded for route info but marked as excluded from billing
+  const leg = { id, type, from, to, miles, cost, excludeFromBilling: type === 'nextjob' };
   if (existing >= 0) legs[existing] = leg;
   else legs.push(leg);
   document.getElementById('journey_json').value = JSON.stringify(legs);
@@ -711,15 +713,24 @@ function unlockJourney() {
 }
 
 function updateJourneyTotal() {
-  const total = legs.reduce((s, l) => s + (l.miles || 0), 0);
+  // nextjob legs are tracked for route purposes but NOT counted in this job's mileage
+  // They become the Travel to Site leg on the next job card
+  const billableLegs = legs.filter(l => l.type !== 'nextjob');
+  const nextJobLegs  = legs.filter(l => l.type === 'nextjob');
+  const total = billableLegs.reduce((s, l) => s + (l.miles || 0), 0);
+  const nextJobMiles = nextJobLegs.reduce((s, l) => s + (l.miles || 0), 0);
+
   document.getElementById('total_miles').value = total.toFixed(1);
   const el = document.getElementById('journey_total');
-  if (total > 0) {
+  if (total > 0 || nextJobMiles > 0) {
     el.style.display = 'flex';
     const paidMileage = document.querySelector('[name=contractor_paid_mileage]')?.value === '1';
-    const label = paidMileage
+    let label = paidMileage
       ? `${total.toFixed(1)} miles — £${(total * MILEAGE_RATE).toFixed(2)}`
       : `${total.toFixed(1)} miles (HMRC record)`;
+    if (nextJobMiles > 0) {
+      label += ` · ${nextJobMiles.toFixed(1)} miles to next job (logged on next card)`;
+    }
     document.getElementById('journey_total_miles').textContent = label;
   } else {
     el.style.display = 'none';
