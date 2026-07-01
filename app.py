@@ -259,6 +259,32 @@ def init_db():
             last_job_id     TEXT,
             updated_at      TIMESTAMPTZ DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS odometer_readings (
+            id              SERIAL PRIMARY KEY,
+            contractor_key  TEXT NOT NULL,
+            van_reg         TEXT,
+            reading_date    DATE NOT NULL,
+            week_commencing DATE NOT NULL,
+            odometer        INTEGER NOT NULL,
+            miles_since_last INTEGER,
+            job_miles_that_week NUMERIC(8,1),
+            variance        NUMERIC(8,1),
+            recorded_at     TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS profile_change_requests (
+            id              SERIAL PRIMARY KEY,
+            contractor_key  TEXT NOT NULL,
+            field_name      TEXT NOT NULL,
+            old_value       TEXT,
+            new_value       TEXT NOT NULL,
+            reason          TEXT,
+            status          TEXT DEFAULT 'pending',
+            requested_at    TIMESTAMPTZ DEFAULT NOW(),
+            reviewed_at     TIMESTAMPTZ,
+            reviewed_by     TEXT
+        );
     """)
     conn.commit()
     cur.close()
@@ -1023,6 +1049,133 @@ def card_submitted(job_id, card_date):
                            job_id=job_id, card_date=card_date)
 
 
+@app.route("/profile")
+@login_required
+def profile():
+    key = session["contractor_key"]
+    contractor = CONTRACTORS[key]
+    conn = get_db()
+    cur = conn.cursor()
+    # Get pending change requests
+    cur.execute("""
+        SELECT * FROM profile_change_requests
+        WHERE contractor_key = %s
+        ORDER BY requested_at DESC LIMIT 10
+    """, (key,))
+    changes = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("profile.html", contractor=contractor, changes=changes)
+
+
+@app.route("/profile/request_change", methods=["POST"])
+@login_required
+def request_profile_change():
+    key = session["contractor_key"]
+    contractor = CONTRACTORS[key]
+    data = request.get_json()
+    field = data.get("field")
+    new_value = data.get("new_value", "").strip()
+    reason = data.get("reason", "").strip()
+
+    if not field or not new_value:
+        return jsonify({"ok": False, "error": "Missing field or value"})
+
+    # Map field to readable label and current value
+    field_map = {
+        "address": ("Home Address", contractor.get("address", "")),
+        "phone": ("Phone Number", contractor.get("phone", "")),
+        "email": ("Email Address", contractor.get("email", "")),
+        "account_no": ("Bank Account Number", contractor.get("account_no", "")),
+        "sort_code": ("Sort Code", contractor.get("sort_code", "")),
+    }
+
+    if field not in field_map:
+        return jsonify({"ok": False, "error": "Invalid field"})
+
+    label, old_value = field_map[field]
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO profile_change_requests
+            (contractor_key, field_name, old_value, new_value, reason)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (key, label, old_value, new_value, reason))
+    conn.commit()
+
+    # Email accounts to review
+    send_email(
+        to_addresses=[ACCOUNTS_EMAIL],
+        subject=f"Profile Change Request — {contractor['name']} — {label}",
+        body_html=f"""
+            <p><strong>{contractor['name']}</strong> has requested a change to their profile.</p>
+            <table style="border-collapse:collapse;width:100%">
+                <tr><td style="padding:8px;font-weight:bold;">Field</td><td style="padding:8px;">{label}</td></tr>
+                <tr><td style="padding:8px;font-weight:bold;">Current</td><td style="padding:8px;">{old_value}</td></tr>
+                <tr><td style="padding:8px;font-weight:bold;">Requested</td><td style="padding:8px;">{new_value}</td></tr>
+                <tr><td style="padding:8px;font-weight:bold;">Reason</td><td style="padding:8px;">{reason or 'Not provided'}</td></tr>
+            </table>
+            <p>Please log in to the admin portal to approve or reject this request.</p>
+        """
+    )
+
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/profile_changes")
+@admin_required
+def admin_profile_changes():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM profile_change_requests
+        WHERE status = 'pending'
+        ORDER BY requested_at DESC
+    """)
+    changes = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("admin_profile_changes.html", changes=changes, contractors=CONTRACTORS)
+
+
+@app.route("/admin/profile_changes/<int:change_id>/<action>", methods=["POST"])
+@admin_required
+def review_profile_change(change_id, action):
+    if action not in ("approve", "reject"):
+        return jsonify({"ok": False})
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE profile_change_requests
+        SET status = %s, reviewed_at = NOW(), reviewed_by = 'admin'
+        WHERE id = %s
+        RETURNING contractor_key, field_name, new_value
+    """, (action + "d", change_id))
+    row = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if row and action == "approve":
+        # Notify contractor their change was approved
+        contractor = CONTRACTORS.get(row["contractor_key"], {})
+        send_email(
+            to_addresses=[contractor.get("email", "")],
+            subject="Redstone PDM — Profile Change Approved",
+            body_html=f"""
+                <p>Hi {contractor.get('name', '')},</p>
+                <p>Your request to update your <strong>{row['field_name']}</strong>
+                to <strong>{row['new_value']}</strong> has been approved.</p>
+                <p>Please allow 1-2 working days for bank detail changes to take effect.</p>
+                <p>Redstone PDM</p>
+            """
+        )
+    return jsonify({"ok": True})
+
+
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
@@ -1071,6 +1224,81 @@ def download_job_card(card_id):
     pdf = build_job_card_pdf(card, contractor)
     return send_file(io.BytesIO(pdf), mimetype="application/pdf",
                      download_name=f"jobcard_{card_id}.pdf")
+
+
+@app.route("/api/odometer_needed")
+@login_required
+def api_odometer_needed():
+    """Check if this van contractor needs to submit an odometer reading this week."""
+    key = session["contractor_key"]
+    contractor = CONTRACTORS[key]
+
+    # Only van contractors need odometer readings
+    if not contractor.get("redstone_vehicle") or contractor.get("mileage_rate", 0) > 0:
+        return jsonify({"needed": False})
+
+    today = date.today()
+    # Week commencing Monday
+    week_start = today - timedelta(days=today.weekday())
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id FROM odometer_readings
+        WHERE contractor_key = %s AND week_commencing = %s
+    """, (key, week_start))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return jsonify({
+        "needed": row is None,
+        "week_commencing": week_start.strftime("%d %B %Y"),
+        "van_reg": contractor.get("van_reg", "")
+    })
+
+
+@app.route("/api/odometer_submit", methods=["POST"])
+@login_required
+def api_odometer_submit():
+    """Submit weekly odometer reading."""
+    key = session["contractor_key"]
+    contractor = CONTRACTORS[key]
+    data = request.get_json()
+    reading = data.get("reading")
+
+    if not reading:
+        return jsonify({"ok": False, "error": "No reading provided"})
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get last reading to calculate miles since then
+    cur.execute("""
+        SELECT odometer, week_commencing FROM odometer_readings
+        WHERE contractor_key = %s
+        ORDER BY week_commencing DESC LIMIT 1
+    """, (key,))
+    last = cur.fetchone()
+
+    miles_since_last = None
+    if last and last["odometer"]:
+        miles_since_last = int(reading) - last["odometer"]
+
+    cur.execute("""
+        INSERT INTO odometer_readings
+            (contractor_key, van_reg, reading_date, week_commencing, odometer, miles_since_last)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT DO NOTHING
+    """, (key, contractor.get("van_reg"), today, week_start, int(reading), miles_since_last))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"ok": True})
 
 
 @app.route("/api/last_location")
