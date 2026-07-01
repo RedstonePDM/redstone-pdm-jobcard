@@ -534,12 +534,14 @@ function addLeg(type) {
   `;
   container.appendChild(div);
 
-  // Auto-calculate if both fields are pre-filled
-  if (fromVal && toVal) {
-    calcLegMiles(id, type);
-  } else if (type === 'materials' && fromVal) {
-    document.getElementById(`leg_miles_${id}`).textContent = 'Enter merchant location to calculate';
-  }
+  // Auto-calculate immediately if both fields are pre-filled
+  setTimeout(() => {
+    if (fromVal && toVal) {
+      calcLegMiles(id, type);
+    } else if (fromVal && !toVal) {
+      document.getElementById(`leg_miles_${id}`).textContent = 'Enter destination to calculate';
+    }
+  }, 100);
 }
 
 async function calcLegMiles(id, type) {
@@ -559,6 +561,11 @@ async function calcLegMiles(id, type) {
     }
     const resp = await fetch(url);
     const data = await resp.json();
+    if (data.error) {
+      el.className = 'leg-miles calculating';
+      el.textContent = `Error: ${data.error}`;
+      return;
+    }
     const miles = data.miles || 0;
     const cost = (miles * MILEAGE_RATE).toFixed(2);
     el.className = 'leg-miles';
@@ -566,7 +573,7 @@ async function calcLegMiles(id, type) {
     el.textContent = paidMileage ? `${miles} miles — £${cost}` : `${miles} miles`;
     updateLeg(id, type, from, to, miles, parseFloat(cost));
   } catch(e) {
-    el.textContent = 'Could not calculate — check connection';
+    el.textContent = `Could not calculate: ${e.message}`;
   }
   updateJourneyTotal();
 }
