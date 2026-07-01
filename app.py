@@ -37,7 +37,7 @@ SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 FROM_EMAIL       = os.environ.get("FROM_EMAIL", "info@redstonepdm.com")
 ACCOUNTS_EMAIL   = os.environ.get("ACCOUNTS_EMAIL", "accounts@redstonepdm.com")
 GMAPS_API_KEY    = os.environ.get("GMAPS_API_KEY", "")
-PLANNER_URL      = os.environ.get("PLANNER_URL", "https://redstone-pdm-planner.up.railway.app")
+PLANNER_URL      = os.environ.get("PLANNER_URL", "https://redstone-planner-production.up.railway.app")
 DVLA_API_KEY     = os.environ.get("DVLA_API_KEY", "")
 
 UPLOAD_FOLDER = "/tmp/uploads"
@@ -248,6 +248,17 @@ def init_db():
             notes                 TEXT,
             created_at            TIMESTAMPTZ DEFAULT NOW(),
             updated_at            TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS contractor_weekly_notes (
+            id              SERIAL PRIMARY KEY,
+            contractor_key  TEXT NOT NULL,
+            week_commencing DATE NOT NULL,
+            note            TEXT NOT NULL,
+            created_by      TEXT DEFAULT 'admin',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (contractor_key, week_commencing)
         );
 
         CREATE TABLE IF NOT EXISTS week_schedules (
@@ -1646,6 +1657,85 @@ def api_mileage():
         return jsonify({"miles": miles, "cost": cost})
     except Exception as e:
         return jsonify({"miles": 0, "cost": 0, "error": str(e)})
+
+
+# ── Routes: Weekly Notes ─────────────────────────────────────────────────────
+
+@app.route("/admin/notes")
+@admin_required
+def admin_notes():
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    conn = get_db()
+    cur = conn.cursor()
+    # Get all notes for this week
+    cur.execute("""
+        SELECT n.*, c.name as contractor_name
+        FROM contractor_weekly_notes n
+        JOIN contractors_db c ON c.contractor_key = n.contractor_key
+        WHERE n.week_commencing = %s
+        ORDER BY c.name
+    """, (week_start,))
+    notes = cur.fetchall()
+    cur.execute("SELECT contractor_key, name FROM contractors_db WHERE status='active' ORDER BY name")
+    contractors = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("admin_notes.html", notes=notes, contractors=contractors,
+                           week_start=week_start)
+
+
+@app.route("/admin/notes/save", methods=["POST"])
+@admin_required
+def save_note():
+    data = request.get_json()
+    contractor_key = data.get("contractor_key")
+    note = data.get("note", "").strip()
+    week_commencing = data.get("week_commencing")
+    if not contractor_key or not week_commencing:
+        return jsonify({"ok": False, "error": "Missing fields"})
+    conn = get_db()
+    cur = conn.cursor()
+    if note:
+        cur.execute("""
+            INSERT INTO contractor_weekly_notes (contractor_key, week_commencing, note)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (contractor_key, week_commencing) DO UPDATE
+            SET note = EXCLUDED.note, updated_at = NOW()
+        """, (contractor_key, week_commencing, note))
+    else:
+        cur.execute("""
+            DELETE FROM contractor_weekly_notes
+            WHERE contractor_key = %s AND week_commencing = %s
+        """, (contractor_key, week_commencing))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/my_note")
+@login_required
+def api_my_note():
+    """Return this week's note for the logged-in contractor."""
+    key = session["contractor_key"]
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT note FROM contractor_weekly_notes
+            WHERE contractor_key = %s AND week_commencing = %s
+        """, (key, week_start))
+        row = cur.fetchone()
+    except Exception:
+        conn.rollback()
+        row = None
+    cur.close()
+    conn.close()
+    return jsonify({"note": row["note"] if row else None,
+                    "week_commencing": str(week_start)})
 
 
 @app.context_processor
