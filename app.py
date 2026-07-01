@@ -915,12 +915,21 @@ def submit_job_card(job_id, card_date):
     conn.commit()
     try:
         loc_cur = conn.cursor()
+        # If contractor travelled home, clear location so next card starts from home
+        went_home = any(l.get("type") in ("home",) for l in journey_legs)
+        if went_home:
+            # Reset to home address
+            new_location = contractor["address"]
+            new_job_id = None
+        else:
+            new_location = job.get("postcode","") + " " + job.get("pub_name","")
+            new_job_id = job_id
         loc_cur.execute("""
             INSERT INTO contractor_locations (contractor_key, last_location, last_job_id, updated_at)
             VALUES (%s, %s, %s, NOW())
             ON CONFLICT (contractor_key) DO UPDATE
             SET last_location=EXCLUDED.last_location, last_job_id=EXCLUDED.last_job_id, updated_at=EXCLUDED.updated_at
-        """, (key, job.get("postcode","") + " " + job.get("pub_name",""), job_id))
+        """, (key, new_location, new_job_id))
         conn.commit()
         loc_cur.close()
     except Exception as e:
