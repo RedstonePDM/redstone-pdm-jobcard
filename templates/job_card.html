@@ -25,6 +25,16 @@
   .back { color: #bdc3c7; font-size: 22px; text-decoration: none; line-height: 1; }
   .topbar-title { color: white; font-size: 16px; font-weight: 700; }
   .topbar-sub { color: #c0392b; font-size: 11px; margin-top: 1px; }
+
+  /* Job type badge */
+  .job-type-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; margin-bottom: 6px;
+  }
+  .jt-reactive { background: #fdf0ef; color: #c0392b; }
+  .jt-ppm      { background: #effdf4; color: #1a7a4a; }
+  .jt-quoted   { background: #eff4ff; color: #1a4fa0; }
+
   .job-header {
     background: linear-gradient(135deg, #c0392b, #e74c3c);
     color: white;
@@ -32,6 +42,16 @@
   }
   .job-header h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
   .job-header p { font-size: 13px; opacity: 0.85; }
+
+  /* Labour info box */
+  .labour-info {
+    background: #1a2332; color: white;
+    border-radius: 10px; padding: 14px 16px;
+    margin-bottom: 14px; font-size: 13px; line-height: 1.6;
+  }
+  .labour-info strong { color: #c0392b; font-size: 15px; display: block; margin-bottom: 4px; }
+  .labour-rate { font-size: 18px; font-weight: 800; color: white; }
+
   .content { padding: 16px; }
   .section {
     background: white;
@@ -87,6 +107,7 @@
     text-align: center;
     margin-top: 10px;
   }
+  .hours-display.has-hours { background: #1a2332; color: white; }
 
   /* Journey Logger */
   .journey-leg {
@@ -101,81 +122,46 @@
   .journey-leg.materials { border-left: 4px solid #27ae60; }
   .journey-leg.home { border-left: 4px solid #8e44ad; }
   .leg-type-badge {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 3px 8px;
-    border-radius: 20px;
-    margin-bottom: 10px;
-    display: inline-block;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; padding: 3px 8px; border-radius: 20px;
+    margin-bottom: 10px; display: inline-block;
   }
   .badge-travel { background: #eaf4fb; color: #2980b9; }
   .badge-materials { background: #eafaf1; color: #27ae60; }
   .badge-home { background: #f5eef8; color: #8e44ad; }
   .leg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .leg-miles {
-    background: #f0f2f5;
-    border-radius: 8px;
-    padding: 10px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #1a2332;
-    text-align: center;
-    margin-top: 8px;
+    background: #f0f2f5; border-radius: 8px; padding: 10px;
+    font-size: 13px; font-weight: 700; color: #1a2332;
+    text-align: center; margin-top: 8px;
   }
   .leg-miles.calculating { color: #7f8c8d; font-weight: 400; }
   .remove-leg {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
-    border: none;
-    color: #e74c3c;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 2px 6px;
+    position: absolute; top: 10px; right: 10px;
+    background: none; border: none; color: #e74c3c;
+    font-size: 18px; cursor: pointer; padding: 2px 6px;
   }
   .journey-total {
-    background: #1a2332;
-    color: white;
-    border-radius: 10px;
-    padding: 12px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 8px;
-    font-weight: 700;
+    background: #1a2332; color: white; border-radius: 10px;
+    padding: 12px 16px; display: flex; justify-content: space-between;
+    align-items: center; margin-top: 8px; font-weight: 700;
   }
   .add-leg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .add-leg-btn {
-    padding: 11px;
-    border: 2px dashed #bdc3c7;
-    border-radius: 10px;
-    background: #fafafa;
-    color: #7f8c8d;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
+    padding: 11px; border: 2px dashed #bdc3c7; border-radius: 10px;
+    background: #fafafa; color: #7f8c8d; font-size: 12px;
+    font-weight: 600; cursor: pointer; text-align: center;
   }
   .add-leg-btn:active { background: #f0f2f5; }
   .mileage-hidden-note {
-    background: #eafaf1;
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 13px;
-    color: #27ae60;
-    font-weight: 500;
+    background: #eafaf1; border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; color: #27ae60; font-weight: 500;
   }
 
   /* Materials */
   .mat-row {
-    border: 1.5px solid #e8e8e8;
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 10px;
-    position: relative;
+    border: 1.5px solid #e8e8e8; border-radius: 10px;
+    padding: 12px; margin-bottom: 10px; position: relative;
   }
   .mat-number { font-size: 11px; font-weight: 700; color: #c0392b; margin-bottom: 8px; text-transform: uppercase; }
   .mat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -195,12 +181,10 @@
 
   /* Parking */
   .parking-row {
-    border: 1.5px solid #e8e8e8;
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 10px;
-    position: relative;
+    border: 1.5px solid #e8e8e8; border-radius: 10px;
+    padding: 12px; margin-bottom: 10px; position: relative;
   }
+  .parking-row.is-fine { border-left: 4px solid #c0392b; }
   .parking-number { font-size: 11px; font-weight: 700; color: #8e44ad; margin-bottom: 8px; text-transform: uppercase; }
   .remove-parking {
     position: absolute; top: 10px; right: 10px;
@@ -208,25 +192,29 @@
     font-size: 18px; cursor: pointer; padding: 2px 6px; line-height: 1;
   }
   .fine-notice {
-    background: #fdf2f2;
-    border: 1px solid #f5c6c6;
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 12px;
-    color: #c0392b;
-    margin-top: 10px;
-    line-height: 1.5;
+    background: #fdf2f2; border: 1px solid #f5c6c6;
+    border-radius: 8px; padding: 12px 14px;
+    font-size: 12px; color: #c0392b; margin-top: 10px; line-height: 1.5;
+  }
+  .fine-warning {
+    background: #fff3cd; border: 1px solid #ffc107;
+    border-radius: 8px; padding: 10px 14px;
+    font-size: 12px; color: #856404; margin-top: 8px; line-height: 1.5; display: none;
+  }
+  .checkbox-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; font-size: 14px; color: #1a2332;
+  }
+  .checkbox-row input[type=checkbox] {
+    width: 20px; height: 20px; cursor: pointer;
+    border-radius: 4px; accent-color: #c0392b;
   }
 
   /* Photo upload */
   .photo-upload {
-    border: 2px dashed #e0e0e0;
-    border-radius: 10px;
-    padding: 20px;
-    text-align: center;
-    background: #fafafa;
-    cursor: pointer;
-    position: relative;
+    border: 2px dashed #e0e0e0; border-radius: 10px;
+    padding: 20px; text-align: center;
+    background: #fafafa; cursor: pointer; position: relative;
   }
   .photo-upload input[type=file] {
     position: absolute; inset: 0; opacity: 0;
@@ -262,33 +250,15 @@
   }
   .info-box strong { display: block; font-size: 14px; margin-bottom: 2px; }
 
-  /* Time picker */
-  .time-picker-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
+  .time-picker-wrap { display: flex; align-items: center; gap: 6px; }
   .time-select {
-    flex: 1;
-    padding: 13px 10px;
-    border: 1.5px solid #e8e8e8;
-    border-radius: 10px;
-    font-size: 18px;
-    font-weight: 600;
-    color: #1a2332;
-    background: white;
-    -webkit-appearance: none;
-    text-align: center;
-    outline: none;
-    cursor: pointer;
+    flex: 1; padding: 13px 10px; border: 1.5px solid #e8e8e8;
+    border-radius: 10px; font-size: 18px; font-weight: 600;
+    color: #1a2332; background: white; -webkit-appearance: none;
+    text-align: center; outline: none; cursor: pointer;
   }
   .time-select:focus { border-color: #c0392b; }
-  .time-colon {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1a2332;
-    line-height: 1;
-  }
+  .time-colon { font-size: 22px; font-weight: 700; color: #1a2332; line-height: 1; }
 
   .submit-btn {
     width: 100%; padding: 17px;
@@ -310,6 +280,56 @@
     border-radius: 10px; color: #7f8c8d;
     font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px;
   }
+
+  /* ── Confirmation Modal ── */
+  .confirm-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 500;
+    align-items: flex-end; justify-content: center;
+    padding: 0;
+  }
+  .confirm-overlay.show { display: flex; }
+  .confirm-sheet {
+    background: white; border-radius: 20px 20px 0 0;
+    padding: 28px 20px 40px; width: 100%; max-width: 540px;
+    animation: slideUp 0.25s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .confirm-title { font-size: 18px; font-weight: 800; color: #1a2332; margin-bottom: 6px; }
+  .confirm-subtitle { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+  .confirm-divider { border: none; border-top: 1px solid #f0f2f5; margin: 16px 0; }
+
+  .checklist { list-style: none; margin-bottom: 20px; }
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 0; border-bottom: 1px solid #f5f5f5;
+    font-size: 14px; color: #1a2332; line-height: 1.4;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist input[type=checkbox] {
+    width: 22px; height: 22px; flex-shrink: 0; cursor: pointer;
+    accent-color: #c0392b; margin-top: 1px;
+  }
+
+  .warning-box {
+    background: #fff3cd; border: 1px solid #ffc107;
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 13px; color: #856404; margin-bottom: 20px; line-height: 1.6;
+  }
+  .warning-box strong { display: block; margin-bottom: 4px; font-size: 14px; }
+
+  .confirm-btn {
+    width: 100%; padding: 16px; border-radius: 12px;
+    font-size: 16px; font-weight: 700; cursor: pointer; border: none;
+    background: #c0392b; color: white; margin-bottom: 10px;
+    opacity: 0.4; transition: opacity 0.2s;
+  }
+  .confirm-btn.ready { opacity: 1; }
+  .cancel-btn {
+    width: 100%; padding: 14px; border-radius: 12px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    border: none; background: #f0f2f5; color: #333;
+  }
 </style>
 </head>
 <body>
@@ -323,6 +343,14 @@
 </div>
 
 <div class="job-header">
+  {% set prefix = job.job_id[:4] %}
+  {% if prefix == '2000' %}
+  <span class="job-type-badge jt-ppm">PPM — Full Day Rate</span>
+  {% elif prefix == '5000' %}
+  <span class="job-type-badge jt-quoted">Quoted Job — Hourly</span>
+  {% else %}
+  <span class="job-type-badge jt-reactive">Reactive — Hourly</span>
+  {% endif %}
   <h2>{{ job.pub_name }}</h2>
   <p>{{ job.job_id }} &nbsp;·&nbsp; {{ job.postcode }}</p>
 </div>
@@ -336,6 +364,22 @@
   </small>
 </div>
 {% else %}
+
+<!-- Labour rate info box -->
+{% set prefix = job.job_id[:4] %}
+{% if prefix == '2000' %}
+<div class="labour-info">
+  <strong>PPM Job — Full Day Rate Applied</strong>
+  <span class="labour-rate">£{{ contractor.day_rate }}</span> day rate
+  {% if contractor.overtime_rate > 0 %}+ £{{ contractor.overtime_rate }}/hr overtime above 8hrs on site{% endif %}
+</div>
+{% else %}
+<div class="labour-info">
+  <strong>Hourly Rate — £{{ '%.2f'|format(contractor.day_rate / 10) }}/hr</strong>
+  Based on your day rate (£{{ contractor.day_rate }} ÷ 10hr day).
+  Overtime: £{{ contractor.overtime_rate }}/hr above 8hrs on site.
+</div>
+{% endif %}
 
 <form method="POST" action="/job/{{ job.job_id }}/{{ card_date }}/submit"
       enctype="multipart/form-data" id="jobForm">
@@ -364,7 +408,6 @@
   <div class="section">
     <div class="section-head">⏱ Time on Site</div>
     <div class="section-body">
-      <!-- Time pickers — custom styled selects for mobile friendliness -->
       <div class="time-row">
         <div class="field">
           <label>Arrived on Site</label>
@@ -407,11 +450,17 @@
       </div>
       <div class="hours-display" id="hours_display">Hours on site: —</div>
       <input type="hidden" name="hours_on_site" id="hours_on_site">
-      <div class="field" style="margin-top:14px;">
-        <label>Overtime Hours (beyond standard day)</label>
-        <input type="number" name="overtime_hours" min="0" max="8" step="0.5" value="0" placeholder="0">
-      </div>
 
+      <!-- Live labour cost preview -->
+      <div id="labour_preview" style="display:none;background:#effdf4;border-radius:8px;padding:10px 14px;font-size:13px;color:#1a7a4a;font-weight:600;margin-top:10px;text-align:center;"></div>
+
+      <div class="field" style="margin-top:14px;">
+        <label>Overtime Hours (above 8hrs on site)</label>
+        <input type="number" name="overtime_hours" id="overtime_hours" min="0" max="8" step="0.5" value="0" placeholder="0" oninput="calcHours()">
+        {% if prefix == '2000' %}
+        <div style="font-size:11px;color:#27ae60;margin-top:6px;">PPM job — add 1hr for large sites to cover extended work</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -422,8 +471,7 @@
     <div class="section-body">
       <div class="info-box">
         <strong>Log every leg of your journey for this job</strong>
-        All mileage is calculated automatically from postcodes — no estimates accepted.
-        If this job is not your last today, do not add a "Travel Home" leg — that goes on your next job card.
+        All mileage is calculated automatically — no estimates accepted.
       </div>
       <div id="start_point_banner" style="display:none;background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px;font-weight:500;"></div>
       <div id="journey_legs"></div>
@@ -439,14 +487,13 @@
           <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
         </div>
         <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">
-          "Drive to Next Job" closes mileage for this card — that journey is logged on your next job card as "Travel to Site".
+          "Drive to Next Job" closes mileage for this card — log on your next card as "Travel to Site".
         </div>
       </div>
       <div class="journey-total" id="journey_total" style="display:none;">
         <span>Total Mileage</span>
         <span id="journey_total_miles">0 miles — £0.00</span>
       </div>
-
     </div>
   </div>
   {% else %}
@@ -495,8 +542,10 @@
       <div id="parking_container"></div>
       <input type="hidden" name="parking_count" id="parking_count" value="0">
       <button type="button" class="add-parking-btn" onclick="addParking()">+ Add Parking Charge</button>
-      <div class="fine-notice">
-        ⚠️ Parking fines cannot be paid by Redstone (HMRC/IR35 rules). If you receive a fine, pay it yourself and it will be reimbursed on your pay run. Add it below as a parking charge paid on your own card and describe it as "Parking fine".
+      <div class="fine-notice" style="margin-top:12px;">
+        ⚠️ Pay & display on your own card = reimbursed automatically.<br>
+        Redstone card parking = company expense, not on your invoice.<br>
+        Parking fines must be flagged — reimbursement at Redstone's discretion.
       </div>
     </div>
   </div>
@@ -518,14 +567,100 @@
     </div>
   </div>
 
-  <button type="submit" class="submit-btn" onclick="return confirmSubmit()">
-    Submit Job Card & Generate Invoice →
+  <button type="button" class="submit-btn" onclick="openConfirm()">
+    Review & Submit Job Card →
   </button>
 </form>
 {% endif %}
 </div>
 
+<!-- ── Confirmation Modal ── -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-sheet">
+    <div class="confirm-title">Before you submit</div>
+    <div class="confirm-subtitle">
+      Once submitted this job card cannot be edited. Tick each box to confirm before sending.
+    </div>
+
+    <div class="warning-box">
+      <strong>⚠ This affects your pay</strong>
+      Your invoice is generated from the information on this card.
+      Incorrect hours, missing materials or wrong amounts will affect the money you receive.
+    </div>
+
+    <ul class="checklist" id="checklist">
+      <li>
+        <input type="checkbox" id="chk1" onchange="checkAll()">
+        <span>I have described the works carried out accurately and in full</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk2" onchange="checkAll()">
+        <span>My start and finish times on site are correct</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk3" onchange="checkAll()">
+        <span>All materials have been logged with correct quantities and costs</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk4" onchange="checkAll()">
+        <span>Any parking charges are included and receipts photographed</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk5" onchange="checkAll()">
+        <span>I confirm all details are correct and I am happy to submit this job card</span>
+      </li>
+    </ul>
+
+    <button class="confirm-btn" id="confirm-submit-btn" onclick="doSubmit()" disabled>
+      ✓ Confirm & Submit Job Card
+    </button>
+    <button class="cancel-btn" onclick="closeConfirm()">Go back and check</button>
+  </div>
+</div>
+
 <script>
+// ── Job type for labour preview
+const JOB_PREFIX = "{{ job.job_id[:4] }}";
+const DAY_RATE = {{ contractor.day_rate }};
+const OVERTIME_RATE = {{ contractor.overtime_rate }};
+const IS_PPM = JOB_PREFIX === '2000';
+const HOURLY_RATE = DAY_RATE / 10;
+
+// ── Confirmation Modal ─────────────────────────────────────
+function openConfirm() {
+  const desc = document.querySelector('[name=description_actual]').value.trim();
+  if (!desc) { alert('Please describe the works carried out.'); return; }
+  const hours = parseFloat(document.getElementById('hours_on_site').value || 0);
+  if (!hours) { alert('Please enter your start and finish times.'); return; }
+  prepareJourneyData();
+  // Reset checkboxes
+  for (let i = 1; i <= 5; i++) document.getElementById(`chk${i}`).checked = false;
+  checkAll();
+  document.getElementById('confirm-overlay').classList.add('show');
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('show');
+}
+
+function checkAll() {
+  const all = [1,2,3,4,5].every(i => document.getElementById(`chk${i}`).checked);
+  const btn = document.getElementById('confirm-submit-btn');
+  btn.disabled = !all;
+  btn.classList.toggle('ready', all);
+}
+
+function doSubmit() {
+  document.getElementById('confirm-submit-btn').disabled = true;
+  document.getElementById('confirm-submit-btn').textContent = 'Submitting...';
+  document.getElementById('jobForm').submit();
+}
+
+// Close on overlay tap
+document.getElementById('confirm-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeConfirm();
+});
+
 // ── Journey Logger ─────────────────────────────────────────
 const JOB_POSTCODE = "{{ job.postcode }}";
 const HOME_ADDRESS = "{{ contractor.address }}";
@@ -533,9 +668,8 @@ const MILEAGE_RATE = {{ contractor.mileage_rate }};
 let legs = [];
 let legCount = 0;
 let journeyClosed = false;
-let startPoint = HOME_ADDRESS; // Will be updated from API
+let startPoint = HOME_ADDRESS;
 
-// Fetch last known location on page load
 async function loadStartPoint() {
   try {
     const resp = await fetch('/api/last_location');
@@ -548,9 +682,7 @@ async function loadStartPoint() {
         banner.style.display = 'block';
       }
     }
-  } catch(e) {
-    startPoint = HOME_ADDRESS;
-  }
+  } catch(e) { startPoint = HOME_ADDRESS; }
 }
 loadStartPoint();
 
@@ -558,34 +690,24 @@ function addLeg(type) {
   legCount++;
   const id = legCount;
   let fromVal = '', toVal = '', fromReadonly = false, toReadonly = false;
-  let badge = '', badgeClass = '', cssClass = '', label = '';
+  let badge = '', badgeClass = '', cssClass = '';
 
   if (type === 'travel') {
-    fromVal = startPoint;
-    toVal = JOB_POSTCODE;
+    fromVal = startPoint; toVal = JOB_POSTCODE;
     fromReadonly = true; toReadonly = true;
     badge = '🚗 Travel to Site'; badgeClass = 'badge-travel'; cssClass = 'travel';
-    label = 'Travel to Site (auto-calculated)';
-    // Hide travel to site button after first use
     document.getElementById('btn_travel').style.display = 'none';
   } else if (type === 'materials') {
-    fromVal = JOB_POSTCODE;
-    fromReadonly = true;
+    fromVal = JOB_POSTCODE; fromReadonly = true;
     badge = '🛒 Materials Run'; badgeClass = 'badge-materials'; cssClass = 'materials';
-    label = 'Site → Merchant → Site';
   } else if (type === 'home') {
-    fromVal = JOB_POSTCODE;
-    fromReadonly = true;
-    toVal = HOME_ADDRESS;
-    toReadonly = true;
+    fromVal = JOB_POSTCODE; fromReadonly = true;
+    toVal = HOME_ADDRESS; toReadonly = true;
     badge = '🏠 Travel Home'; badgeClass = 'badge-home'; cssClass = 'home';
-    label = 'Site → Home (auto-calculated)';
     closeJourney();
   } else if (type === 'nextjob') {
-    fromVal = JOB_POSTCODE;
-    fromReadonly = true;
+    fromVal = JOB_POSTCODE; fromReadonly = true;
     badge = '➡️ Drive to Next Job'; badgeClass = 'badge-travel'; cssClass = 'travel';
-    label = 'Site → Next Job';
     closeJourney();
   }
 
@@ -605,64 +727,36 @@ function addLeg(type) {
                onchange="calcLegMiles(${id}, '${type}')">
       </div>
       <div class="field">
-        <label>${type === 'materials' ? 'Merchant — include town or postcode' : 'To'}</label>
+        <label>${type === 'materials' ? 'Merchant' : 'To'}</label>
         <input type="text" id="leg_to_${id}" value="${toVal}"
                ${toReadonly ? 'readonly style="background:#f8f8f8"' : ''}
-               placeholder="${type === 'materials' ? 'Start typing address or place name...' : 'Postcode or address'}"
+               placeholder="Postcode or address"
                onchange="calcLegMiles(${id}, '${type}')"
                autocomplete="off">
       </div>
     </div>
     ${type === 'materials' ? `
     <div class="field" style="margin-top:8px;">
-      <label>Did you return to site after the materials run?</label>
+      <label>Returned to site after materials run?</label>
       <select id="leg_return_${id}" onchange="calcLegMiles(${id}, 'materials')">
-        <option value="yes">Yes — returned to site (return leg included in mileage above)</option>
-        <option value="no">No — went straight home or to next job</option>
+        <option value="yes">Yes — returned to site</option>
+        <option value="no">No — went home or to next job</option>
       </select>
-      <div style="font-size:11px;color:#7f8c8d;margin-top:4px;">
-        The return journey is automatically included in the mileage calculation above.
-        Do not add another Travel to Site leg after a materials run.
-      </div>
     </div>` : ''}
     <div class="leg-miles calculating" id="leg_miles_${id}">Calculating...</div>
-    ${type === 'materials' ? '<div style="font-size:11px;color:#7f8c8d;margin-top:4px;text-align:center;">Round trip automatically included if returning to site</div>' : ''}
-    ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this job — they will be Travel to Site on your next job card</div>' : ''}
+    ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this card</div>' : ''}
   `;
   container.appendChild(div);
 
-  // Auto-calculate immediately if both fields are pre-filled
   setTimeout(() => {
-    if (fromVal && toVal) {
-      calcLegMiles(id, type);
-    } else if (fromVal && !toVal) {
-      document.getElementById(`leg_miles_${id}`).textContent = 'Enter destination to calculate';
-    }
-    // Attach Places Autocomplete to editable destination fields
+    if (fromVal && toVal) calcLegMiles(id, type);
+    else if (fromVal && !toVal) document.getElementById(`leg_miles_${id}`).textContent = 'Enter destination to calculate';
     const toInput = document.getElementById(`leg_to_${id}`);
-    if (toInput && !toReadonly && window.google && window.google.maps && window.google.maps.places) {
-      const ac = new google.maps.places.Autocomplete(toInput, {
-        componentRestrictions: { country: "gb" },
-        fields: ["formatted_address", "geometry", "name"]
-      });
+    if (toInput && !toReadonly && window.google?.maps?.places) {
+      const ac = new google.maps.places.Autocomplete(toInput, { componentRestrictions: { country: "gb" } });
       ac.addListener("place_changed", () => {
         const place = ac.getPlace();
-        if (place.formatted_address) {
-          toInput.value = place.formatted_address;
-        }
-        calcLegMiles(id, type);
-      });
-    }
-    // Also attach to from field if editable
-    const fromInput = document.getElementById(`leg_from_${id}`);
-    if (fromInput && !fromReadonly && window.google && window.google.maps && window.google.maps.places) {
-      const ac2 = new google.maps.places.Autocomplete(fromInput, {
-        componentRestrictions: { country: "gb" },
-        fields: ["formatted_address"]
-      });
-      ac2.addListener("place_changed", () => {
-        const place = ac2.getPlace();
-        if (place.formatted_address) fromInput.value = place.formatted_address;
+        if (place.formatted_address) toInput.value = place.formatted_address;
         calcLegMiles(id, type);
       });
     }
@@ -673,42 +767,30 @@ async function calcLegMiles(id, type) {
   const from = document.getElementById(`leg_from_${id}`)?.value?.trim();
   const to = document.getElementById(`leg_to_${id}`)?.value?.trim();
   const el = document.getElementById(`leg_miles_${id}`);
-  if (!from || !to) { el.textContent = 'Enter both locations to calculate'; return; }
-
+  if (!from || !to) { el.textContent = 'Enter both locations'; return; }
   el.className = 'leg-miles calculating';
   el.textContent = 'Calculating...';
-
   try {
     let url = `/api/mileage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
     if (type === 'materials') {
-      const returnToSite = document.getElementById(`leg_return_${id}`)?.value === 'yes';
-      url += `&return_to_site=${returnToSite}&site=${encodeURIComponent(JOB_POSTCODE)}`;
+      const ret = document.getElementById(`leg_return_${id}`)?.value === 'yes';
+      url += `&return_to_site=${ret}&site=${encodeURIComponent(JOB_POSTCODE)}`;
     }
-    const resp = await fetch(url);
-    const data = await resp.json();
-    if (data.error) {
-      el.className = 'leg-miles calculating';
-      el.textContent = `Error: ${data.error}`;
-      return;
-    }
+    const data = await fetch(url).then(r => r.json());
+    if (data.error) { el.textContent = `Error: ${data.error}`; return; }
     const miles = data.miles || 0;
     const cost = (miles * MILEAGE_RATE).toFixed(2);
     el.className = 'leg-miles';
-    const paidMileage = document.querySelector('[name=contractor_paid_mileage]')?.value === '1';
-    el.textContent = paidMileage ? `${miles} miles — £${cost}` : `${miles} miles`;
+    el.textContent = MILEAGE_RATE > 0 ? `${miles} miles — £${cost}` : `${miles} miles`;
     updateLeg(id, type, from, to, miles, parseFloat(cost));
-  } catch(e) {
-    el.textContent = `Could not calculate: ${e.message}`;
-  }
+  } catch(e) { el.textContent = `Could not calculate`; }
   updateJourneyTotal();
 }
 
 function updateLeg(id, type, from, to, miles, cost) {
   const existing = legs.findIndex(l => l.id === id);
-  // nextjob: miles recorded for route info but marked as excluded from billing
   const leg = { id, type, from, to, miles, cost, excludeFromBilling: type === 'nextjob' };
-  if (existing >= 0) legs[existing] = leg;
-  else legs.push(leg);
+  if (existing >= 0) legs[existing] = leg; else legs.push(leg);
   document.getElementById('journey_json').value = JSON.stringify(legs);
 }
 
@@ -717,19 +799,8 @@ function removeLeg(id) {
   if (!leg) return;
   const legData = legs.find(l => l.id === id);
   const type = legData?.type || '';
-
-  // If removing a closing leg, use unlockJourney which handles everything cleanly
-  if (type === 'home' || type === 'nextjob') {
-    unlockJourney();
-    return;
-  }
-
-  // If removing travel to site, show that button again
-  if (type === 'travel') {
-    const btn = document.getElementById('btn_travel');
-    if (btn) btn.style.display = '';
-  }
-
+  if (type === 'home' || type === 'nextjob') { unlockJourney(); return; }
+  if (type === 'travel') { const btn = document.getElementById('btn_travel'); if (btn) btn.style.display = ''; }
   leg.remove();
   legs = legs.filter(l => l.id !== id);
   document.getElementById('journey_json').value = JSON.stringify(legs);
@@ -739,69 +810,43 @@ function removeLeg(id) {
 function closeJourney() {
   journeyClosed = true;
   const btns = document.getElementById('leg_buttons');
-  if (btns) {
-    btns.innerHTML = `
-      <div style="background:#eafaf1;border-radius:8px;padding:12px 14px;font-size:13px;color:#27ae60;font-weight:600;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-        <span>✓ Journey complete — fill in the rest of the form and submit.</span>
-        <button type="button" onclick="unlockJourney()" style="background:none;border:1px solid #27ae60;border-radius:6px;color:#27ae60;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:12px;white-space:nowrap;">Undo</button>
-      </div>`;
-  }
+  if (btns) btns.innerHTML = `
+    <div style="background:#eafaf1;border-radius:8px;padding:12px 14px;font-size:13px;color:#27ae60;font-weight:600;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+      <span>✓ Journey complete</span>
+      <button type="button" onclick="unlockJourney()" style="background:none;border:1px solid #27ae60;border-radius:6px;color:#27ae60;padding:4px 10px;font-size:11px;cursor:pointer;">Undo</button>
+    </div>`;
 }
 
 function unlockJourney() {
   journeyClosed = false;
-
-  // Remove the closing leg (home or nextjob) from the DOM and legs array
-  const closingTypes = ['home', 'nextjob'];
-  legs.filter(l => closingTypes.includes(l.type)).forEach(l => {
-    document.getElementById(`leg_${l.id}`)?.remove();
-  });
-  legs = legs.filter(l => !closingTypes.includes(l.type));
+  legs.filter(l => ['home','nextjob'].includes(l.type)).forEach(l => document.getElementById(`leg_${l.id}`)?.remove());
+  legs = legs.filter(l => !['home','nextjob'].includes(l.type));
   document.getElementById('journey_json').value = JSON.stringify(legs);
   updateJourneyTotal();
-
-  // Restore buttons
   const hasTravelLeg = legs.some(l => l.type === 'travel');
   const btns = document.getElementById('leg_buttons');
-  if (btns) {
-    btns.innerHTML = `
-      <div class="add-leg-btns" id="btn_travel_row">
-        <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')" ${hasTravelLeg ? 'style="display:none"' : ''}>🚗 Travel to Site</button>
-        <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
-      </div>
-      <div class="add-leg-btns" style="margin-top:8px;">
-        <button type="button" class="add-leg-btn" onclick="addLeg('home')">🏠 Travel Home</button>
-        <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
-      </div>
-      <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">
-        "Drive to Next Job" closes mileage for this card — that journey is logged on your next job card as "Travel to Site".
-      </div>`;
-  }
+  if (btns) btns.innerHTML = `
+    <div class="add-leg-btns" id="btn_travel_row">
+      <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')" ${hasTravelLeg ? 'style="display:none"' : ''}>🚗 Travel to Site</button>
+      <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
+    </div>
+    <div class="add-leg-btns" style="margin-top:8px;">
+      <button type="button" class="add-leg-btn" onclick="addLeg('home')">🏠 Travel Home</button>
+      <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
+    </div>
+    <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">"Drive to Next Job" closes mileage for this card</div>`;
 }
 
 function updateJourneyTotal() {
-  // nextjob legs are tracked for route purposes but NOT counted in this job's mileage
-  // They become the Travel to Site leg on the next job card
-  const billableLegs = legs.filter(l => l.type !== 'nextjob');
-  const nextJobLegs  = legs.filter(l => l.type === 'nextjob');
-  const total = billableLegs.reduce((s, l) => s + (l.miles || 0), 0);
-  const nextJobMiles = nextJobLegs.reduce((s, l) => s + (l.miles || 0), 0);
-
+  const billable = legs.filter(l => l.type !== 'nextjob');
+  const total = billable.reduce((s, l) => s + (l.miles || 0), 0);
   document.getElementById('total_miles').value = total.toFixed(1);
   const el = document.getElementById('journey_total');
-  if (total > 0 || nextJobMiles > 0) {
+  if (total > 0) {
     el.style.display = 'flex';
-    const paidMileage = document.querySelector('[name=contractor_paid_mileage]')?.value === '1';
-    let label = paidMileage
-      ? `${total.toFixed(1)} miles — £${(total * MILEAGE_RATE).toFixed(2)}`
-      : `${total.toFixed(1)} miles (HMRC record)`;
-    if (nextJobMiles > 0) {
-      label += ` · ${nextJobMiles.toFixed(1)} miles to next job (logged on next card)`;
-    }
-    document.getElementById('journey_total_miles').textContent = label;
-  } else {
-    el.style.display = 'none';
-  }
+    document.getElementById('journey_total_miles').textContent =
+      MILEAGE_RATE > 0 ? `${total.toFixed(1)} miles — £${(total * MILEAGE_RATE).toFixed(2)}` : `${total.toFixed(1)} miles`;
+  } else { el.style.display = 'none'; }
 }
 
 // ── Materials ──────────────────────────────────────────────
@@ -816,31 +861,20 @@ function addMaterial() {
   div.innerHTML = `
     <div class="mat-number">Item ${matCount}</div>
     <button type="button" class="remove-mat" onclick="removeMat(${matCount})">×</button>
-    <div class="field">
-      <label>Description</label>
-      <input type="text" name="mat_desc_${matCount}" placeholder="e.g. Sand paper, Paint, Fixings..." required>
-    </div>
+    <div class="field"><label>Description</label>
+      <input type="text" name="mat_desc_${matCount}" placeholder="e.g. Sand paper, Paint..."></div>
     <div class="mat-grid">
-      <div class="field">
-        <label>Qty</label>
-        <input type="number" name="mat_qty_${matCount}" value="1" min="0.01" step="0.01"
-               oninput="calcMatTotal(${matCount})">
-      </div>
-      <div class="field">
-        <label>Cost inc VAT (£)</label>
-        <input type="number" name="mat_cost_${matCount}" value="0" min="0" step="0.01"
-               oninput="calcMatTotal(${matCount})">
-      </div>
+      <div class="field"><label>Qty</label>
+        <input type="number" name="mat_qty_${matCount}" value="1" min="0.01" step="0.01" oninput="calcMatTotal(${matCount})"></div>
+      <div class="field"><label>Cost inc VAT (£)</label>
+        <input type="number" name="mat_cost_${matCount}" value="0" min="0" step="0.01" oninput="calcMatTotal(${matCount})"></div>
     </div>
-    <div class="field">
-      <label>Payment Method</label>
+    <div class="field"><label>Payment Method</label>
       <select name="mat_payment_${matCount}">
         <option value="Redstone Card">Redstone Company Card</option>
         <option value="Own card/cash">Own Card / Cash (Reimburse me)</option>
-      </select>
-    </div>
-    <div class="mat-total" id="mat_total_${matCount}">Total: £0.00</div>
-  `;
+      </select></div>
+    <div class="mat-total" id="mat_total_${matCount}">Total: £0.00</div>`;
   container.appendChild(div);
 }
 
@@ -860,49 +894,59 @@ function addParking() {
   const div = document.createElement('div');
   div.className = 'parking-row';
   div.id = `park_${parkCount}`;
+  const n = parkCount;
   div.innerHTML = `
-    <div class="parking-number">Parking Charge ${parkCount}</div>
-    <button type="button" class="remove-parking" onclick="removePark(${parkCount})">×</button>
-    <div class="field">
-      <label>Description</label>
-      <input type="text" name="park_desc_${parkCount}"
-             placeholder="e.g. Car park, Parking fine, Pay & display">
-    </div>
+    <div class="parking-number">Parking Charge ${n}</div>
+    <button type="button" class="remove-parking" onclick="removePark(${n})">×</button>
+    <div class="field"><label>Description</label>
+      <input type="text" name="park_desc_${n}" placeholder="e.g. Pay & display, Parking fine"></div>
     <div class="mat-grid">
-      <div class="field">
-        <label>Amount (£)</label>
-        <input type="number" name="park_cost_${parkCount}" min="0" step="0.01" value="0">
-      </div>
-      <div class="field">
-        <label>Payment</label>
-        <select name="park_payment_${parkCount}">
+      <div class="field"><label>Amount (£)</label>
+        <input type="number" name="park_cost_${n}" min="0" step="0.01" value="0"></div>
+      <div class="field"><label>Payment</label>
+        <select name="park_payment_${n}">
           <option value="Redstone Card">Redstone Card</option>
           <option value="Own card/cash">Own Card / Cash (Reimburse)</option>
-        </select>
-      </div>
+        </select></div>
     </div>
-    <div class="field" style="margin-top:8px;">
-      <label>Receipt Photo</label>
+    <div class="checkbox-row" style="margin-top:8px;">
+      <input type="checkbox" name="park_is_fine_${n}" id="park_fine_${n}" value="yes"
+             onchange="toggleFineWarning(${n})">
+      <label for="park_fine_${n}" style="font-size:14px;color:#c0392b;font-weight:600;text-transform:none;letter-spacing:0">
+        ⚠ This is a parking fine
+      </label>
+    </div>
+    <div class="fine-warning" id="fine_warn_${n}">
+      Parking fines are flagged for Redstone approval — reimbursement is at their discretion.
+      You will be notified of the decision as part of your weekly pay sign-off.
+    </div>
+    <div class="field" style="margin-top:8px;"><label>Receipt Photo</label>
       <div class="photo-upload" style="padding:12px;" onclick="this.querySelector('input').click()">
-        <input type="file" name="park_photo_${parkCount}" accept="image/*" capture="environment"
-               onchange="previewSingle(this, 'park_preview_${parkCount}')">
-        <div style="font-size:13px;color:#7f8c8d;">📷 Tap to photograph receipt</div>
+        <input type="file" name="park_photo_${n}" accept="image/*" capture="environment"
+               onchange="previewSingle(this, 'park_preview_${n}')">
+        <div style="font-size:13px;color:#7f8c8d;">📷 Tap to photograph receipt / fine notice</div>
       </div>
-      <div id="park_preview_${parkCount}" style="margin-top:8px;"></div>
-    </div>
-  `;
+      <div id="park_preview_${n}" style="margin-top:8px;"></div>
+    </div>`;
   container.appendChild(div);
+}
+
+function toggleFineWarning(n) {
+  const cb = document.getElementById(`park_fine_${n}`);
+  const warn = document.getElementById(`fine_warn_${n}`);
+  const row = document.getElementById(`park_${n}`);
+  warn.style.display = cb.checked ? 'block' : 'none';
+  row.classList.toggle('is-fine', cb.checked);
 }
 
 function removePark(n) { document.getElementById(`park_${n}`)?.remove(); }
 
-// ── Time calculation ───────────────────────────────────────
+// ── Time & Labour ──────────────────────────────────────────
 function calcHours() {
   const sh = document.getElementById('start_hour')?.value;
   const sm = document.getElementById('start_min')?.value;
   const fh = document.getElementById('finish_hour')?.value;
   const fm = document.getElementById('finish_min')?.value;
-
   if (!sh || sm === '' || !fh || fm === '' || sm === undefined || fm === undefined) return;
 
   const startStr = `${sh}:${sm}`;
@@ -912,12 +956,38 @@ function calcHours() {
 
   let mins = (parseInt(fh)*60 + parseInt(fm)) - (parseInt(sh)*60 + parseInt(sm));
   if (mins < 0) mins += 1440;
-  const hrs = (mins/60).toFixed(1);
+  const hrs = parseFloat((mins/60).toFixed(1));
   document.getElementById('hours_display').textContent = `Hours on site: ${hrs} hrs`;
+  document.getElementById('hours_display').className = 'hours-display has-hours';
   document.getElementById('hours_on_site').value = hrs;
+
+  // Live labour cost preview
+  const ot = parseFloat(document.getElementById('overtime_hours')?.value || 0);
+  let labourCost, labourDesc;
+  if (IS_PPM) {
+    labourCost = DAY_RATE + (ot * OVERTIME_RATE);
+    labourDesc = `PPM Full Day: £${DAY_RATE.toFixed(2)}${ot > 0 ? ` + ${ot}hr OT: £${(ot*OVERTIME_RATE).toFixed(2)}` : ''}`;
+  } else {
+    const base = hrs * HOURLY_RATE;
+    const otCost = ot * OVERTIME_RATE;
+    labourCost = base + otCost;
+    labourDesc = `${hrs}hrs × £${HOURLY_RATE.toFixed(2)}/hr = £${base.toFixed(2)}${ot > 0 ? ` + ${ot}hr OT = £${otCost.toFixed(2)}` : ''}`;
+  }
+
+  const preview = document.getElementById('labour_preview');
+  preview.style.display = 'block';
+  preview.textContent = `Labour: ${labourDesc} → Total: £${labourCost.toFixed(2)}`;
+  if (hrs > 8) {
+    preview.style.background = '#fff3cd';
+    preview.style.color = '#856404';
+    preview.textContent += ' ⚠ Over 8hrs — add overtime hours above';
+  } else {
+    preview.style.background = '#effdf4';
+    preview.style.color = '#1a7a4a';
+  }
 }
 
-// ── Photo previews ─────────────────────────────────────────
+// ── Photos ─────────────────────────────────────────────────
 function previewPhotos(input, previewId) {
   const container = document.getElementById(previewId);
   container.innerHTML = '';
@@ -948,26 +1018,15 @@ function previewSingle(input, previewId) {
   }
 }
 
-function confirmSubmit() {
-  const desc = document.querySelector('[name=description_actual]').value.trim();
-  if (!desc) { alert('Please describe the works carried out.'); return false; }
-  prepareJourneyData();
-  return confirm('Submit this job card? This will generate your invoice and email it to Redstone accounts.');
-}
-
 function prepareJourneyData() {
   document.getElementById('journey_json').value = JSON.stringify(legs);
-  const total = legs.reduce((s, l) => s + (l.miles || 0), 0);
+  const total = legs.filter(l => l.type !== 'nextjob').reduce((s, l) => s + (l.miles || 0), 0);
   document.getElementById('total_miles').value = total.toFixed(1);
 }
 </script>
 
 <script>
-// Load Google Maps Places API
-function initGoogleMaps() {
-  // Places API loaded — autocomplete will attach on next leg add
-  console.log('Google Maps Places API ready');
-}
+function initGoogleMaps() { console.log('Google Maps Places API ready'); }
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ gmaps_key }}&libraries=places&callback=initGoogleMaps&loading=async" async defer></script>
 </body>
