@@ -252,6 +252,13 @@ def init_db():
             status          TEXT DEFAULT 'pending',
             created_at      TIMESTAMPTZ DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS contractor_locations (
+            contractor_key  TEXT PRIMARY KEY,
+            last_location   TEXT,
+            last_job_id     TEXT,
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        );
     """)
     conn.commit()
     cur.close()
@@ -935,6 +942,24 @@ def submit_job_card(job_id, card_date):
     result = cur.fetchone()
     conn.commit()
 
+    # Save last known location for this contractor (for next job card start point)
+    try:
+        loc_conn = get_db()
+        loc_cur = loc_conn.cursor()
+        loc_cur.execute("""
+            INSERT INTO contractor_locations (contractor_key, last_location, last_job_id, updated_at)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (contractor_key) DO UPDATE
+            SET last_location = EXCLUDED.last_location,
+                last_job_id = EXCLUDED.last_job_id,
+                updated_at = EXCLUDED.updated_at
+        """, (key, job.get("postcode", "") + " " + job.get("pub_name", ""), job_id))
+        loc_conn.commit()
+        loc_cur.close()
+        loc_conn.close()
+    except Exception as e:
+        print(f"Could not save last location: {e}")
+
     # Generate PDFs
     job_card_pdf  = build_job_card_pdf(card, contractor)
     invoice_pdf   = build_invoice_pdf(card, contractor)
@@ -1036,6 +1061,40 @@ def download_job_card(card_id):
     pdf = build_job_card_pdf(card, contractor)
     return send_file(io.BytesIO(pdf), mimetype="application/pdf",
                      download_name=f"jobcard_{card_id}.pdf")
+
+
+@app.route("/api/last_location")
+@login_required
+def api_last_location():
+    """Return contractor's last known location if set today, else their home address."""
+    key = session["contractor_key"]
+    contractor = CONTRACTORS[key]
+    today = date.today()
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT last_location, last_job_id, updated_at
+        FROM contractor_locations
+        WHERE contractor_key = %s
+    """, (key,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    # Only use last location if it was set today
+    if row and row["updated_at"] and row["updated_at"].date() == today and row["last_location"]:
+        return jsonify({
+            "location": row["last_location"],
+            "job_id": row["last_job_id"],
+            "from_last_job": True
+        })
+
+    return jsonify({
+        "location": contractor["address"],
+        "job_id": None,
+        "from_last_job": False
+    })
 
 
 @app.route("/api/mileage")
