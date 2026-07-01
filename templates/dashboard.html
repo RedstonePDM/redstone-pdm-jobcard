@@ -2,249 +2,283 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Redstone PDM — My Jobs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Dashboard — Redstone PDM</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #f0f2f5;
-    min-height: 100vh;
-  }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
   .topbar {
-    background: #1a2332;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+    background: #1a2332; color: white; padding: 0 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
-  .topbar-left { display: flex; flex-direction: column; }
-  .topbar-name { color: white; font-size: 16px; font-weight: 700; }
-  .topbar-sub  { color: #c0392b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 1px; }
-  .logout { color: #7f8c8d; font-size: 13px; text-decoration: none; padding: 6px 12px;
-            border: 1px solid #2c3e50; border-radius: 6px; color: #bdc3c7; }
-  .week-banner {
-    background: linear-gradient(135deg, #c0392b, #e74c3c);
-    color: white;
-    padding: 14px 20px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
+  .topbar-brand { font-weight: 700; font-size: 18px; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-nav { display: flex; gap: 4px; }
+  .topbar-nav a {
+    color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px;
+    padding: 8px 14px; border-radius: 6px; transition: all 0.15s;
   }
-  .content { padding: 16px; }
-  .section-title {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #7f8c8d;
-    margin: 16px 0 10px;
+  .topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
+
+  .page { max-width: 900px; margin: 0 auto; padding: 28px 16px; }
+
+  /* Hero greeting */
+  .hero {
+    background: #1a2332; border-radius: 14px; padding: 28px 28px 24px;
+    color: white; margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
   }
-  .job-card {
-    background: white;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    text-decoration: none;
-    display: block;
-    border-left: 4px solid #e0e0e0;
-    position: relative;
+  .hero-left h1 { font-size: 22px; font-weight: 800; }
+  .hero-left p  { font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+  .hero-right { text-align: right; }
+  .hero-date { font-size: 13px; color: rgba(255,255,255,0.5); }
+  .hero-week { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 3px; font-weight: 600; }
+
+  /* 3 main tiles */
+  .tile-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  @media (max-width: 600px) { .tile-row { grid-template-columns: 1fr; } }
+
+  .main-tile {
+    background: white; border-radius: 14px; padding: 22px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07); text-decoration: none; color: inherit;
+    display: flex; flex-direction: column; gap: 8px;
+    border: 2px solid transparent;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    cursor: pointer;
   }
-  .job-card.callout  { border-left-color: #c0392b; }
-  .job-card.quote    { border-left-color: #2980b9; }
-  .job-card.miv      { border-left-color: #27ae60; }
-  .job-card.ppm      { border-left-color: #8e44ad; }
-  .job-card.done     { border-left-color: #27ae60; opacity: 0.7; }
-  .job-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-  .job-number { font-size: 12px; color: #7f8c8d; font-weight: 600; }
-  .job-date   { font-size: 11px; color: #bdc3c7; }
-  .job-site   { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
-  .job-desc   { font-size: 13px; color: #555; line-height: 1.4; margin-bottom: 8px;
-                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .job-meta   { display: flex; gap: 8px; flex-wrap: wrap; }
-  .badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .main-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); border-color: #c0392b; }
+
+  .mt-icon { font-size: 28px; margin-bottom: 4px; }
+  .mt-title { font-size: 15px; font-weight: 700; color: #1a2332; }
+  .mt-desc  { font-size: 12px; color: #888; line-height: 1.4; flex: 1; }
+  .mt-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; margin-top: 4px; width: fit-content;
   }
-  .badge-type    { background: #f0f2f5; color: #7f8c8d; }
-  .badge-post    { background: #eaf4fb; color: #2980b9; }
-  .badge-due     { background: #fdf2f2; color: #c0392b; }
-  .badge-done    { background: #eafaf1; color: #27ae60; }
-  .arrow { position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-           color: #bdc3c7; font-size: 18px; }
-  .empty {
-    text-align: center;
-    padding: 40px 20px;
-    color: #bdc3c7;
-    font-size: 14px;
+  .badge-red   { background: #fdf0ef; color: #c0392b; }
+  .badge-green { background: #effdf4; color: #1a7a4a; }
+  .badge-grey  { background: #f0f2f5; color: #555; }
+  .badge-blue  { background: #eff4ff; color: #1a4fa0; }
+  .badge-amber { background: #fff8ef; color: #c77a10; }
+
+  /* Week view section */
+  .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+
+  /* Day groups */
+  .day-group { margin-bottom: 16px; }
+  .day-label { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .day-label.today { color: #c0392b; }
+
+  .job-row {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+    background: #fafbfc; border-radius: 10px; margin-bottom: 8px;
+    border: 1.5px solid #f0f2f5; text-decoration: none; color: inherit;
+    transition: border-color 0.15s, background 0.15s;
   }
-  .empty-icon { font-size: 40px; margin-bottom: 8px; }
-  .recent-card {
-    background: white;
-    border-radius: 10px;
-    padding: 14px 16px;
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  .job-row:hover { border-color: #c0392b; background: white; }
+  .job-row.done  { border-color: #b7e4c7; background: #f0fdf4; }
+  .job-row.today-job { border-color: #c0392b; }
+
+  .job-icon { font-size: 22px; flex-shrink: 0; }
+  .job-info { flex: 1; min-width: 0; }
+  .job-name { font-size: 14px; font-weight: 700; color: #1a2332; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .job-status { flex-shrink: 0; }
+  .status-pill { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  .status-pill.todo     { background: #eff4ff; color: #1a4fa0; }
+  .status-pill.done     { background: #effdf4; color: #1a7a4a; }
+  .status-pill.overdue  { background: #fdf0ef; color: #c0392b; }
+
+  /* Not published banner */
+  .not-published {
+    background: #fff8ef; border: 1px solid #ffd89b; border-radius: 12px;
+    padding: 20px 22px; text-align: center; color: #7a5000;
   }
-  .recent-left { flex: 1; }
-  .recent-job  { font-size: 13px; font-weight: 600; color: #1a2332; }
-  .recent-site { font-size: 12px; color: #7f8c8d; margin-top: 2px; }
-  .status-pill {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 20px;
-    text-transform: uppercase;
+  .not-published h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .not-published p  { font-size: 13px; color: #a06800; }
+
+  /* Recent cards */
+  .card-item {
+    display: flex; align-items: center; gap: 14px; padding: 12px 14px;
+    border-radius: 10px; background: #fafbfc; border: 1.5px solid #f0f2f5;
+    margin-bottom: 8px; text-decoration: none; color: inherit;
+    transition: border-color 0.15s;
   }
-  .status-submitted { background: #fef9e7; color: #f39c12; }
-  .status-approved  { background: #eafaf1; color: #27ae60; }
+  .card-item:hover { border-color: #c0392b; }
+  .card-date { font-size: 12px; color: #888; width: 80px; flex-shrink: 0; }
+  .card-job  { flex: 1; }
+  .card-job-id   { font-size: 13px; font-weight: 700; color: #1a2332; }
+  .card-job-site { font-size: 12px; color: #888; }
+  .card-amount { font-size: 13px; font-weight: 700; color: #1a2332; }
+  .card-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-submitted { background: #e6a817; }
+  .dot-approved  { background: #1a7a4a; }
+
+  .empty-state { text-align: center; padding: 30px; color: #aaa; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="topbar-left">
-    <div class="topbar-name">{{ contractor.name }}</div>
-    <div class="topbar-sub">Field Engineer</div>
-  </div>
-  <div style="display:flex;gap:10px;align-items:center;">
-    <a href="/profile" style="color:#bdc3c7;font-size:13px;text-decoration:none;padding:6px 12px;border:1px solid #2c3e50;border-radius:6px;">My Profile</a>
-    <a href="/logout" class="logout">Sign out</a>
+  <div class="topbar-brand">Redstone <span>PDM</span></div>
+  <div class="topbar-nav">
+    <a href="/dashboard" class="active">Home</a>
+    <a href="/profile">My Profile</a>
+    <a href="/logout">Sign Out</a>
   </div>
 </div>
 
-<div class="week-banner">
-  📅 Week commencing {{ week_start.strftime('%d %B %Y') }}
-</div>
+<div class="page">
 
-<!-- Odometer banner — only shown for van contractors who haven't submitted this week -->
-<div id="odo_banner" style="display:none;background:#fff8e1;border-bottom:2px solid #f39c12;padding:14px 20px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;max-width:600px;margin:0 auto;flex-wrap:wrap;gap:10px;">
-    <div>
-      <div style="font-size:14px;font-weight:700;color:#856404;margin-bottom:2px;">📍 Weekly Odometer Reading Required</div>
-      <div style="font-size:12px;color:#a07000;" id="odo_banner_text">Enter your odometer reading to start the week.</div>
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-left">
+      <h1>Hi {{ contractor.name.split()[0] }} 👋</h1>
+      <p>Welcome to your Redstone PDM portal</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input type="number" id="odo_banner_input" placeholder="Current miles"
-             style="width:140px;padding:10px 12px;border:1.5px solid #f39c12;border-radius:8px;font-size:15px;font-weight:700;color:#1a2332;outline:none;"
-             inputmode="numeric">
-      <button onclick="submitOdometerBanner()"
-              style="padding:10px 16px;background:#f39c12;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
-        Submit ✓
-      </button>
+    <div class="hero-right">
+      <div class="hero-date">{{ today.strftime('%A, %d %B %Y') }}</div>
+      <div class="hero-week">w/c {{ week_start.strftime('%d %b') }}</div>
     </div>
   </div>
-</div>
 
-<div class="content">
+  <!-- 3 tiles -->
+  <div class="tile-row">
 
-  <div class="section-title">This Week's Jobs</div>
-
-  {% if jobs %}
-    {% set days = {} %}
-    {% for job in jobs %}
-      {% set day_key = job.day_date.strftime('%A %d %b') %}
-      {% if day_key not in days %}
-        {% set _ = days.update({day_key: []}) %}
+    <div class="main-tile" onclick="showSection('this-week')">
+      <div class="mt-icon">📅</div>
+      <div class="mt-title">This Week's Jobs</div>
+      <div class="mt-desc">Your allocated jobs for the current week</div>
+      {% if not week_published %}
+      <span class="mt-badge badge-amber">⏳ Not published yet</span>
+      {% elif jobs %}
+      <span class="mt-badge badge-blue">{{ jobs | length }} job{{ 's' if jobs | length != 1 }}</span>
+      {% else %}
+      <span class="mt-badge badge-grey">No jobs this week</span>
       {% endif %}
-    {% endfor %}
+    </div>
 
-    {% set current_day = namespace(value='') %}
+    <div class="main-tile" onclick="showSection('my-cards')">
+      <div class="mt-icon">📋</div>
+      <div class="mt-title">My Job Cards</div>
+      <div class="mt-desc">Your submitted job cards and invoices</div>
+      {% if recent_cards %}
+      <span class="mt-badge badge-green">{{ recent_cards | length }} recent</span>
+      {% else %}
+      <span class="mt-badge badge-grey">None yet</span>
+      {% endif %}
+    </div>
+
+    <a href="/profile" class="main-tile">
+      <div class="mt-icon">👤</div>
+      <div class="mt-title">My Profile</div>
+      <div class="mt-desc">View your pay details, vehicle MOT, and request changes</div>
+      <span class="mt-badge badge-grey">View profile</span>
+    </a>
+
+  </div>
+
+  <!-- This week section -->
+  <div id="section-this-week" class="section-card">
+    <div class="section-title">
+      <span>📅 This Week's Jobs</span>
+      <span style="font-size:13px;color:#888;font-weight:400">w/c {{ week_start.strftime('%d %B') }}</span>
+    </div>
+
+    {% if not week_published %}
+    <div class="not-published">
+      <h3>⏳ Schedule Not Published Yet</h3>
+      <p>Your jobs for this week haven't been released yet. Check back soon — you'll receive an email when the schedule is confirmed.</p>
+    </div>
+
+    {% elif jobs %}
+    {% set ns = namespace(current_day=None) %}
     {% for job in jobs %}
-      {% set day_label = job.day_date.strftime('%A %d %b') %}
-      {% if day_label != current_day.value %}
-        {% set current_day.value = day_label %}
-        <div class="section-title" style="margin-top:20px;">{{ day_label }}</div>
+      {% if job.day_date != ns.current_day %}
+        {% set ns.current_day = job.day_date %}
+        <div class="day-label {% if job.day_date == today %}today{% endif %}">
+          {{ job.day_date.strftime('%A, %d %B') }}{% if job.day_date == today %} — Today{% endif %}
+        </div>
       {% endif %}
 
-      {% set tab = job.tab | lower %}
-      {% set is_done = job.card_id is not none %}
-      <a href="/job/{{ job.job_id }}/{{ job.day_date.strftime('%Y-%m-%d') }}"
-         class="job-card {{ tab }} {% if is_done %}done{% endif %}">
-        <div class="job-top">
-          <span class="job-number">{{ job.job_id }}</span>
-          <span class="job-date">{{ job.day_date.strftime('%a %d %b') }}</span>
+      {% if job.card_id %}
+      <div class="job-row done">
+        <div class="job-icon">✅</div>
+        <div class="job-info">
+          <div class="job-name">{{ job.pub_name or job.job_id }}</div>
+          <div class="job-meta">{{ job.job_id }} · {{ job.postcode }}</div>
         </div>
-        <div class="job-site">{{ job.pub_name }}</div>
-        <div class="job-desc">{{ job.description }}</div>
-        <div class="job-meta">
-          <span class="badge badge-type">{{ job.tab }}</span>
-          {% if job.postcode %}<span class="badge badge-post">{{ job.postcode }}</span>{% endif %}
-          {% if job.due_date %}<span class="badge badge-due">Due {{ job.due_date[:10] }}</span>{% endif %}
-          {% if is_done %}<span class="badge badge-done">✓ Submitted</span>{% endif %}
+        <div class="job-status"><span class="status-pill done">Card Submitted</span></div>
+      </div>
+      {% else %}
+      <a href="/job/{{ job.job_id }}/{{ job.day_date }}" class="job-row {% if job.day_date == today %}today-job{% endif %}">
+        <div class="job-icon">🔧</div>
+        <div class="job-info">
+          <div class="job-name">{{ job.pub_name or job.job_id }}</div>
+          <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.trade_type or 'General' }}</div>
         </div>
-        {% if not is_done %}<span class="arrow">›</span>{% endif %}
+        <div class="job-status">
+          {% if job.day_date < today %}
+          <span class="status-pill overdue">Card Overdue</span>
+          {% elif job.day_date == today %}
+          <span class="status-pill todo">Start Card</span>
+          {% else %}
+          <span class="status-pill todo">Upcoming</span>
+          {% endif %}
+        </div>
       </a>
+      {% endif %}
     {% endfor %}
-  {% else %}
-    <div class="empty">
-      <div class="empty-icon">📋</div>
-      No jobs allocated for this week yet.<br>Check back once the planner has been updated.
-    </div>
-  {% endif %}
 
-  {% if recent_cards %}
-  <div class="section-title" style="margin-top: 28px;">Recent Submissions</div>
-  {% for card in recent_cards %}
-  <div class="recent-card">
-    <div class="recent-left">
-      <div class="recent-job">{{ card.job_id }} · {{ card.card_date.strftime('%d %b') }}</div>
-      <div class="recent-site">{{ card.site_name }} · £{{ '%.2f'|format(card.invoice_total) }}</div>
-    </div>
-    <span class="status-pill status-{{ card.status }}">{{ card.status }}</span>
+    {% else %}
+    <div class="empty-state">No jobs allocated to you this week.</div>
+    {% endif %}
   </div>
-  {% endfor %}
-  {% endif %}
+
+  <!-- My Job Cards section -->
+  <div id="section-my-cards" class="section-card" style="display:none">
+    <div class="section-title">
+      <span>📋 My Job Cards</span>
+      <span style="font-size:13px;color:#888;font-weight:400">Most recent first</span>
+    </div>
+
+    {% if recent_cards %}
+    {% for card in recent_cards %}
+    <a href="/card/{{ card.id }}/jobcard.pdf" target="_blank" class="card-item">
+      <div class="card-date">{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</div>
+      <div class="card-job">
+        <div class="card-job-id">{{ card.job_id }}</div>
+        <div class="card-job-site">{{ card.site_name or '—' }}</div>
+      </div>
+      <div class="card-amount">£{{ '%.2f'|format(card.net_payment|float) }}</div>
+      <div class="card-status-dot dot-{{ card.status }}"></div>
+    </a>
+    {% endfor %}
+    <div style="font-size:12px;color:#aaa;text-align:center;padding-top:8px">
+      🟡 Pending approval &nbsp;&nbsp; 🟢 Approved
+    </div>
+    {% else %}
+    <div class="empty-state">No job cards submitted yet. Complete your first job card to see it here.</div>
+    {% endif %}
+  </div>
 
 </div>
+
 <script>
-async function checkOdometerBanner() {
-  try {
-    const resp = await fetch('/api/odometer_needed');
-    const data = await resp.json();
-    if (data.needed) {
-      document.getElementById('odo_banner').style.display = 'block';
-      document.getElementById('odo_banner_text').textContent =
-        `Week commencing ${data.week_commencing} · ${data.van_reg} · Enter your current mileage`;
-    }
-  } catch(e) {}
-}
-
-async function submitOdometerBanner() {
-  const reading = document.getElementById('odo_banner_input').value;
-  if (!reading || parseInt(reading) < 1) {
-    document.getElementById('odo_banner_input').style.borderColor = '#c0392b';
-    return;
+  function showSection(name) {
+    document.querySelectorAll('[id^="section-"]').forEach(s => s.style.display = 'none');
+    const el = document.getElementById('section-' + name);
+    if (el) { el.style.display = 'block'; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    // Highlight active tile
+    document.querySelectorAll('.main-tile').forEach(t => t.style.borderColor = '');
   }
-  try {
-    const resp = await fetch('/api/odometer_submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reading: parseInt(reading) })
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      const banner = document.getElementById('odo_banner');
-      banner.style.background = '#eafaf1';
-      banner.style.borderColor = '#27ae60';
-      banner.innerHTML = '<div style="text-align:center;padding:4px;font-size:14px;font-weight:700;color:#27ae60;">✓ Odometer reading saved — thank you!</div>';
-      setTimeout(() => banner.style.display = 'none', 2500);
-    }
-  } catch(e) {}
-}
 
-checkOdometerBanner();
+  // Show this week by default
+  showSection('this-week');
 </script>
 </body>
 </html>
