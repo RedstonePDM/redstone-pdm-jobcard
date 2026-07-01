@@ -1055,11 +1055,18 @@ def api_mileage():
             return jsonify({"miles": 0, "cost": 0, "error": "No API key"})
 
         def get_miles(a, b):
+            # Distance Matrix API accepts addresses, postcodes, and place names
             url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-            params = {"origins": a, "destinations": b,
-                      "units": "imperial", "key": GMAPS_API_KEY}
+            params = {
+                "origins": a,
+                "destinations": b,
+                "units": "imperial",
+                "region": "gb",
+                "key": GMAPS_API_KEY
+            }
             r = requests.get(url, params=params, timeout=10)
             data = r.json()
+            log.info(f"Distance Matrix: {a} -> {b}: {data.get('rows', [{}])[0].get('elements', [{}])[0]}")
             el = data["rows"][0]["elements"][0]
             if el["status"] != "OK":
                 return 0
