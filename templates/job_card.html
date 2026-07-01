@@ -377,11 +377,19 @@
       <div id="journey_legs"></div>
       <input type="hidden" name="journey_json" id="journey_json" value="[]">
       <input type="hidden" name="total_miles" id="total_miles" value="0">
-      <div class="add-leg-btns">
-        <button type="button" class="add-leg-btn" onclick="addLeg('travel')">🚗 Travel to Site</button>
-        <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
+      <div id="leg_buttons">
+        <div class="add-leg-btns" id="btn_travel_row">
+          <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')">🚗 Travel to Site</button>
+          <button type="button" class="add-leg-btn" onclick="addLeg('materials')">🛒 Materials Run</button>
+        </div>
+        <div class="add-leg-btns" style="margin-top:8px;">
+          <button type="button" class="add-leg-btn" onclick="addLeg('home')">🏠 Travel Home</button>
+          <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
+        </div>
+        <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">
+          "Drive to Next Job" closes mileage for this card — that journey is logged on your next job card as "Travel to Site".
+        </div>
       </div>
-      <button type="button" class="add-leg-btn" style="width:100%;margin-top:8px;" onclick="addLeg('home')">🏠 Travel Home</button>
       <div class="journey-total" id="journey_total" style="display:none;">
         <span>Total Mileage</span>
         <span id="journey_total_miles">0 miles — £0.00</span>
@@ -485,6 +493,8 @@ function addLeg(type) {
     fromReadonly = true; toReadonly = true;
     badge = '🚗 Travel to Site'; badgeClass = 'badge-travel'; cssClass = 'travel';
     label = 'Home → Site (auto-calculated)';
+    // Hide travel to site button after first use
+    document.getElementById('btn_travel').style.display = 'none';
   } else if (type === 'materials') {
     fromVal = JOB_POSTCODE;
     fromReadonly = true;
@@ -497,6 +507,11 @@ function addLeg(type) {
     toReadonly = true;
     badge = '🏠 Travel Home'; badgeClass = 'badge-home'; cssClass = 'home';
     label = 'Site → Home (auto-calculated)';
+  } else if (type === 'nextjob') {
+    fromVal = JOB_POSTCODE;
+    fromReadonly = true;
+    badge = '➡️ Drive to Next Job'; badgeClass = 'badge-travel'; cssClass = 'travel';
+    label = 'Site → Next Job (log on next card)';
   }
 
   const container = document.getElementById('journey_legs');
@@ -621,7 +636,13 @@ function updateLeg(id, type, from, to, miles, cost) {
 }
 
 function removeLeg(id) {
-  document.getElementById(`leg_${id}`)?.remove();
+  const leg = document.getElementById(`leg_${id}`);
+  if (leg && leg.classList.contains('travel') && leg.querySelector('.leg-type-badge')?.textContent?.includes('Travel to Site')) {
+    // Show travel to site button again if that leg is removed
+    const btn = document.getElementById('btn_travel');
+    if (btn) btn.style.display = '';
+  }
+  leg?.remove();
   legs = legs.filter(l => l.id !== id);
   document.getElementById('journey_json').value = JSON.stringify(legs);
   updateJourneyTotal();
