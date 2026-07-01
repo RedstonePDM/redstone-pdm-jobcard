@@ -978,21 +978,29 @@ def request_profile_change():
 def admin_home():
     conn = get_db()
     cur = conn.cursor()
-    # Pending job cards count
-    cur.execute("SELECT COUNT(*) as c FROM job_cards WHERE status='submitted'")
-    pending_cards = cur.fetchone()["c"]
-    # Pending profile changes count
-    cur.execute("SELECT COUNT(*) as c FROM profile_change_requests WHERE status='pending'")
-    pending_changes = cur.fetchone()["c"]
-    # Vehicles with MOT issues
-    cur.execute("SELECT COUNT(*) as c FROM vehicles WHERE mot_status IN ('expired','due_soon')")
-    mot_alerts = cur.fetchone()["c"]
-    # This week schedule status
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    cur.execute("SELECT status FROM week_schedules WHERE week_commencing=%s", (week_start,))
-    sched = cur.fetchone()
-    week_status = sched["status"] if sched else "draft"
+    pending_cards = 0
+    pending_changes = 0
+    mot_alerts = 0
+    week_status = "draft"
+    try:
+        cur.execute("SELECT COUNT(*) as c FROM job_cards WHERE status='submitted'")
+        pending_cards = cur.fetchone()["c"]
+    except Exception: conn.rollback()
+    try:
+        cur.execute("SELECT COUNT(*) as c FROM profile_change_requests WHERE status='pending'")
+        pending_changes = cur.fetchone()["c"]
+    except Exception: conn.rollback()
+    try:
+        cur.execute("SELECT COUNT(*) as c FROM vehicles WHERE mot_status IN ('expired','due_soon')")
+        mot_alerts = cur.fetchone()["c"]
+    except Exception: conn.rollback()
+    try:
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        cur.execute("SELECT status FROM week_schedules WHERE week_commencing=%s", (week_start,))
+        sched = cur.fetchone()
+        week_status = sched["status"] if sched else "draft"
+    except Exception: conn.rollback()
     cur.close()
     conn.close()
     return render_template("admin_home.html",
@@ -1018,62 +1026,74 @@ def admin_jobcards():
     cur = conn.cursor()
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
-    # Engineer overview: allocations vs submitted cards this week
-    cur.execute("""
-        SELECT
-            a.contractor,
-            COUNT(DISTINCT a.id) as allocated,
-            COUNT(DISTINCT jc.id) as submitted,
-            SUM(jc.invoice_total) as week_total,
-            SUM(jc.net_payment) as week_net
-        FROM allocations a
-        LEFT JOIN job_cards jc ON jc.job_id = a.job_id
-            AND jc.contractor_key IN (
-                SELECT contractor_key FROM contractors_db WHERE name = a.contractor
-            )
-            AND jc.card_date = a.day_date
-        WHERE a.day_date BETWEEN %s AND %s
-        GROUP BY a.contractor
-        ORDER BY a.contractor
-    """, (week_start, week_start + timedelta(days=6)))
-    engineer_overview = cur.fetchall()
-
-    # All submitted cards
-    cur.execute("""
-        SELECT jc.*, j.pub_name, j.description as job_description
-        FROM job_cards jc
-        LEFT JOIN jobs j ON j.job_id = jc.job_id
-        ORDER BY jc.submitted_at DESC LIMIT 100
-    """)
-    cards = cur.fetchall()
-
-    # Overdue flags: allocated jobs with no card by Saturday 6pm or >24hrs past allocation
-    now = datetime.now()
-    saturday_6pm = week_start + timedelta(days=5, hours=18)
-    cur.execute("""
-        SELECT a.contractor, a.job_id, a.day_date, j.pub_name,
-               jc.id as card_id, jc.submitted_at
-        FROM allocations a
-        JOIN jobs j ON j.job_id = a.job_id
-        LEFT JOIN job_cards jc ON jc.job_id = a.job_id
-            AND jc.card_date = a.day_date
-        WHERE a.day_date BETWEEN %s AND %s
-        AND jc.id IS NULL
-        ORDER BY a.day_date
-    """, (week_start, week_start + timedelta(days=6)))
-    missing_cards = cur.fetchall()
-
+    engineer_overview = []
+    cards = []
     overdue = []
-    for mc in missing_cards:
-        day_dt = datetime.combine(mc["day_date"], datetime.min.time())
-        hrs_since = (now - day_dt).total_seconds() / 3600
-        flag = None
-        if now >= saturday_6pm.replace(tzinfo=None) if hasattr(saturday_6pm, 'tzinfo') else now >= saturday_6pm:
-            flag = "saturday"
-        elif hrs_since > 24:
-            flag = "24hr"
-        if flag:
-            overdue.append({**dict(mc), "flag": flag, "hrs_since": round(hrs_since,1)})
+    missing_cards = []
+
+    try:
+        cur.execute("""
+            SELECT
+                a.contractor,
+                COUNT(DISTINCT a.id) as allocated,
+                COUNT(DISTINCT jc.id) as submitted,
+                SUM(jc.invoice_total) as week_total,
+                SUM(jc.net_payment) as week_net
+            FROM allocations a
+            LEFT JOIN job_cards jc ON jc.job_id = a.job_id
+                AND jc.contractor_key IN (
+                    SELECT contractor_key FROM contractors_db WHERE name = a.contractor
+                )
+                AND jc.card_date = a.day_date
+            WHERE a.day_date BETWEEN %s AND %s
+            GROUP BY a.contractor
+            ORDER BY a.contractor
+        """, (week_start, week_start + timedelta(days=6)))
+        engineer_overview = cur.fetchall()
+    except Exception as e:
+        print(f"engineer_overview query failed: {e}")
+        conn.rollback()
+
+    try:
+        cur.execute("""
+            SELECT jc.*, j.pub_name, j.description as job_description
+            FROM job_cards jc
+            LEFT JOIN jobs j ON j.job_id = jc.job_id
+            ORDER BY jc.submitted_at DESC LIMIT 100
+        """)
+        cards = cur.fetchall()
+    except Exception as e:
+        print(f"cards query failed: {e}")
+        conn.rollback()
+
+    try:
+        now = datetime.now()
+        saturday_6pm = week_start + timedelta(days=5, hours=18)
+        cur.execute("""
+            SELECT a.contractor, a.job_id, a.day_date, j.pub_name,
+                   jc.id as card_id, jc.submitted_at
+            FROM allocations a
+            JOIN jobs j ON j.job_id = a.job_id
+            LEFT JOIN job_cards jc ON jc.job_id = a.job_id
+                AND jc.card_date = a.day_date
+            WHERE a.day_date BETWEEN %s AND %s
+            AND jc.id IS NULL
+            ORDER BY a.day_date
+        """, (week_start, week_start + timedelta(days=6)))
+        missing_cards = cur.fetchall()
+        for mc in missing_cards:
+            day_dt = datetime.combine(mc["day_date"], datetime.min.time())
+            hrs_since = (now - day_dt).total_seconds() / 3600
+            flag = None
+            if now >= saturday_6pm:
+                flag = "saturday"
+            elif hrs_since > 24:
+                flag = "24hr"
+            if flag:
+                overdue.append({**dict(mc), "flag": flag, "hrs_since": round(hrs_since,1)})
+    except Exception as e:
+        print(f"overdue query failed: {e}")
+        conn.rollback()
 
     cur.close()
     conn.close()
@@ -1309,6 +1329,52 @@ def update_vehicle(vid):
           data.get("last_service_mileage") or 0,
           data.get("service_interval_miles") or 12000,
           data.get("notes"), vid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# ── Routes: Vehicle Add/Delete ───────────────────────────────────────────────
+
+@app.route("/admin/vehicles/add", methods=["POST"])
+@admin_required
+def add_vehicle():
+    data = request.form
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO vehicles (van_reg, make_model, year, contractor_key, redstone_vehicle,
+            current_mileage, last_service_mileage, service_interval_miles, notes)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (van_reg) DO UPDATE SET
+            make_model=EXCLUDED.make_model, year=EXCLUDED.year,
+            contractor_key=EXCLUDED.contractor_key,
+            redstone_vehicle=EXCLUDED.redstone_vehicle,
+            updated_at=NOW()
+    """, (
+        data.get("van_reg","").upper().replace(" ",""),
+        data.get("make_model"),
+        data.get("year") or None,
+        data.get("contractor_key") or None,
+        data.get("redstone_vehicle") == "yes",
+        data.get("current_mileage") or 0,
+        data.get("last_service_mileage") or 0,
+        data.get("service_interval_miles") or 12000,
+        data.get("notes") or None,
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/vehicles/<int:vid>/delete", methods=["POST"])
+@admin_required
+def delete_vehicle(vid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM vehicles WHERE id=%s", (vid,))
     conn.commit()
     cur.close()
     conn.close()
