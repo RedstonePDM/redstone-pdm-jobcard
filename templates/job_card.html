@@ -515,11 +515,12 @@ function addLeg(type) {
                onchange="calcLegMiles(${id}, '${type}')">
       </div>
       <div class="field">
-        <label>${type === 'materials' ? 'Merchant (postcode or name)' : 'To'}</label>
+        <label>${type === 'materials' ? 'Merchant — include town or postcode' : 'To'}</label>
         <input type="text" id="leg_to_${id}" value="${toVal}"
                ${toReadonly ? 'readonly style="background:#f8f8f8"' : ''}
-               placeholder="${type === 'materials' ? 'e.g. Screwfix Hitchin SG5' : 'Postcode or address'}"
-               onchange="calcLegMiles(${id}, '${type}')">
+               placeholder="${type === 'materials' ? 'Start typing address or place name...' : 'Postcode or address'}"
+               onchange="calcLegMiles(${id}, '${type}')"
+               autocomplete="off">
       </div>
     </div>
     ${type === 'materials' ? `
@@ -541,7 +542,35 @@ function addLeg(type) {
     } else if (fromVal && !toVal) {
       document.getElementById(`leg_miles_${id}`).textContent = 'Enter destination to calculate';
     }
-  }, 100);
+    // Attach Places Autocomplete to editable destination fields
+    const toInput = document.getElementById(`leg_to_${id}`);
+    if (toInput && !toReadonly && window.google && window.google.maps && window.google.maps.places) {
+      const ac = new google.maps.places.Autocomplete(toInput, {
+        componentRestrictions: { country: "gb" },
+        fields: ["formatted_address", "geometry", "name"]
+      });
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        if (place.formatted_address) {
+          toInput.value = place.formatted_address;
+        }
+        calcLegMiles(id, type);
+      });
+    }
+    // Also attach to from field if editable
+    const fromInput = document.getElementById(`leg_from_${id}`);
+    if (fromInput && !fromReadonly && window.google && window.google.maps && window.google.maps.places) {
+      const ac2 = new google.maps.places.Autocomplete(fromInput, {
+        componentRestrictions: { country: "gb" },
+        fields: ["formatted_address"]
+      });
+      ac2.addListener("place_changed", () => {
+        const place = ac2.getPlace();
+        if (place.formatted_address) fromInput.value = place.formatted_address;
+        calcLegMiles(id, type);
+      });
+    }
+  }, 200);
 }
 
 async function calcLegMiles(id, type) {
@@ -762,5 +791,13 @@ function prepareJourneyData() {
 }
 </script>
 
+<script>
+// Load Google Maps Places API
+function initGoogleMaps() {
+  // Places API loaded — autocomplete will attach on next leg add
+  console.log('Google Maps Places API ready');
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ gmaps_key }}&libraries=places&callback=initGoogleMaps&loading=async" async defer></script>
 </body>
 </html>
