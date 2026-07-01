@@ -374,6 +374,7 @@
         All mileage is calculated automatically from postcodes — no estimates accepted.
         If this job is not your last today, do not add a "Travel Home" leg — that goes on your next job card.
       </div>
+      <div id="start_point_banner" style="display:none;background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px;font-weight:500;"></div>
       <div id="journey_legs"></div>
       <input type="hidden" name="journey_json" id="journey_json" value="[]">
       <input type="hidden" name="total_miles" id="total_miles" value="0">
@@ -480,6 +481,27 @@ const HOME_ADDRESS = "{{ contractor.address }}";
 const MILEAGE_RATE = {{ contractor.mileage_rate }};
 let legs = [];
 let legCount = 0;
+let journeyClosed = false;
+let startPoint = HOME_ADDRESS; // Will be updated from API
+
+// Fetch last known location on page load
+async function loadStartPoint() {
+  try {
+    const resp = await fetch('/api/last_location');
+    const data = await resp.json();
+    startPoint = data.location || HOME_ADDRESS;
+    if (data.from_last_job && data.job_id) {
+      const banner = document.getElementById('start_point_banner');
+      if (banner) {
+        banner.textContent = `Starting from last job site (${data.job_id}) — not home`;
+        banner.style.display = 'block';
+      }
+    }
+  } catch(e) {
+    startPoint = HOME_ADDRESS;
+  }
+}
+loadStartPoint();
 
 function addLeg(type) {
   legCount++;
@@ -488,11 +510,11 @@ function addLeg(type) {
   let badge = '', badgeClass = '', cssClass = '', label = '';
 
   if (type === 'travel') {
-    fromVal = HOME_ADDRESS;
+    fromVal = startPoint;
     toVal = JOB_POSTCODE;
     fromReadonly = true; toReadonly = true;
     badge = '🚗 Travel to Site'; badgeClass = 'badge-travel'; cssClass = 'travel';
-    label = 'Home → Site (auto-calculated)';
+    label = 'Travel to Site (auto-calculated)';
     // Hide travel to site button after first use
     document.getElementById('btn_travel').style.display = 'none';
   } else if (type === 'materials') {
@@ -507,11 +529,13 @@ function addLeg(type) {
     toReadonly = true;
     badge = '🏠 Travel Home'; badgeClass = 'badge-home'; cssClass = 'home';
     label = 'Site → Home (auto-calculated)';
+    closeJourney();
   } else if (type === 'nextjob') {
     fromVal = JOB_POSTCODE;
     fromReadonly = true;
     badge = '➡️ Drive to Next Job'; badgeClass = 'badge-travel'; cssClass = 'travel';
     label = 'Site → Next Job (log on next card)';
+    closeJourney();
   }
 
   const container = document.getElementById('journey_legs');
@@ -646,6 +670,14 @@ function removeLeg(id) {
   legs = legs.filter(l => l.id !== id);
   document.getElementById('journey_json').value = JSON.stringify(legs);
   updateJourneyTotal();
+}
+
+function closeJourney() {
+  journeyClosed = true;
+  const btns = document.getElementById('leg_buttons');
+  if (btns) {
+    btns.innerHTML = '<div style="background:#eafaf1;border-radius:8px;padding:12px 14px;font-size:13px;color:#27ae60;font-weight:600;margin-top:8px;">✓ Journey complete — fill in the rest of the form and submit.</div>';
+  }
 }
 
 function updateJourneyTotal() {
