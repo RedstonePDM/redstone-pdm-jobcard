@@ -161,7 +161,13 @@ def init_db():
             submitted_at        TIMESTAMPTZ DEFAULT NOW(),
             approved_at         TIMESTAMPTZ,
             approved_by         TEXT,
-            notes               TEXT
+            notes               TEXT,
+            query_note          TEXT,
+            revision            INTEGER DEFAULT 0,
+            expected_payment_date DATE,
+            paid_at             TIMESTAMPTZ,
+            reimburse_parking   NUMERIC(8,2) DEFAULT 0,
+            parking_items_json  JSONB DEFAULT '[]'
         );
 
         CREATE TABLE IF NOT EXISTS weekly_summaries (
@@ -295,6 +301,21 @@ def init_db():
                 INSERT INTO vehicles (van_reg, make_model, year, contractor_key, redstone_vehicle)
                 VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
             """, v)
+
+    # Add new columns to existing tables if upgrading
+    for col_sql in [
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS query_note TEXT",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS revision INTEGER DEFAULT 0",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS expected_payment_date DATE",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
+    ]:
+        try:
+            cur.execute(col_sql)
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
     conn.commit()
     cur.close()
@@ -454,14 +475,17 @@ def build_job_card_pdf(card, contractor):
                                     backColor=REDSTONE_DARK, leftIndent=4, spaceAfter=0, spaceBefore=8)
     header_data = [[
         Paragraph("Redstone PDM", head_style),
-        Paragraph(f"Field Engineer Job Card<br/><font size=9 color=grey>{card['card_date'].strftime('%A, %d %B %Y')}</font>", head_style),
+        Paragraph(f"Field Engineer Job Card", head_style),
     ]]
     header_table = Table(header_data, colWidths=[85*mm, 95*mm])
     header_table.setStyle(TableStyle([("ALIGN", (1,0),(1,0),"RIGHT"), ("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
     story.append(header_table)
-    story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceAfter=8))
+    story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=6, spaceAfter=6))
+    date_style = ParagraphStyle("date", fontSize=10, textColor=REDSTONE_GREY, fontName="Helvetica", alignment=TA_CENTER, spaceAfter=10)
+    story.append(Paragraph(card['card_date'].strftime('%A, %d %B %Y'), date_style))
     def field_row(label, value):
         return [Paragraph(label, label_style), Paragraph(str(value) if value else "—", value_style)]
+    story.append(Spacer(1, 4))
     story.append(Paragraph(" JOB DETAILS", section_style))
     story.append(Spacer(1, 4))
     details = Table([
@@ -819,14 +843,34 @@ def dashboard():
 
     cur.execute("""
         SELECT * FROM job_cards WHERE contractor_key = %s
-        ORDER BY submitted_at DESC LIMIT 10
+        ORDER BY submitted_at DESC LIMIT 20
     """, (key,))
     recent_cards = cur.fetchall()
+
+    # Count queried invoices for badge
+    queried_count = sum(1 for c in recent_cards if c["status"] == "queried")
+
+    # Get survey jobs (5000 prefix) allocated to this contractor
+    try:
+        cur.execute("""
+            SELECT a.job_id, a.day_date, j.pub_name, j.postcode, j.description, j.trade_type
+            FROM allocations a
+            JOIN jobs j ON j.job_id = a.job_id
+            WHERE a.contractor = %s
+            AND (j.job_id LIKE '5000%%' OR j.tab = 'QUOTE' OR j.tab = 'QUOTEREQUEST')
+            ORDER BY a.day_date DESC LIMIT 20
+        """, (contractor["name"],))
+        survey_jobs = cur.fetchall()
+    except Exception:
+        conn.rollback()
+        survey_jobs = []
+
     cur.close()
     conn.close()
     return render_template("dashboard.html", contractor=contractor, jobs=jobs,
                            recent_cards=recent_cards, week_start=week_start,
-                           today=today, week_published=week_published)
+                           today=today, week_published=week_published,
+                           queried_count=queried_count, survey_jobs=survey_jobs)
 
 
 @app.route("/job/<job_id>/<card_date>")
@@ -1263,11 +1307,83 @@ def admin_jobcards():
 def approve_card(card_id):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE job_cards SET status='approved', approved_at=NOW(), approved_by='admin' WHERE id=%s", (card_id,))
+    # Calculate expected payment date: 30 days from Friday of submission week
+    cur.execute("SELECT submitted_at, card_date FROM job_cards WHERE id=%s", (card_id,))
+    row = cur.fetchone()
+    expected_pay = None
+    if row and row["card_date"]:
+        card_dt = row["card_date"]
+        # Find the Friday of that week
+        days_to_friday = (4 - card_dt.weekday()) % 7
+        week_friday = card_dt + timedelta(days=days_to_friday)
+        expected_pay = week_friday + timedelta(days=30)
+    cur.execute("""
+        UPDATE job_cards SET status='approved', approved_at=NOW(), approved_by='admin',
+        expected_payment_date=%s WHERE id=%s
+    """, (expected_pay, card_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True, "expected_payment_date": str(expected_pay) if expected_pay else None})
+
+
+@app.route("/admin/query/<int:card_id>", methods=["POST"])
+@admin_required
+def query_card(card_id):
+    data = request.get_json()
+    note = data.get("note", "").strip()
+    if not note:
+        return jsonify({"ok": False, "error": "Query note required"})
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE job_cards SET status='queried', query_note=%s WHERE id=%s
+        RETURNING contractor_key, job_id, site_name
+    """, (note, card_id))
+    row = cur.fetchone()
     conn.commit()
     cur.close()
     conn.close()
     return jsonify({"ok": True})
+
+
+@app.route("/admin/mark_paid/<int:card_id>", methods=["POST"])
+@admin_required
+def mark_paid(card_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE job_cards SET status='paid', paid_at=NOW() WHERE id=%s", (card_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/card/<int:card_id>/detail")
+@admin_required
+def card_detail(card_id):
+    """Return full card detail as JSON for side panel."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT jc.*, j.pub_name, j.description as job_description, j.trade_type
+        FROM job_cards jc
+        LEFT JOIN jobs j ON j.job_id = jc.job_id
+        WHERE jc.id=%s
+    """, (card_id,))
+    card = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not card:
+        return jsonify({"error": "Not found"}), 404
+    d = dict(card)
+    # Serialise dates
+    for k, v in d.items():
+        if hasattr(v, 'isoformat'):
+            d[k] = v.isoformat()
+        elif hasattr(v, 'strftime'):
+            d[k] = str(v)
+    return jsonify(d)
 
 
 @app.route("/card/<int:card_id>/jobcard.pdf")
@@ -1415,6 +1531,33 @@ def review_profile_change(change_id, action):
                    subject="Redstone PDM — Profile Change Approved",
                    body_html=f"<p>Hi {contractor.get('name','')}, your {row['field_name']} update to {row['new_value']} has been approved.</p>")
     return jsonify({"ok": True})
+
+
+# ── Routes: Admin Surveys ────────────────────────────────────────────────────
+
+@app.route("/admin/surveys")
+@admin_required
+def admin_surveys():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT DISTINCT a.job_id, a.contractor, a.day_date,
+                   j.pub_name, j.postcode, j.description, j.trade_type,
+                   j.tab, j.tab_label, j.location_code
+            FROM allocations a
+            JOIN jobs j ON j.job_id = a.job_id
+            WHERE (j.job_id LIKE '5000%%' OR j.tab IN ('QUOTE','QUOTEREQUEST'))
+            ORDER BY a.day_date DESC
+            LIMIT 100
+        """)
+        surveys = cur.fetchall()
+    except Exception as e:
+        conn.rollback()
+        surveys = []
+    cur.close()
+    conn.close()
+    return render_template("admin_surveys.html", surveys=surveys)
 
 
 # ── Routes: Admin Vehicles ────────────────────────────────────────────────────
@@ -1704,6 +1847,175 @@ def admin_payroll():
 
 
 # ── API: Odometer / Mileage / Location ───────────────────────────────────────
+
+@app.route("/my_invoices")
+@login_required
+def my_invoices():
+    """Contractor invoice history page."""
+    if session.get("role") == "admin":
+        return redirect(url_for("admin_home"))
+    key = session["contractor_key"]
+    contractor = CONTRACTORS.get(key) or get_contractor(key) or {}
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM job_cards
+        WHERE contractor_key=%s
+        ORDER BY submitted_at DESC
+    """, (key,))
+    invoices = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("my_invoices.html", contractor=contractor, invoices=invoices)
+
+
+@app.route("/card/<int:card_id>/edit")
+@login_required
+def edit_card(card_id):
+    """Reopen a queried job card for editing."""
+    key = session["contractor_key"]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM job_cards WHERE id=%s AND contractor_key=%s AND status='queried'", (card_id, key))
+    card = cur.fetchone()
+    if not card:
+        return redirect(url_for("my_invoices"))
+    cur.execute("SELECT * FROM jobs WHERE job_id=%s", (card["job_id"],))
+    job = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not job:
+        return redirect(url_for("my_invoices"))
+    contractor = CONTRACTORS.get(key) or get_contractor(key) or {}
+    return render_template("job_card.html", contractor=contractor, job=job,
+                           card_date=str(card["card_date"]),
+                           existing_card=None,
+                           edit_card=card,
+                           gmaps_key=GMAPS_API_KEY)
+
+
+@app.route("/card/<int:card_id>/resubmit", methods=["POST"])
+@login_required
+def resubmit_card(card_id):
+    """Update a queried card and regenerate invoice."""
+    key = session["contractor_key"]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM job_cards WHERE id=%s AND contractor_key=%s AND status='queried'", (card_id, key))
+    old_card = cur.fetchone()
+    if not old_card:
+        return redirect(url_for("my_invoices"))
+
+    # Get new revision number
+    revision = (old_card["revision"] or 0) + 1
+
+    # Parse same fields as submit_job_card
+    contractor = CONTRACTORS.get(key) or get_contractor(key) or {}
+    time_start   = request.form.get("time_start", "")
+    time_finish  = request.form.get("time_finish", "")
+    hours        = float(request.form.get("hours_on_site", 0) or 0)
+    overtime_h   = float(request.form.get("overtime_hours", 0) or 0)
+    desc_actual  = request.form.get("description_actual", "")
+    desc_planned = request.form.get("description_planned", "")
+    mileage_miles = float(request.form.get("total_miles", 0) or 0)
+
+    job_id = old_card["job_id"]
+    job_prefix = str(job_id)[:4]
+    is_ppm = job_prefix == "2000"
+    if is_ppm:
+        base_labour = float(contractor["day_rate"])
+        labour_type = "PPM Full Day"
+    else:
+        hourly_rate = float(contractor["day_rate"]) / 10
+        base_labour = round(hours * hourly_rate, 2)
+        labour_type = f"Hourly ({hours}hrs × £{hourly_rate:.2f}/hr)"
+    overtime_cost = round(overtime_h * float(contractor["overtime_rate"]), 2)
+    labour_cost = round(base_labour + overtime_cost, 2)
+    mileage_cost = round(mileage_miles * float(contractor.get("mileage_rate", 0)), 2)
+
+    parking = 0.0
+    reimburse_parking = 0.0
+    parking_items = []
+    park_count = int(request.form.get("parking_count", 0))
+    for i in range(1, park_count + 1):
+        desc = request.form.get(f"park_desc_{i}", "")
+        cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
+        payment = request.form.get(f"park_payment_{i}", "Redstone Card")
+        is_fine = request.form.get(f"park_is_fine_{i}") == "yes"
+        if cost > 0:
+            parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
+            parking += cost
+            if payment != "Redstone Card":
+                reimburse_parking += cost
+
+    materials = []
+    reimburse_total = 0.0
+    mat_count = int(request.form.get("material_count", 0))
+    for i in range(1, mat_count + 1):
+        desc = request.form.get(f"mat_desc_{i}", "")
+        if not desc:
+            continue
+        qty = float(request.form.get(f"mat_qty_{i}", 1) or 1)
+        unit_cost = float(request.form.get(f"mat_cost_{i}", 0) or 0)
+        payment = request.form.get(f"mat_payment_{i}", "Redstone Card")
+        total = round(qty * unit_cost, 2)
+        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
+        if payment != "Redstone Card":
+            reimburse_total += total
+
+    materials_total = sum(m["total"] for m in materials)
+    reimburse_total_all = reimburse_total + reimburse_parking
+    invoice_total = labour_cost + mileage_cost + reimburse_total_all
+    cis_deduction = round(labour_cost * float(contractor.get("cis_rate", 0.20)), 2)
+    net_payment = round(invoice_total - cis_deduction, 2)
+
+    cur.execute("""
+        UPDATE job_cards SET
+            status='submitted', query_note=NULL, revision=%s,
+            description_actual=%s, description_planned=%s,
+            time_start=%s, time_finish=%s, hours_on_site=%s,
+            labour_type=%s, overtime_hours=%s, labour_cost=%s,
+            mileage_miles=%s, mileage_cost=%s, parking_cost=%s,
+            reimburse_parking=%s, parking_items_json=%s,
+            materials_json=%s, materials_total=%s, reimburse_total=%s,
+            invoice_total=%s, cis_deduction=%s, net_payment=%s,
+            submitted_at=NOW()
+        WHERE id=%s
+    """, (revision, desc_actual, desc_planned, time_start, time_finish, hours,
+          labour_type, overtime_h, labour_cost, mileage_miles, mileage_cost,
+          parking, reimburse_parking, json.dumps(parking_items),
+          json.dumps(materials), materials_total, reimburse_total,
+          invoice_total, cis_deduction, net_payment, card_id))
+    conn.commit()
+
+    # Rebuild card dict for PDF
+    cur.execute("SELECT * FROM job_cards WHERE id=%s", (card_id,))
+    updated = cur.fetchone()
+    cur.execute("SELECT * FROM jobs WHERE job_id=%s", (job_id,))
+    job = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    card_dict = dict(updated)
+    card_dict["parking_items_json"] = parking_items
+    card_dict["materials_json"] = materials
+
+    invoice_pdf = build_invoice_pdf(card_dict, contractor)
+    filename_base = f"{contractor['name'].replace(' ','_')}_{job_id}_rev{revision}"
+    send_email(
+        to_addresses=[ACCOUNTS_EMAIL, contractor["email"]],
+        subject=f"Redstone PDM — REVISED Invoice v{revision}: {contractor['name']} | {job_id}",
+        body_html=f"""
+            <p><strong>REVISED INVOICE (v{revision})</strong></p>
+            <p>Engineer: {contractor['name']}<br>
+            Job: {job_id}<br>
+            Invoice Total: £{invoice_total:.2f}<br>
+            Net Payment: £{net_payment:.2f}</p>
+        """,
+        attachments=[(f"{filename_base}_invoice.pdf", invoice_pdf)]
+    )
+    return redirect(url_for("my_invoices"))
+
 
 @app.route("/api/odometer_needed")
 @login_required
