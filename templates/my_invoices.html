@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Invoices — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; padding: 0 20px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; color: white; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-nav { display: flex; gap: 4px; }
+  .topbar-nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 14px; border-radius: 6px; }
+  .topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 16px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+
+  /* Summary strip */
+  .summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .summary-card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .summary-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; }
+  .summary-value { font-size: 22px; font-weight: 700; color: #1a2332; }
+  .summary-sub { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* Status tabs */
+  .status-tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 0; }
+  .status-tab { padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; background: none; border: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .status-tab.active { color: #c0392b; border-bottom-color: #c0392b; }
+
+  /* Invoice table */
+  .table-wrap { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 12px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+
+  .query-notice {
+    background: #fdf0ef; border: 1px solid #f5a89a; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #c0392b; margin-top: 6px;
+    line-height: 1.5;
+  }
+  .query-notice strong { display: block; margin-bottom: 3px; }
+
+  /* Status pills */
+  .pill { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .pill-submitted { background: #fff3cd; color: #856404; }
+  .pill-queried   { background: #fdf0ef; color: #c0392b; }
+  .pill-approved  { background: #d1e7dd; color: #0a5c36; }
+  .pill-paid      { background: #cfe2ff; color: #084298; }
+
+  .btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; display: inline-block; }
+  .btn-edit { background: #c0392b; color: white; }
+  .btn-pdf  { background: #1a2332; color: white; }
+
+  .rev-badge { font-size: 10px; color: #888; margin-left: 4px; }
+  .expected-pay { font-size: 11px; color: #27ae60; margin-top: 3px; }
+  .empty { padding: 60px; text-align: center; color: #aaa; font-size: 14px; }
+
+  @media (max-width: 700px) {
+    .summary-strip { grid-template-columns: 1fr 1fr; }
+    table { font-size: 12px; }
+    th, td { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">Redstone <span>PDM</span></div>
+  <div class="topbar-nav">
+    <a href="/dashboard">Home</a>
+    <a href="/my_invoices" class="active">My Invoices</a>
+    <a href="/profile">My Profile</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <h2>My Invoices</h2>
+    <div style="font-size:13px;color:#888">{{ contractor.name }}</div>
+  </div>
+
+  <!-- Summary -->
+  {% set total_gross = invoices | sum(attribute='invoice_total') %}
+  {% set total_net = invoices | sum(attribute='net_payment') %}
+  {% set pending_count = invoices | selectattr('status', 'in', ['submitted', 'queried']) | list | length %}
+  {% set approved_count = invoices | selectattr('status', 'equalto', 'approved') | list | length %}
+  <div class="summary-strip">
+    <div class="summary-card">
+      <div class="summary-label">Total Invoiced</div>
+      <div class="summary-value">{{ invoices | length }}</div>
+      <div class="summary-sub">all time</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Gross Total</div>
+      <div class="summary-value">£{{ '%.2f'|format(total_gross|float) }}</div>
+      <div class="summary-sub">all time</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Net (After CIS)</div>
+      <div class="summary-value">£{{ '%.2f'|format(total_net|float) }}</div>
+      <div class="summary-sub">all time</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Pending / Queried</div>
+      <div class="summary-value">{{ pending_count }}</div>
+      <div class="summary-sub">awaiting action</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="status-tabs">
+    <button class="status-tab active" onclick="filterTab('all', this)">All ({{ invoices|length }})</button>
+    <button class="status-tab" onclick="filterTab('submitted', this)">Pending</button>
+    <button class="status-tab" onclick="filterTab('queried', this)">⚠ Queried</button>
+    <button class="status-tab" onclick="filterTab('approved', this)">Approved</button>
+    <button class="status-tab" onclick="filterTab('paid', this)">Paid</button>
+  </div>
+
+  <div class="table-wrap">
+    {% if invoices %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Job / Site</th>
+          <th>Description</th>
+          <th>Labour</th>
+          <th>Materials</th>
+          <th>Mileage</th>
+          <th>Parking</th>
+          <th>Gross</th>
+          <th>CIS</th>
+          <th>Net Pay</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr data-status="{{ inv.status }}">
+          <td style="white-space:nowrap">
+            {{ inv.card_date.strftime('%d %b %Y') if inv.card_date else '—' }}
+            {% if inv.revision %}<div class="rev-badge">Rev v{{ inv.revision }}</div>{% endif %}
+          </td>
+          <td>
+            <div style="font-weight:600;font-size:12px;font-family:monospace">{{ inv.job_id }}</div>
+            <div style="color:#555">{{ inv.site_name or '—' }}</div>
+          </td>
+          <td style="max-width:160px">
+            <div style="font-size:12px;color:#555;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+              {{ (inv.description_actual or '')[:80] }}
+            </div>
+            {% if inv.status == 'queried' and inv.query_note %}
+            <div class="query-notice">
+              <strong>⚠ Query from Redstone:</strong>
+              {{ inv.query_note }}
+            </div>
+            {% endif %}
+            {% if inv.expected_payment_date %}
+            <div class="expected-pay">💷 Expected payment: {{ inv.expected_payment_date.strftime('%d %b %Y') }}</div>
+            {% endif %}
+          </td>
+          <td>£{{ '%.2f'|format(inv.labour_cost|float) }}</td>
+          <td>£{{ '%.2f'|format(inv.materials_total|float) }}</td>
+          <td>£{{ '%.2f'|format(inv.mileage_cost|float) }}</td>
+          <td>£{{ '%.2f'|format((inv.reimburse_parking or inv.parking_cost or 0)|float) }}</td>
+          <td style="font-weight:700">£{{ '%.2f'|format(inv.invoice_total|float) }}</td>
+          <td style="color:#c0392b">-£{{ '%.2f'|format(inv.cis_deduction|float) }}</td>
+          <td style="font-weight:700;color:#1a7a4a">£{{ '%.2f'|format(inv.net_payment|float) }}</td>
+          <td>
+            <span class="pill pill-{{ inv.status }}">
+              {% if inv.status == 'submitted' %}Submitted
+              {% elif inv.status == 'queried' %}⚠ Queried
+              {% elif inv.status == 'approved' %}✓ Approved
+              {% elif inv.status == 'paid' %}💙 Paid
+              {% else %}{{ inv.status }}{% endif %}
+            </span>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;align-items:center">
+              {% if inv.status == 'queried' %}
+              <a href="/card/{{ inv.id }}/edit" class="btn btn-edit">Edit & Resubmit</a>
+              {% endif %}
+              <a href="/card/{{ inv.id }}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No invoices yet. Submit your first job card to see it here.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function filterTab(status, btn) {
+  document.querySelectorAll('.status-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('tbody tr[data-status]').forEach(row => {
+    row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>
