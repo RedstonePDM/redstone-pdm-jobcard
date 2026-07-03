@@ -38,9 +38,10 @@
   .hero-week { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 3px; font-weight: 600; }
 
   /* 3 main tiles */
-  .tile-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
-  @media (max-width: 800px) { .tile-row { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 480px) { .tile-row { grid-template-columns: 1fr; } }
+  .tile-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+  @media (max-width: 900px) { .tile-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { .tile-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 400px) { .tile-row { grid-template-columns: 1fr; } }
 
   .main-tile {
     background: white; border-radius: 14px; padding: 22px 18px;
@@ -163,15 +164,24 @@
       {% endif %}
     </div>
 
-    <div class="main-tile" onclick="showSection('my-cards')">
-      <div class="mt-icon">📋</div>
-      <div class="mt-title">My Job Cards</div>
-      <div class="mt-desc">Your submitted job cards and invoices</div>
+    <a href="/my_invoices" class="main-tile">
+      <div class="mt-icon">🧾</div>
+      <div class="mt-title">My Invoices</div>
+      <div class="mt-desc">Your invoice history, payment status and PDF downloads</div>
       {% if recent_cards %}
-      <span class="mt-badge badge-green">{{ recent_cards | length }} recent</span>
+      <span class="mt-badge {% if queried_count > 0 %}badge-red{% else %}badge-green{% endif %}">
+        {% if queried_count > 0 %}⚠ {{ queried_count }} queried{% else %}{{ recent_cards | length }} invoices{% endif %}
+      </span>
       {% else %}
       <span class="mt-badge badge-grey">None yet</span>
       {% endif %}
+    </a>
+
+    <div class="main-tile" onclick="showSection('surveys')">
+      <div class="mt-icon">📐</div>
+      <div class="mt-title">My Surveys</div>
+      <div class="mt-desc">Survey jobs you have completed for quoting</div>
+      <span class="mt-badge badge-grey">{% if survey_jobs %}{{ survey_jobs|length }} surveys{% else %}None yet{% endif %}</span>
     </div>
 
     <a href="/profile" class="main-tile">
@@ -230,10 +240,10 @@
           <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.trade_type or 'General' }}</div>
         </div>
         <div class="job-status">
-          {% if job.day_date < today %}
-          <span class="status-pill overdue">Card Overdue</span>
-          {% elif job.day_date == today %}
+          {% if job.day_date == today %}
           <span class="status-pill todo">Start Card</span>
+          {% elif job.day_date < today %}
+          <span class="status-pill todo">Complete Card</span>
           {% else %}
           <span class="status-pill todo">Upcoming</span>
           {% endif %}
@@ -258,30 +268,26 @@
     </div>
   </div>
 
-  <!-- My Job Cards section -->
-  <div id="section-my-cards" class="section-card" style="display:none">
+  <!-- Surveys section -->
+  <div id="section-surveys" class="section-card" style="display:none">
     <div class="section-title">
-      <span>📋 My Job Cards</span>
-      <span style="font-size:13px;color:#888;font-weight:400">Most recent first</span>
+      <span>📐 My Surveys</span>
+      <span style="font-size:13px;color:#888;font-weight:400">Quote jobs you have surveyed</span>
     </div>
-
-    {% if recent_cards %}
-    {% for card in recent_cards %}
-    <a href="/card/{{ card.id }}/jobcard.pdf" target="_blank" class="card-item">
-      <div class="card-date">{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</div>
-      <div class="card-job">
-        <div class="card-job-id">{{ card.job_id }}</div>
-        <div class="card-job-site">{{ card.site_name or '—' }}</div>
+    {% if survey_jobs %}
+    {% for job in survey_jobs %}
+    <div class="job-row done">
+      <div class="job-icon">📐</div>
+      <div class="job-info">
+        <div class="job-name">{{ job.pub_name or job.job_id }}</div>
+        <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.day_date.strftime('%d %b %Y') if job.day_date else '' }}</div>
+        {% if job.description %}<div class="job-meta" style="margin-top:3px;color:#666">{{ (job.description or '')[:100] }}</div>{% endif %}
       </div>
-      <div class="card-amount">£{{ '%.2f'|format(card.net_payment|float) }}</div>
-      <div class="card-status-dot dot-{{ card.status }}"></div>
-    </a>
-    {% endfor %}
-    <div style="font-size:12px;color:#aaa;text-align:center;padding-top:8px">
-      🟡 Pending approval &nbsp;&nbsp; 🟢 Approved
+      <span class="status-pill todo">Survey</span>
     </div>
+    {% endfor %}
     {% else %}
-    <div class="empty-state">No job cards submitted yet. Complete your first job card to see it here.</div>
+    <div class="empty-state">No survey jobs allocated yet.</div>
     {% endif %}
   </div>
 
