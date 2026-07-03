@@ -8,72 +8,103 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
   .topbar {
-    background: #1a2332; color: white; padding: 0 24px;
+    background: #1a2332; height: 56px; padding: 0 24px;
     display: flex; align-items: center; justify-content: space-between;
-    height: 56px; position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    position: sticky; top: 0; z-index: 200; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
-  .topbar-brand { font-weight: 700; font-size: 18px; letter-spacing: 0.5px; cursor: pointer; }
+  .topbar-brand { font-weight: 700; font-size: 18px; color: white; cursor: pointer; }
   .topbar-brand span { color: #c0392b; }
-  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; margin-left: 16px; }
-  .topbar-right a:hover { color: white; }
-  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
-  h2 { font-size: 22px; color: #1a2332; font-weight: 700; margin-bottom: 20px; }
-  h3 { font-size: 16px; color: #1a2332; font-weight: 700; margin-bottom: 14px; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
-  /* Engineer run rate cards */
-  .run-rate-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px; margin-bottom: 28px;
+  /* Layout — list + drawer */
+  .layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+  .list-panel { flex: 1; overflow-y: auto; padding: 24px; min-width: 0; transition: all 0.25s; }
+  .drawer {
+    width: 0; overflow: hidden; background: white;
+    border-left: 1px solid #e0e0e0; transition: width 0.25s ease;
+    display: flex; flex-direction: column;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.1);
   }
-  .run-card {
-    background: white; border-radius: 10px; padding: 16px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-  }
-  .run-card-name { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 8px; }
-  .run-card-stats { display: flex; flex-direction: column; gap: 4px; }
-  .run-stat { font-size: 12px; color: #555; }
-  .run-stat strong { color: #1a2332; }
-  .run-bar { height: 5px; background: #eee; border-radius: 3px; margin-top: 8px; overflow: hidden; }
-  .run-fill { height: 100%; background: #c0392b; border-radius: 3px; transition: width 0.3s; }
-  .run-fill.green  { background: #1a7a4a; }
-  .run-fill.amber  { background: #e6a817; }
+  .drawer.open { width: 460px; min-width: 460px; }
 
-  /* Overdue alerts */
-  .overdue-section { background: #fff3cd; border: 1px solid #ffecb5; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
-  .overdue-title { font-size: 14px; font-weight: 700; color: #856404; margin-bottom: 10px; }
-  .overdue-item { font-size: 13px; color: #5c4a00; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
-  .overdue-item:last-child { border-bottom: none; }
-  .overdue-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-left: 8px; }
-  .badge-sat { background: #f8d7da; color: #842029; }
-  .badge-24 { background: #ffe5d0; color: #8c4a00; }
+  h2 { font-size: 20px; color: #1a2332; font-weight: 700; margin-bottom: 16px; }
+
+  /* Engineer overview */
+  .eng-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .eng-card { background: white; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .eng-name { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 6px; }
+  .eng-stat { font-size: 12px; color: #555; }
+  .eng-bar { height: 4px; background: #eee; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .eng-fill { height: 100%; background: #c0392b; border-radius: 2px; }
+  .eng-fill.green { background: #1a7a4a; }
+  .eng-fill.amber { background: #e6a817; }
+
+  /* Overdue */
+  .overdue-bar { background: #fff3cd; border: 1px solid #ffecb5; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #856404; }
 
   /* Tabs */
-  .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid #e0e0e0; }
-  .tab-btn {
-    padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-    background: none; border: none; color: #666; border-bottom: 2px solid transparent;
-    margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
-  }
+  .tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 0; background: white; border-radius: 10px 10px 0 0; }
+  .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; border: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .tab-btn.active { color: #c0392b; border-bottom-color: #c0392b; }
 
-  /* Cards table */
-  .card-section { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  /* Table */
+  .table-wrap { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+  th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
-  tr:hover td { background: #fafbfc; }
-  .status-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
-  }
-  .status-submitted { background: #fff3cd; color: #856404; }
-  .status-approved  { background: #d1e7dd; color: #0a5c36; }
-  .btn { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+  tr:hover td { background: #fafbfc; cursor: pointer; }
+  tr.selected td { background: #eff4ff; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .pill-submitted { background: #fff3cd; color: #856404; }
+  .pill-queried   { background: #fdf0ef; color: #c0392b; }
+  .pill-approved  { background: #d1e7dd; color: #0a5c36; }
+  .pill-paid      { background: #cfe2ff; color: #084298; }
+
+  .btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; display: inline-block; text-decoration: none; }
   .btn-approve { background: #1a7a4a; color: white; }
-  .btn-approve:hover { background: #155d38; }
-  .btn-pdf { background: #1a2332; color: white; text-decoration: none; display: inline-block; }
-  .btn-pdf:hover { background: #0f1923; }
-  .empty { padding: 40px; text-align: center; color: #999; font-size: 14px; }
+  .btn-query   { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+  .btn-pdf     { background: #1a2332; color: white; }
+  .btn-paid    { background: #cfe2ff; color: #084298; }
+  .empty { padding: 40px; text-align: center; color: #aaa; font-size: 14px; }
+
+  /* Drawer internals */
+  .drawer-header {
+    background: #1a2332; color: white; padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .drawer-title { font-size: 15px; font-weight: 700; }
+  .drawer-close { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 22px; cursor: pointer; line-height: 1; }
+  .drawer-close:hover { color: white; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .drawer-actions { padding: 16px 20px; border-top: 1px solid #f0f2f5; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .d-section { margin-bottom: 16px; }
+  .d-section-title { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #f0f2f5; }
+  .d-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .d-label { color: #888; width: 120px; flex-shrink: 0; font-weight: 600; }
+  .d-val { color: #1a2332; flex: 1; }
+
+  .d-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  .d-table th { background: #1a2332; color: white; padding: 7px 8px; text-align: left; font-size: 10px; }
+  .d-table td { padding: 7px 8px; border-bottom: 1px solid #f5f5f5; }
+  .d-table tr:last-child td { border-bottom: none; }
+  .d-table tr:hover td { background: #fafbfc; }
+
+  .d-totals { background: #f5f6f8; border-radius: 8px; padding: 12px 14px; margin-top: 8px; }
+  .d-total-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .d-total-row.grand { font-weight: 700; font-size: 14px; border-top: 1px solid #ddd; padding-top: 8px; margin-top: 4px; color: #1a2332; }
+  .d-total-row.cis { color: #c0392b; }
+  .d-total-row.net { color: #1a7a4a; font-weight: 700; }
+
+  /* Query form */
+  .query-form { background: #fff8ef; border: 1px solid #ffd89b; border-radius: 8px; padding: 14px; margin-top: 12px; display: none; }
+  .query-form textarea { width: 100%; padding: 10px; border: 1.5px solid #ddd; border-radius: 6px; font-size: 13px; font-family: inherit; min-height: 80px; resize: vertical; margin-bottom: 10px; }
+  .query-form textarea:focus { outline: none; border-color: #c0392b; }
+  .query-form-actions { display: flex; gap: 8px; }
+  .btn-send-query { background: #c0392b; color: white; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-cancel-query { background: #f0f2f5; color: #333; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
 </style>
 </head>
 <body>
@@ -88,128 +119,291 @@
   </div>
 </div>
 
-<div class="page">
-  <h2>Job Cards — w/c {{ week_start.strftime('%d %B %Y') }}</h2>
+<div class="layout">
+  <!-- Left: list panel -->
+  <div class="list-panel" id="list-panel">
+    <h2>Job Cards — w/c {{ week_start.strftime('%d %B %Y') }}</h2>
 
-  <!-- Engineer run rate -->
-  <h3>Engineer Overview This Week</h3>
-  <div class="run-rate-grid">
-    {% for e in engineer_overview %}
-    {% set pct = ((e.submitted or 0) / (e.allocated or 1) * 100)|int %}
-    <div class="run-card">
-      <div class="run-card-name">{{ e.contractor }}</div>
-      <div class="run-card-stats">
-        <div class="run-stat">Allocated: <strong>{{ e.allocated or 0 }}</strong></div>
-        <div class="run-stat">Submitted: <strong>{{ e.submitted or 0 }}</strong></div>
-        {% if e.week_net %}
-        <div class="run-stat">Net Pay: <strong>£{{ '%.2f'|format(e.week_net|float) }}</strong></div>
-        {% endif %}
+    <!-- Engineer overview -->
+    <div class="eng-grid">
+      {% for e in engineer_overview %}
+      {% set pct = [[(((e.submitted or 0) / (e.allocated or 1)) * 100)|int, 0]|max, 100]|min %}
+      <div class="eng-card">
+        <div class="eng-name">{{ e.contractor }}</div>
+        <div class="eng-stat">{{ e.allocated or 0 }} allocated · {{ e.submitted or 0 }} submitted</div>
+        {% if e.week_net %}<div class="eng-stat" style="color:#1a7a4a;font-weight:600">£{{ '%.2f'|format(e.week_net|float) }} net</div>{% endif %}
+        <div class="eng-bar"><div class="eng-fill {% if pct==100 %}green{% elif pct>=50 %}amber{% endif %}" style="width:{{pct}}%"></div></div>
       </div>
-      <div class="run-bar">
-        <div class="run-fill {% if pct == 100 %}green{% elif pct >= 50 %}amber{% endif %}"
-             style="width:{{ pct }}%"></div>
-      </div>
+      {% endfor %}
     </div>
-    {% else %}
-    <div style="grid-column:1/-1;color:#999;font-size:13px;padding:16px 0">No allocations found for this week.</div>
-    {% endfor %}
-  </div>
 
-  <!-- Overdue alerts -->
-  {% if overdue %}
-  <div class="overdue-section">
-    <div class="overdue-title">⚠ Overdue Job Cards</div>
-    {% for o in overdue %}
-    <div class="overdue-item">
-      <strong>{{ o.contractor }}</strong> — {{ o.pub_name }} ({{ o.day_date.strftime('%a %d %b') }})
-      {% if o.flag == 'saturday' %}
-      <span class="overdue-badge badge-sat">Past Saturday 6pm</span>
-      {% else %}
-      <span class="overdue-badge badge-24">{{ o.hrs_since }}hrs overdue</span>
-      {% endif %}
+    <!-- Overdue -->
+    {% if overdue %}
+    <div class="overdue-bar">
+      ⚠ <strong>{{ overdue|length }} overdue card{{ 's' if overdue|length != 1 }}:</strong>
+      {% for o in overdue %}{{ o.contractor }} — {{ o.pub_name }} ({{ o.day_date.strftime('%a %d %b') }}){% if not loop.last %}, {% endif %}{% endfor %}
     </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+    {% endif %}
 
-  <!-- Job cards table -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="showTab('submitted', this)">Pending Review</button>
-    <button class="tab-btn" onclick="showTab('approved', this)">Approved</button>
-    <button class="tab-btn" onclick="showTab('all', this)">All</button>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('submitted',this)">Pending</button>
+      <button class="tab-btn" onclick="showTab('queried',this)">⚠ Queried</button>
+      <button class="tab-btn" onclick="showTab('approved',this)">Approved</button>
+      <button class="tab-btn" onclick="showTab('paid',this)">Paid</button>
+      <button class="tab-btn" onclick="showTab('all',this)">All</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Engineer</th><th>Job / Site</th>
+            <th>Labour</th><th>Invoice</th><th>Net Pay</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="cards-tbody">
+          {% for card in cards %}
+          <tr data-status="{{ card.status }}" data-id="{{ card.id }}" onclick="openDrawer({{ card.id }}, this)">
+            <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</td>
+            <td style="font-weight:600">{{ contractors.get(card.contractor_key, {}).get('name', card.contractor_key) }}</td>
+            <td>
+              <div style="font-weight:600;font-size:12px;font-family:monospace">{{ card.job_id }}</div>
+              <div style="color:#666;font-size:12px">{{ card.site_name }}</div>
+            </td>
+            <td>£{{ '%.2f'|format(card.labour_cost|float) }}</td>
+            <td style="font-weight:700">£{{ '%.2f'|format(card.invoice_total|float) }}</td>
+            <td style="color:#1a7a4a;font-weight:700">£{{ '%.2f'|format(card.net_payment|float) }}</td>
+            <td>
+              <span class="pill pill-{{ card.status }}" id="pill-{{ card.id }}">
+                {% if card.status=='submitted' %}Pending
+                {% elif card.status=='queried' %}⚠ Queried
+                {% elif card.status=='approved' %}✓ Approved
+                {% elif card.status=='paid' %}💙 Paid
+                {% else %}{{ card.status }}{% endif %}
+              </span>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty">No job cards found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="card-section">
-    <table id="cards-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Engineer</th>
-          <th>Job / Site</th>
-          <th>Labour</th>
-          <th>Invoice</th>
-          <th>Net Pay</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for card in cards %}
-        <tr data-status="{{ card.status }}">
-          <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</td>
-          <td>{{ contractors.get(card.contractor_key, {}).get('name', card.contractor_key) }}</td>
-          <td>
-            <div style="font-weight:600">{{ card.job_id }}</div>
-            <div style="color:#666;font-size:12px">{{ card.site_name }}</div>
-          </td>
-          <td>£{{ '%.2f'|format(card.labour_cost|float) }}</td>
-          <td>£{{ '%.2f'|format(card.invoice_total|float) }}</td>
-          <td>£{{ '%.2f'|format(card.net_payment|float) }}</td>
-          <td>
-            <span class="status-badge status-{{ card.status }}">{{ card.status|upper }}</span>
-          </td>
-          <td>
-            <div style="display:flex;gap:6px;align-items:center">
-              {% if card.status == 'submitted' %}
-              <button class="btn btn-approve" onclick="approveCard({{ card.id }}, this)">Approve</button>
-              {% endif %}
-              <a class="btn btn-pdf" href="/card/{{ card.id }}/jobcard.pdf" target="_blank">PDF</a>
-            </div>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="empty">No job cards submitted yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <!-- Right: detail drawer -->
+  <div class="drawer" id="detail-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="drawer-title">Job Card Detail</div>
+      <button class="drawer-close" onclick="closeDrawer()">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body">
+      <div style="color:#aaa;font-size:14px;text-align:center;padding:40px">Select a job card to view details</div>
+    </div>
+    <div class="drawer-actions" id="drawer-actions"></div>
   </div>
 </div>
 
 <script>
-  function showTab(status, btn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelectorAll('#cards-table tbody tr[data-status]').forEach(row => {
-      if (status === 'all') row.style.display = '';
-      else row.style.display = row.dataset.status === status ? '' : 'none';
-    });
-  }
-  // Default: show submitted only
-  showTab('submitted', document.querySelector('.tab-btn.active'));
+let currentCardId = null;
+let selectedRow = null;
 
-  async function approveCard(id, btn) {
-    btn.disabled = true; btn.textContent = '...';
-    const res = await fetch(`/admin/approve/${id}`, { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) {
-      const row = btn.closest('tr');
-      row.querySelector('.status-badge').textContent = 'APPROVED';
-      row.querySelector('.status-badge').className = 'status-badge status-approved';
-      btn.remove();
-      row.dataset.status = 'approved';
-    }
+function showTab(status, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#cards-tbody tr[data-status]').forEach(row => {
+    row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+  });
+}
+showTab('submitted', document.querySelector('.tab-btn.active'));
+
+async function openDrawer(cardId, row) {
+  currentCardId = cardId;
+  if (selectedRow) selectedRow.classList.remove('selected');
+  selectedRow = row;
+  row.classList.add('selected');
+
+  document.getElementById('detail-drawer').classList.add('open');
+  document.getElementById('drawer-body').innerHTML = '<div style="color:#aaa;text-align:center;padding:40px">Loading...</div>';
+  document.getElementById('drawer-actions').innerHTML = '';
+
+  const res = await fetch(`/card/${cardId}/detail`);
+  const card = await res.json();
+  if (card.error) { document.getElementById('drawer-body').innerHTML = '<div style="color:#c0392b;padding:20px">Error loading card</div>'; return; }
+
+  renderDrawer(card);
+}
+
+function renderDrawer(card) {
+  document.getElementById('drawer-title').textContent = `${card.job_id} — ${card.site_name || ''}`;
+
+  const statusLabels = { submitted:'Pending', queried:'⚠ Queried', approved:'✓ Approved', paid:'💙 Paid' };
+  const materials = card.materials_json || [];
+  const parking = card.parking_items_json || [];
+
+  let matRows = '';
+  if (materials.length) {
+    matRows = materials.map(m => `<tr>
+      <td>${m.description}</td><td>${m.qty}</td>
+      <td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td>
+      <td>£${parseFloat(m.total||0).toFixed(2)}</td>
+      <td style="font-size:11px;color:${m.payment!='Redstone Card'?'#c0392b':'#555'}">${m.payment}</td>
+    </tr>`).join('');
+    matRows += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Total Materials</td><td>£${parseFloat(card.materials_total||0).toFixed(2)}</td><td></td></tr>`;
   }
+
+  let parkRows = '';
+  if (parking.length) {
+    parkRows = parking.map(p => `<tr>
+      <td>${p.description}</td>
+      <td>£${parseFloat(p.cost||0).toFixed(2)}</td>
+      <td>${p.payment}</td>
+      <td style="font-size:11px">${p.is_fine ? '⚠ Fine — approval needed' : p.payment!='Redstone Card' ? '✓ Reimburse' : 'Company expense'}</td>
+    </tr>`).join('');
+  } else if (card.parking_cost > 0) {
+    parkRows = `<tr><td colspan="4">£${parseFloat(card.parking_cost).toFixed(2)}</td></tr>`;
+  }
+
+  const queryBlock = card.status === 'queried' && card.query_note ?
+    `<div style="background:#fdf0ef;border:1px solid #f5a89a;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:4px">⚠ QUERY FROM ADMIN</div>
+      <div style="font-size:13px;color:#333">${card.query_note}</div>
+    </div>` : '';
+
+  document.getElementById('drawer-body').innerHTML = `
+    ${queryBlock}
+    <div class="d-section">
+      <div class="d-section-title">Job Details</div>
+      <div class="d-row"><div class="d-label">Job Number</div><div class="d-val" style="font-family:monospace">${card.job_id}</div></div>
+      <div class="d-row"><div class="d-label">Date</div><div class="d-val">${card.card_date ? card.card_date.split('T')[0] : '—'}</div></div>
+      <div class="d-row"><div class="d-label">Site</div><div class="d-val">${card.site_name || '—'} ${card.postcode || ''}</div></div>
+      <div class="d-row"><div class="d-label">Works Done</div><div class="d-val">${card.description_actual || '—'}</div></div>
+      <div class="d-row"><div class="d-label">Time on Site</div><div class="d-val">${card.time_start || '—'} — ${card.time_finish || '—'} (${card.hours_on_site || 0} hrs)</div></div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-section-title">Labour</div>
+      <div class="d-row"><div class="d-label">Type</div><div class="d-val">${card.labour_type || '—'}</div></div>
+      <div class="d-row"><div class="d-label">Overtime</div><div class="d-val">${parseFloat(card.overtime_hours||0) > 0 ? card.overtime_hours + ' hrs @ £' + parseFloat(card.overtime_rate||0).toFixed(2) + '/hr' : 'None'}</div></div>
+      <div class="d-row"><div class="d-label">Labour Cost</div><div class="d-val" style="font-weight:700">£${parseFloat(card.labour_cost||0).toFixed(2)}</div></div>
+    </div>
+
+    ${materials.length ? `<div class="d-section">
+      <div class="d-section-title">Materials</div>
+      <table class="d-table">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th><th>Payment</th></tr></thead>
+        <tbody>${matRows}</tbody>
+      </table>
+    </div>` : ''}
+
+    ${card.mileage_miles > 0 ? `<div class="d-section">
+      <div class="d-section-title">Mileage</div>
+      <div class="d-row"><div class="d-label">Miles</div><div class="d-val">${card.mileage_miles} miles</div></div>
+      <div class="d-row"><div class="d-label">Cost</div><div class="d-val">£${parseFloat(card.mileage_cost||0).toFixed(2)}</div></div>
+    </div>` : ''}
+
+    ${parking.length || card.parking_cost > 0 ? `<div class="d-section">
+      <div class="d-section-title">Parking</div>
+      <table class="d-table">
+        <thead><tr><th>Description</th><th>Amount</th><th>Payment</th><th>Status</th></tr></thead>
+        <tbody>${parkRows}</tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="d-section">
+      <div class="d-section-title">Invoice Summary</div>
+      <div class="d-totals">
+        <div class="d-total-row"><span>Labour</span><span>£${parseFloat(card.labour_cost||0).toFixed(2)}</span></div>
+        ${parseFloat(card.mileage_cost||0)>0?`<div class="d-total-row"><span>Mileage</span><span>£${parseFloat(card.mileage_cost).toFixed(2)}</span></div>`:''}
+        ${parseFloat(card.reimburse_parking||card.parking_cost||0)>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span>£${parseFloat(card.reimburse_parking||card.parking_cost).toFixed(2)}</span></div>`:''}
+        ${parseFloat(card.reimburse_total||0)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span>£${parseFloat(card.reimburse_total).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row grand"><span>Gross Invoice</span><span>£${parseFloat(card.invoice_total||0).toFixed(2)}</span></div>
+        ${parseFloat(card.cis_deduction||0)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${parseFloat(card.cis_deduction).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row net"><span>Net to Contractor</span><span>£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
+      </div>
+    </div>
+
+    <div class="query-form" id="query-form">
+      <div style="font-size:13px;font-weight:700;color:#856404;margin-bottom:10px">Send Query to Engineer</div>
+      <textarea id="query-text" placeholder="Describe what needs correcting..."></textarea>
+      <div class="query-form-actions">
+        <button class="btn-cancel-query" onclick="toggleQueryForm(false)">Cancel</button>
+        <button class="btn-send-query" onclick="sendQuery()">Send Query</button>
+      </div>
+    </div>`;
+
+  // Actions
+  const status = card.status;
+  let actions = '';
+  if (status === 'submitted' || status === 'queried') {
+    actions += `<button class="btn btn-approve" onclick="approveCard()">✓ Approve</button>`;
+    actions += `<button class="btn btn-query" onclick="toggleQueryForm(true)">⚠ Query</button>`;
+  }
+  if (status === 'approved') {
+    actions += `<button class="btn btn-paid" onclick="markPaid()">💙 Mark Paid</button>`;
+  }
+  actions += `<a href="/card/${card.id}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
+  document.getElementById('drawer-actions').innerHTML = actions;
+}
+
+function closeDrawer() {
+  document.getElementById('detail-drawer').classList.remove('open');
+  if (selectedRow) selectedRow.classList.remove('selected');
+  selectedRow = null; currentCardId = null;
+}
+
+function toggleQueryForm(show) {
+  document.getElementById('query-form').style.display = show ? 'block' : 'none';
+  if (show) document.getElementById('query-text').focus();
+}
+
+async function approveCard() {
+  if (!currentCardId) return;
+  const res = await fetch(`/admin/approve/${currentCardId}`, { method: 'POST' });
+  const data = await res.json();
+  if (data.ok) {
+    updateRowPill(currentCardId, 'approved', '✓ Approved');
+    document.getElementById('drawer-actions').innerHTML =
+      `<button class="btn btn-paid" onclick="markPaid()">💙 Mark Paid</button>
+       <a href="/card/${currentCardId}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
+  }
+}
+
+async function sendQuery() {
+  const note = document.getElementById('query-text').value.trim();
+  if (!note) { alert('Please enter a query note'); return; }
+  const res = await fetch(`/admin/query/${currentCardId}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ note })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    updateRowPill(currentCardId, 'queried', '⚠ Queried');
+    toggleQueryForm(false);
+    alert('Query sent — engineer will see it on their next login.');
+  }
+}
+
+async function markPaid() {
+  if (!confirm('Mark this invoice as paid?')) return;
+  const res = await fetch(`/admin/mark_paid/${currentCardId}`, { method: 'POST' });
+  const data = await res.json();
+  if (data.ok) {
+    updateRowPill(currentCardId, 'paid', '💙 Paid');
+    document.getElementById('drawer-actions').innerHTML =
+      `<a href="/card/${currentCardId}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
+  }
+}
+
+function updateRowPill(id, status, label) {
+  const row = document.querySelector(`tr[data-id="${id}"]`);
+  if (row) {
+    row.dataset.status = status;
+    const pill = document.getElementById(`pill-${id}`);
+    if (pill) { pill.className = `pill pill-${status}`; pill.textContent = label; }
+  }
+}
 </script>
-
 </body>
 </html>
