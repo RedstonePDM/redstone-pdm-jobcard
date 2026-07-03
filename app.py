@@ -12,6 +12,7 @@ import math
 import requests
 import psycopg2
 import psycopg2.extras
+from collections import defaultdict
 from datetime import datetime, date, timedelta
 from functools import wraps
 from sendgrid import SendGridAPIClient
@@ -302,7 +303,6 @@ def init_db():
                 VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
             """, v)
 
-    # Add new columns to existing tables if upgrading
     for col_sql in [
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS query_note TEXT",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS revision INTEGER DEFAULT 0",
@@ -386,21 +386,17 @@ def admin_required(f):
 # ── DVLA MOT Lookup ───────────────────────────────────────────────────────────
 
 def lookup_mot(reg):
-    """Check MOT status via DVLA API. Returns dict with expiry, status, etc."""
     if not DVLA_API_KEY:
         return {"status": "unknown", "expiry": None, "error": "No API key"}
     try:
         reg_clean = reg.replace(" ", "").upper()
         url = "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles"
-        headers = {
-            "x-api-key": DVLA_API_KEY,
-            "Content-Type": "application/json",
-        }
+        headers = {"x-api-key": DVLA_API_KEY, "Content-Type": "application/json"}
         payload = {"registrationNumber": reg_clean}
         r = requests.post(url, headers=headers, json=payload, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            mot_expiry_str = data.get("motExpiryDate")  # format: YYYY-MM-DD
+            mot_expiry_str = data.get("motExpiryDate")
             mot_expiry = None
             mot_status = "unknown"
             if mot_expiry_str:
@@ -414,11 +410,9 @@ def lookup_mot(reg):
                 else:
                     mot_status = "valid"
             return {
-                "status": mot_status,
-                "expiry": mot_expiry,
+                "status": mot_status, "expiry": mot_expiry,
                 "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
-                "make": data.get("make", ""),
-                "colour": data.get("colour", ""),
+                "make": data.get("make", ""), "colour": data.get("colour", ""),
                 "year": data.get("yearOfManufacture"),
             }
         else:
@@ -454,7 +448,7 @@ def calculate_mileage(origin_address, destination_postcode):
         return 0, 0
 
 
-# ── PDF Generation ────────────────────────────────────────────────────────────
+# ── PDF Colours ───────────────────────────────────────────────────────────────
 
 REDSTONE_DARK  = colors.HexColor("#1a2332")
 REDSTONE_RED   = colors.HexColor("#c0392b")
@@ -462,11 +456,12 @@ REDSTONE_LIGHT = colors.HexColor("#f5f6f8")
 REDSTONE_GREY  = colors.HexColor("#7f8c8d")
 
 
+# ── Job Card PDF (admin operational document) ─────────────────────────────────
+
 def build_job_card_pdf(card, contractor):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
-    styles = getSampleStyleSheet()
     story = []
     label_style   = ParagraphStyle("label", fontSize=8, textColor=REDSTONE_GREY, fontName="Helvetica-Bold", spaceAfter=1)
     value_style   = ParagraphStyle("value", fontSize=10, textColor=REDSTONE_DARK, fontName="Helvetica", spaceAfter=6)
@@ -475,27 +470,34 @@ def build_job_card_pdf(card, contractor):
                                     backColor=REDSTONE_DARK, leftIndent=4, spaceAfter=0, spaceBefore=8)
     header_data = [[
         Paragraph("Redstone PDM", head_style),
-        Paragraph(f"Field Engineer Job Card", head_style),
+        Paragraph("Field Engineer Job Card", head_style),
     ]]
     header_table = Table(header_data, colWidths=[85*mm, 95*mm])
     header_table.setStyle(TableStyle([("ALIGN", (1,0),(1,0),"RIGHT"), ("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
     story.append(header_table)
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=6, spaceAfter=6))
     date_style = ParagraphStyle("date", fontSize=10, textColor=REDSTONE_GREY, fontName="Helvetica", alignment=TA_CENTER, spaceAfter=10)
-    story.append(Paragraph(card['card_date'].strftime('%A, %d %B %Y'), date_style))
+    card_date = card['card_date']
+    if hasattr(card_date, 'strftime'):
+        date_str = card_date.strftime('%A, %d %B %Y')
+    else:
+        date_str = str(card_date)
+    story.append(Paragraph(date_str, date_style))
+
     def field_row(label, value):
-        return [Paragraph(label, label_style), Paragraph(str(value) if value else "—", value_style)]
+        return [Paragraph(label, label_style), Paragraph(str(value) if value else "\u2014", value_style)]
+
     story.append(Spacer(1, 4))
     story.append(Paragraph(" JOB DETAILS", section_style))
     story.append(Spacer(1, 4))
     details = Table([
         field_row("JOB NUMBER", card["job_id"]),
         field_row("ENGINEER NAME", contractor["name"]),
-        field_row("DATE", card["card_date"].strftime("%A, %d %B %Y")),
+        field_row("DATE", date_str),
         field_row("SITE / LOCATION", f"{card['site_name']} {card['postcode']}"),
         field_row("DESCRIPTION OF WORKS PLANNED", card["description_planned"]),
         field_row("DESCRIPTION OF WORKS CARRIED OUT", card["description_actual"]),
-        field_row("TIME ON SITE", f"{card['time_start']} — {card['time_finish']}  ({card['hours_on_site']} hrs)"),
+        field_row("TIME ON SITE", f"{card['time_start']} \u2014 {card['time_finish']}  ({card['hours_on_site']} hrs)"),
     ], colWidths=[55*mm, 125*mm])
     details.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT), ("VALIGN",(0,0),(-1,-1),"TOP"),
@@ -504,13 +506,14 @@ def build_job_card_pdf(card, contractor):
         ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
     ]))
     story.append(details)
+
     story.append(Paragraph(" LABOUR", section_style))
     story.append(Spacer(1, 4))
     labour = Table([
         field_row("LABOUR TYPE", card["labour_type"]),
-        field_row("BASE DAY RATE", f"£{card['base_day_rate']:.2f}"),
-        field_row("OVERTIME HOURS", f"{card['overtime_hours']} hrs @ £{card['overtime_rate']:.2f}/hr" if card["overtime_hours"] else "None"),
-        field_row("TOTAL LABOUR COST", f"£{card['labour_cost']:.2f}"),
+        field_row("BASE DAY RATE", f"\u00a3{card['base_day_rate']:.2f}"),
+        field_row("OVERTIME HOURS", f"{card['overtime_hours']} hrs @ \u00a3{card['overtime_rate']:.2f}/hr" if card["overtime_hours"] else "None"),
+        field_row("TOTAL LABOUR COST", f"\u00a3{card['labour_cost']:.2f}"),
     ], colWidths=[55*mm, 125*mm])
     labour.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT), ("VALIGN",(0,0),(-1,-1),"TOP"),
@@ -519,20 +522,26 @@ def build_job_card_pdf(card, contractor):
         ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
     ]))
     story.append(labour)
+
     materials = card.get("materials_json") or []
+    if isinstance(materials, str):
+        try:
+            materials = json.loads(materials)
+        except Exception:
+            materials = []
+
     if materials:
         story.append(Paragraph(" MATERIALS", section_style))
         story.append(Spacer(1, 4))
-        mat_data = [["#","Description","Qty","Unit Cost","Total","Payment"]]
+        mat_data = [["#", "Description", "Qty", "Unit Cost", "Total", "Payment"]]
         mat_grand_total = 0.0
         for i, m in enumerate(materials, 1):
             line_total = float(m.get("total", 0))
             mat_grand_total += line_total
             mat_data.append([str(i), m.get("description",""), str(m.get("qty","")),
-                             f"£{float(m.get('unit_cost',0)):.2f}", f"£{line_total:.2f}",
+                             f"\u00a3{float(m.get('unit_cost',0)):.2f}", f"\u00a3{line_total:.2f}",
                              m.get("payment","Redstone Card")])
-        # Add totals row
-        mat_data.append(["", "TOTAL MATERIALS", "", "", f"£{mat_grand_total:.2f}", ""])
+        mat_data.append(["", "TOTAL MATERIALS", "", "", f"\u00a3{mat_grand_total:.2f}", ""])
         mat_table = Table(mat_data, colWidths=[8*mm,60*mm,15*mm,22*mm,22*mm,33*mm])
         mat_table.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
@@ -545,14 +554,15 @@ def build_job_card_pdf(card, contractor):
             ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
         ]))
         story.append(mat_table)
-    if contractor["mileage_rate"] > 0:
+
+    if contractor.get("mileage_rate", 0) > 0:
         story.append(Paragraph(" TRAVEL & MILEAGE", section_style))
         story.append(Spacer(1, 4))
         travel = Table([
             field_row("TOTAL MILEAGE", f"{card['mileage_miles']} miles (round trip)"),
-            field_row("MILEAGE RATE", f"{int(contractor['mileage_rate']*100)}p per mile"),
-            field_row("MILEAGE COST", f"£{card['mileage_cost']:.2f}"),
-            field_row("ODOMETER READING", str(card.get("odometer","—"))),
+            field_row("MILEAGE RATE", f"{int(float(contractor['mileage_rate'])*100)}p per mile"),
+            field_row("MILEAGE COST", f"\u00a3{card['mileage_cost']:.2f}"),
+            field_row("ODOMETER READING", str(card.get("odometer", "\u2014"))),
         ], colWidths=[55*mm, 125*mm])
         travel.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT),
@@ -561,27 +571,47 @@ def build_job_card_pdf(card, contractor):
             ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
         ]))
         story.append(travel)
-    if card.get("parking_cost", 0):
+
+    parking_cost = float(card.get("parking_cost", 0) or 0)
+    if parking_cost > 0:
         story.append(Paragraph(" PARKING", section_style))
         story.append(Spacer(1, 4))
         parking_items_stored = card.get("parking_items_json") or []
+        if isinstance(parking_items_stored, str):
+            try:
+                parking_items_stored = json.loads(parking_items_stored)
+            except Exception:
+                parking_items_stored = []
+
         if parking_items_stored:
-            park_data = [["Description", "Amount", "Payment", "Reimbursable?"]]
+            park_data = [["Description", "Amount", "Payment", "Status"]]
             for p in parking_items_stored:
-                reimb = "Pending approval" if p.get("is_fine") else ("Yes" if p.get("payment") != "Redstone Card" else "No — company expense")
+                cost = float(p.get("cost", 0))
+                if p.get("is_fine"):
+                    status_label = "Fine \u2014 pending approval"
+                elif p.get("payment") == "Redstone Card":
+                    status_label = "Company expense"
+                else:
+                    status_label = "Own card \u2014 reimburse"
                 park_data.append([
-                    p.get("description",""),
-                    f"£{float(p.get('cost',0)):.2f}",
-                    p.get("payment",""),
-                    reimb
+                    p.get("description", ""),
+                    f"\u00a3{cost:.2f}",
+                    p.get("payment", ""),
+                    status_label
                 ])
-            park_data.append(["TOTAL PARKING", f"£{float(card['parking_cost']):.2f}", "", ""])
-            park_table = Table(park_data, colWidths=[65*mm, 25*mm, 45*mm, 45*mm])
+            reimburse_parking = float(card.get("reimburse_parking", 0) or 0)
+            redstone_parking = parking_cost - reimburse_parking
+            if redstone_parking > 0:
+                park_data.append(["Redstone Card Total", f"\u00a3{redstone_parking:.2f}", "", "Company expense"])
+            if reimburse_parking > 0:
+                park_data.append(["Own Card Total (Reimburse)", f"\u00a3{reimburse_parking:.2f}", "", "On invoice"])
+            park_data.append(["TOTAL PARKING", f"\u00a3{parking_cost:.2f}", "", ""])
+            park_table = Table(park_data, colWidths=[60*mm, 25*mm, 40*mm, 55*mm])
             park_table.setStyle(TableStyle([
                 ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
                 ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8),
                 ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-                ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white, REDSTONE_LIGHT]),
+                ("ROWBACKGROUNDS",(0,1),(-1,-3),[colors.white, REDSTONE_LIGHT]),
                 ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
                 ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
                 ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
@@ -589,16 +619,15 @@ def build_job_card_pdf(card, contractor):
             ]))
             story.append(park_table)
         else:
-            parking = Table([field_row("PARKING COST", f"£{card['parking_cost']:.2f}")], colWidths=[55*mm, 125*mm])
-            parking.setStyle(TableStyle([
+            parking_tbl = Table([field_row("PARKING COST", f"\u00a3{parking_cost:.2f}")], colWidths=[55*mm, 125*mm])
+            parking_tbl.setStyle(TableStyle([
                 ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT),
                 ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
                 ("LEFTPADDING",(0,0),(-1,-1),6),
                 ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
             ]))
-            story.append(parking)
+            story.append(parking_tbl)
 
-    # ── Grand Total section ──────────────────────────────────────────────────
     story.append(Spacer(1, 8))
     story.append(Paragraph(" JOB COST SUMMARY", section_style))
     story.append(Spacer(1, 4))
@@ -607,15 +636,14 @@ def build_job_card_pdf(card, contractor):
     grand_park    = float(card.get("parking_cost", 0))
     grand_mats    = float(card.get("materials_total", 0))
     grand_total   = grand_labour + grand_mileage + grand_park + grand_mats
-    grand_data = []
-    grand_data.append(["Labour", f"£{grand_labour:.2f}"])
+    grand_data = [["Labour", f"\u00a3{grand_labour:.2f}"]]
     if grand_mileage > 0:
-        grand_data.append(["Mileage", f"£{grand_mileage:.2f}"])
+        grand_data.append(["Mileage", f"\u00a3{grand_mileage:.2f}"])
     if grand_park > 0:
-        grand_data.append(["Parking", f"£{grand_park:.2f}"])
+        grand_data.append(["Parking (total)", f"\u00a3{grand_park:.2f}"])
     if grand_mats > 0:
-        grand_data.append(["Materials", f"£{grand_mats:.2f}"])
-    grand_data.append(["TOTAL JOB COST", f"£{grand_total:.2f}"])
+        grand_data.append(["Materials (total)", f"\u00a3{grand_mats:.2f}"])
+    grand_data.append(["TOTAL JOB COST", f"\u00a3{grand_total:.2f}"])
     grand_table = Table(grand_data, colWidths=[140*mm, 40*mm])
     grand_table.setStyle(TableStyle([
         ("ALIGN",(1,0),(1,-1),"RIGHT"),
@@ -636,98 +664,250 @@ def build_job_card_pdf(card, contractor):
     return buf.read()
 
 
+# ── Invoice PDF (contractor financial document) ───────────────────────────────
+
 def build_invoice_pdf(card, contractor):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
-    styles = getSampleStyleSheet()
     story = []
-    label_style = ParagraphStyle("label", fontSize=8, textColor=REDSTONE_GREY, fontName="Helvetica-Bold")
-    value_style = ParagraphStyle("value", fontSize=10, textColor=REDSTONE_DARK, fontName="Helvetica")
-    head_style  = ParagraphStyle("head", fontSize=16, textColor=REDSTONE_DARK, fontName="Helvetica-Bold")
+
+    label_style   = ParagraphStyle("label", fontSize=8, textColor=REDSTONE_GREY, fontName="Helvetica-Bold")
+    value_style   = ParagraphStyle("value", fontSize=10, textColor=REDSTONE_DARK, fontName="Helvetica")
+    head_style    = ParagraphStyle("head", fontSize=16, textColor=REDSTONE_DARK, fontName="Helvetica-Bold")
+    section_style = ParagraphStyle("section", fontSize=11, textColor=colors.white, fontName="Helvetica-Bold",
+                                    backColor=REDSTONE_DARK, leftIndent=4, spaceAfter=0, spaceBefore=8)
+    small_red     = ParagraphStyle("smallred", fontSize=7, textColor=REDSTONE_RED, fontName="Helvetica")
+    small_grey    = ParagraphStyle("smallgrey", fontSize=7, textColor=REDSTONE_GREY, fontName="Helvetica")
+
     story.append(Paragraph("Redstone PDM", head_style))
     story.append(Paragraph("Reverse Self-Billing Invoice", ParagraphStyle(
         "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
+
     parties = Table([[
-        Paragraph(f"<b>Engineer:</b> {contractor['name']}<br/>{contractor['address']}<br/>"
-                  f"UTR: {contractor.get('utr','—')}<br/>NI: {contractor.get('ni','—')}<br/>"
-                  f"Bank: {contractor.get('sort_code','—')} / {contractor.get('account_no','—')}", value_style),
-        Paragraph("<b>Bill to:</b><br/>Redstone PDM Ltd<br/>9 Canberra Gardens<br/>Cranfield<br/>MK43 1AQ<br/>"
-                  "VAT Reg: 248 5387 69<br/>Company: 10070131", value_style),
+        Paragraph(
+            f"<b>Engineer:</b> {contractor['name']}<br/>"
+            f"{contractor.get('address','')}<br/>"
+            f"UTR: {contractor.get('utr','--')}<br/>"
+            f"NI: {contractor.get('ni','--')}<br/>"
+            f"Bank: {contractor.get('sort_code','--')} / {contractor.get('account_no','--')}",
+            value_style),
+        Paragraph(
+            "<b>Bill to:</b><br/>Redstone PDM Ltd<br/>9 Canberra Gardens<br/>Cranfield<br/>MK43 1AQ<br/>"
+            "VAT Reg: 248 5387 69<br/>Company: 10070131",
+            value_style),
     ]], colWidths=[90*mm, 90*mm])
     story.append(parties)
     story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e0e0e0"), spaceAfter=8))
+
     def row(label, value):
-        return [Paragraph(f"<b>{label}</b>", label_style), Paragraph(str(value) if value else "—", value_style)]
+        return [Paragraph(f"<b>{label}</b>", label_style), Paragraph(str(value) if value else "\u2014", value_style)]
+
+    card_date = card["card_date"]
+    if hasattr(card_date, 'strftime'):
+        date_str = card_date.strftime("%A, %d %B %Y")
+    else:
+        date_str = str(card_date)
+
     summary = Table([
         row("JOB NUMBER", card["job_id"]),
-        row("DATE", card["card_date"].strftime("%A, %d %B %Y")),
+        row("DATE", date_str),
         row("SITE / LOCATION", f"{card['site_name']} {card['postcode']}"),
         row("DESCRIPTION OF WORKS", card["description_actual"]),
     ], colWidths=[55*mm, 125*mm])
     summary.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT), ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-        ("LEFTPADDING",(0,0),(-1,-1),6), ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ("BACKGROUND",(0,0),(0,-1),REDSTONE_LIGHT),
+        ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+        ("LEFTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),4),
+        ("BOTTOMPADDING",(0,0),(-1,-1),4),
     ]))
     story.append(summary)
-    story.append(Spacer(1, 8))
-    cost_data = [["Item","Amount"]]
-    cost_data.append(["Labour", f"£{card['labour_cost']:.2f}"])
-    if card.get("mileage_cost", 0):
-        cost_data.append([f"Mileage ({card['mileage_miles']} miles @ {int(contractor['mileage_rate']*100)}p/mile)", f"£{card['mileage_cost']:.2f}"])
-    if float(card.get("parking_cost", 0)) > 0:
-        # parking_cost = total parking logged; only own-card portion on invoice
-        # reimburse_parking stored separately in card dict
-        reimb_park = float(card.get("reimburse_parking", 0) or card.get("parking_cost", 0))
-        if reimb_park > 0:
-            cost_data.append(["Parking (Own Card)", f"£{reimb_park:.2f}"])
-    if card.get("reimburse_total", 0):
-        # Itemise each reimbursable material line
-        materials_list = card.get("materials_json") or []
-        reimb_items = [m for m in materials_list if m.get("payment","") != "Redstone Card"]
-        if reimb_items:
-            for m in reimb_items:
-                cost_data.append([
-                    f"Materials — {m.get('description','')} (x{m.get('qty',1)})",
-                    f"£{float(m.get('total',0)):.2f}"
-                ])
-            cost_data.append(["Materials Reimbursement Total", f"£{float(card['reimburse_total']):.2f}"])
-        else:
-            cost_data.append(["Materials (To Be Reimbursed)", f"£{card['reimburse_total']:.2f}"])
+    story.append(Spacer(1, 10))
+    story.append(Paragraph(" INVOICE LINES", section_style))
+    story.append(Spacer(1, 4))
+
+    # Parse materials
+    materials_list = card.get("materials_json") or []
+    if isinstance(materials_list, str):
+        try:
+            materials_list = json.loads(materials_list)
+        except Exception:
+            materials_list = []
+
+    # Parse parking items
+    parking_items_raw = card.get("parking_items_json") or []
+    if isinstance(parking_items_raw, str):
+        try:
+            parking_items_raw = json.loads(parking_items_raw)
+        except Exception:
+            parking_items_raw = []
+
+    own_mats     = [m for m in materials_list if m.get("payment", "") != "Redstone Card"]
+    redstone_mats = [m for m in materials_list if m.get("payment", "") == "Redstone Card"]
+    own_park_items = [p for p in parking_items_raw if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
+    red_park_items = [p for p in parking_items_raw if p.get("payment") == "Redstone Card" and not p.get("is_fine")]
+    fine_items     = [p for p in parking_items_raw if p.get("is_fine")]
+
+    reimburse_parking = float(card.get("reimburse_parking", 0) or 0)
+    parking_cost_total = float(card.get("parking_cost", 0) or 0)
+    redstone_parking = parking_cost_total - reimburse_parking
+
+    cost_data = [["Item", "Amount"]]
+    cost_data.append(["Labour", f"\u00a3{float(card['labour_cost']):.2f}"])
+
+    mileage_cost = float(card.get("mileage_cost", 0) or 0)
+    if mileage_cost > 0:
+        mileage_rate_pct = int(float(contractor.get("mileage_rate", 0)) * 100)
+        cost_data.append([
+            f"Mileage ({card['mileage_miles']} miles @ {mileage_rate_pct}p/mile)",
+            f"\u00a3{mileage_cost:.2f}"
+        ])
+
+    # Own-card materials (reimbursable) — these appear on invoice
+    for m in own_mats:
+        cost_data.append([
+            Paragraph(
+                f"Materials \u2014 {m.get('description','')} (x{m.get('qty',1)})<br/>"
+                f"<font color='#c0392b' size='7'>Own card \u2014 reimbursable</font>",
+                ParagraphStyle("mi", fontSize=9, fontName="Helvetica", leading=13)),
+            f"\u00a3{float(m.get('total',0)):.2f}"
+        ])
+
+    # Redstone card materials noted but greyed — NOT reimbursed on invoice
+    if redstone_mats:
+        red_mat_total = sum(float(m.get("total", 0)) for m in redstone_mats)
+        cost_data.append([
+            Paragraph(
+                f"Materials ({len(redstone_mats)} item(s) on Redstone card)<br/>"
+                f"<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
+                ParagraphStyle("rmi", fontSize=9, fontName="Helvetica", leading=13)),
+            Paragraph(f"<font color='#aaaaaa'>\u00a3{red_mat_total:.2f}</font>",
+                      ParagraphStyle("rmiv", fontSize=9, fontName="Helvetica"))
+        ])
+
+    # Own-card parking (reimbursable) — on invoice
+    for p in own_park_items:
+        cost_data.append([
+            Paragraph(
+                f"Parking \u2014 {p.get('description','')}<br/>"
+                f"<font color='#c0392b' size='7'>Own card \u2014 reimbursable</font>",
+                ParagraphStyle("pi", fontSize=9, fontName="Helvetica", leading=13)),
+            f"\u00a3{float(p.get('cost',0)):.2f}"
+        ])
+
+    # If no itemised parking but there is a reimburse_parking total, show it
+    if not own_park_items and reimburse_parking > 0:
+        cost_data.append([
+            Paragraph(
+                "Parking (Own Card)<br/>"
+                "<font color='#c0392b' size='7'>Own card \u2014 reimbursable</font>",
+                ParagraphStyle("pi2", fontSize=9, fontName="Helvetica", leading=13)),
+            f"\u00a3{reimburse_parking:.2f}"
+        ])
+
+    # Redstone card parking noted but greyed
+    if red_park_items:
+        red_park_total = sum(float(p.get("cost", 0)) for p in red_park_items)
+        cost_data.append([
+            Paragraph(
+                "Parking (Redstone Card)<br/>"
+                "<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
+                ParagraphStyle("rpi", fontSize=9, fontName="Helvetica", leading=13)),
+            Paragraph(f"<font color='#aaaaaa'>\u00a3{red_park_total:.2f}</font>",
+                      ParagraphStyle("rpiv", fontSize=9, fontName="Helvetica"))
+        ])
+    elif redstone_parking > 0 and not parking_items_raw:
+        cost_data.append([
+            Paragraph(
+                "Parking (Redstone Card)<br/>"
+                "<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
+                ParagraphStyle("rpi2", fontSize=9, fontName="Helvetica", leading=13)),
+            Paragraph(f"<font color='#aaaaaa'>\u00a3{redstone_parking:.2f}</font>",
+                      ParagraphStyle("rpi2v", fontSize=9, fontName="Helvetica"))
+        ])
+
+    # Parking fines — not on invoice, noted for transparency
+    for p in fine_items:
+        cost_data.append([
+            Paragraph(
+                f"Parking Fine \u2014 {p.get('description','')}<br/>"
+                f"<font color='#856404' size='7'>Pending approval \u2014 not included in invoice total</font>",
+                ParagraphStyle("fi", fontSize=9, fontName="Helvetica", leading=13)),
+            Paragraph(f"<font color='#aaaaaa'>\u00a3{float(p.get('cost',0)):.2f}</font>",
+                      ParagraphStyle("fiv", fontSize=9, fontName="Helvetica"))
+        ])
+
     cost_table = Table(cost_data, colWidths=[140*mm, 40*mm])
     cost_table.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),9),
-        ("ALIGN",(1,0),(1,-1),"RIGHT"), ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+        ("BACKGROUND",(0,0),(-1,0),REDSTONE_DARK),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+        ("FONTSIZE",(0,0),(-1,-1),9),
+        ("ALIGN",(1,0),(1,-1),"RIGHT"),
+        ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
         ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, REDSTONE_LIGHT]),
-        ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ("LEFTPADDING",(0,0),(-1,-1),6),
+        ("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),5),
+        ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
     ]))
     story.append(cost_table)
-    story.append(Spacer(1, 4))
-    totals_data = [["Gross Invoice Value", f"£{card['invoice_total']:.2f}"]]
-    if contractor["cis_rate"] > 0:
-        totals_data.append([f"CIS Deduction ({int(contractor['cis_rate']*100)}%)", f"-£{card['cis_deduction']:.2f}"])
-        totals_data.append(["Net Payment to Contractor", f"£{card['net_payment']:.2f}"])
-    totals_table = Table(totals_data, colWidths=[140*mm, 40*mm])
-    totals_table.setStyle(TableStyle([
-        ("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),10),
+    story.append(Spacer(1, 6))
+
+    # Totals
+    invoice_total = float(card.get("invoice_total", 0))
+    cis_deduction = float(card.get("cis_deduction", 0))
+    net_payment   = float(card.get("net_payment", 0))
+    cis_rate      = float(contractor.get("cis_rate", 0))
+
+    totals_data = [["Gross Invoice", f"\u00a3{invoice_total:.2f}"]]
+    if cis_rate > 0:
+        totals_data.append([
+            f"CIS Deduction ({int(cis_rate*100)}%)\non labour only",
+            f"-\u00a3{cis_deduction:.2f}"
+        ])
+        totals_data.append(["Net Payment to Contractor", f"\u00a3{net_payment:.2f}"])
+
+    ts = [
+        ("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),
+        ("FONTSIZE",(0,0),(-1,-1),10),
         ("ALIGN",(1,0),(1,-1),"RIGHT"),
-        ("BACKGROUND",(-1,-1),(-1,-1),REDSTONE_DARK), ("TEXTCOLOR",(-1,-1),(-1,-1),colors.white),
-        ("BACKGROUND",(0,-1),(0,-1),REDSTONE_DARK), ("TEXTCOLOR",(0,-1),(0,-1),colors.white),
-        ("TOPPADDING",(0,0),(-1,-1),5), ("BOTTOMPADDING",(0,0),(-1,-1),5),
-        ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6),
-        ("LINEABOVE",(0,0),(-1,0),1,REDSTONE_RED),
-    ]))
+        ("TOPPADDING",(0,0),(-1,-1),6),
+        ("BOTTOMPADDING",(0,0),(-1,-1),6),
+        ("LEFTPADDING",(0,0),(-1,-1),6),
+        ("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("LINEABOVE",(0,0),(-1,0),1.5,REDSTONE_RED),
+        ("BACKGROUND",(0,0),(-1,0),REDSTONE_LIGHT),
+    ]
+    if cis_rate > 0:
+        ts += [
+            ("TEXTCOLOR",(0,1),(-1,1),REDSTONE_RED),
+            ("FONTSIZE",(0,1),(0,1),8),
+            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_DARK),
+            ("TEXTCOLOR",(0,-1),(-1,-1),colors.white),
+            ("FONTSIZE",(0,-1),(-1,-1),11),
+        ]
+    else:
+        ts += [
+            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_DARK),
+            ("TEXTCOLOR",(0,-1),(-1,-1),colors.white),
+            ("FONTSIZE",(0,-1),(-1,-1),11),
+        ]
+
+    totals_table = Table(totals_data, colWidths=[140*mm, 40*mm])
+    totals_table.setStyle(TableStyle(ts))
     story.append(totals_table)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 14))
     story.append(Paragraph(
         "Payment will be processed via EEBS (pay intermediary) in accordance with IR35 regulations. "
-        "CIS deductions are calculated on labour elements only. "
+        "CIS deductions are calculated on labour elements only and do not apply to expense reimbursements or materials. "
         "This is a self-billing invoice raised by Redstone PDM Ltd on behalf of the above engineer.",
         ParagraphStyle("note", fontSize=7, textColor=REDSTONE_GREY, fontName="Helvetica")))
+
     doc.build(story)
     buf.seek(0)
     return buf.read()
@@ -737,7 +917,7 @@ def build_invoice_pdf(card, contractor):
 
 def send_email(to_addresses, subject, body_html, attachments=None):
     if not SENDGRID_API_KEY:
-        print("No SendGrid API key — email skipped")
+        print("No SendGrid API key -- email skipped")
         return False
     try:
         if isinstance(to_addresses, str):
@@ -819,7 +999,6 @@ def dashboard():
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    # Only show jobs if this week is published
     cur.execute("SELECT status FROM week_schedules WHERE week_commencing = %s", (week_start,))
     sched = cur.fetchone()
     week_published = sched and sched["status"] == "published"
@@ -847,10 +1026,8 @@ def dashboard():
     """, (key,))
     recent_cards = cur.fetchall()
 
-    # Count queried invoices for badge
     queried_count = sum(1 for c in recent_cards if c["status"] == "queried")
 
-    # Get survey jobs (5000 prefix) allocated to this contractor
     try:
         cur.execute("""
             SELECT a.job_id, a.day_date, j.pub_name, j.postcode, j.description, j.trade_type
@@ -878,7 +1055,7 @@ def dashboard():
 def job_card_form(job_id, card_date):
     key = session["contractor_key"]
     contractor = CONTRACTORS[key]
-    job_id = str(job_id)  # ensure string, never int
+    job_id = str(job_id)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM jobs WHERE job_id::text = %s", (job_id,))
@@ -888,8 +1065,6 @@ def job_card_form(job_id, card_date):
         WHERE job_id = %s AND contractor_key = %s AND card_date = %s
     """, (job_id, key, card_date))
     existing_card = cur.fetchone()
-
-    # Get MOT expiry for this contractor's van
     cur.execute("SELECT mot_expiry, mot_status FROM vehicles WHERE contractor_key = %s", (key,))
     vehicle = cur.fetchone()
     cur.close()
@@ -928,11 +1103,12 @@ def submit_job_card(job_id, card_date):
     billable_miles = sum(float(l.get("miles",0)) for l in journey_legs if l.get("type") != "nextjob")
     if journey_legs:
         mileage_miles = round(billable_miles, 1)
+
     parking = 0.0
     parking_items = []
     park_count = int(request.form.get("parking_count", 0))
     reimburse_parking = 0.0
-    redstone_parking = 0.0  # Redstone card parking — company cost, NOT on contractor invoice
+    redstone_parking = 0.0
     for i in range(1, park_count + 1):
         desc = request.form.get(f"park_desc_{i}", "").strip()
         cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
@@ -940,31 +1116,28 @@ def submit_job_card(job_id, card_date):
         is_fine = request.form.get(f"park_is_fine_{i}") == "yes"
         if cost > 0:
             parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
-            parking += cost  # total parking for record keeping
+            parking += cost
             if payment == "Redstone Card":
-                redstone_parking += cost  # company expense only
+                redstone_parking += cost
             else:
-                reimburse_parking += cost  # on contractor invoice
-    # ── Labour calculation by job type ──────────────────────────────────────
-    # Detect job type from job_id prefix
+                reimburse_parking += cost
+
+    # Labour calculation by job type
     job_prefix = str(job_id)[:4] if job_id else "1000"
-    is_ppm = job_prefix == "2000"  # PPM jobs always full day rate
-    # 1000/3000 = reactive hourly, 2000 = PPM full day, 5000/8000 = quoted hourly
+    is_ppm = job_prefix == "2000"
 
     if is_ppm:
-        # PPM: full day rate + any logged overtime
-        base_labour   = float(contractor["day_rate"])
-        labour_type   = "PPM Full Day"
+        base_labour = float(contractor["day_rate"])
+        labour_type = "PPM Full Day"
     else:
-        # Reactive (1000/3000) and Quoted (5000): hourly rate = day_rate ÷ 10
-        hourly_rate   = float(contractor["day_rate"]) / 10
-        base_labour   = round(hours * hourly_rate, 2)
-        labour_type   = f"Hourly ({hours}hrs × £{hourly_rate:.2f}/hr)"
+        hourly_rate = float(contractor["day_rate"]) / 10
+        base_labour = round(hours * hourly_rate, 2)
+        labour_type = f"Hourly ({hours}hrs x \u00a3{hourly_rate:.2f}/hr)"
 
-    # Overtime: anything logged above 8hrs on site
     overtime_cost = round(overtime_h * float(contractor["overtime_rate"]), 2)
     labour_cost   = round(base_labour + overtime_cost, 2)
-    mileage_cost  = round(mileage_miles * contractor["mileage_rate"], 2)
+    mileage_cost  = round(mileage_miles * float(contractor.get("mileage_rate", 0)), 2)
+
     materials = []
     reimburse_total = 0.0
     mat_count = int(request.form.get("material_count", 0))
@@ -979,15 +1152,13 @@ def submit_job_card(job_id, card_date):
         materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
         if payment != "Redstone Card":
             reimburse_total += total
+
     materials_total = sum(m["total"] for m in materials)
-    # Only reimburse parking paid on own card (not Redstone card, not fines pending approval)
-    # Contractor invoice: labour + mileage + own-card parking + own-card materials
-    # Redstone card parking is a company expense — NOT on contractor invoice
     reimburse_total_all = reimburse_total + reimburse_parking
     invoice_total = labour_cost + mileage_cost + reimburse_total_all
-    # parking_fines within reimburse_parking are flagged for admin approval at sign-off
-    cis_deduction = round(labour_cost * contractor["cis_rate"], 2)
+    cis_deduction = round(labour_cost * float(contractor.get("cis_rate", 0)), 2)
     net_payment   = round(invoice_total - cis_deduction, 2)
+
     def save_files(field_name):
         paths = []
         files = request.files.getlist(field_name)
@@ -998,14 +1169,17 @@ def submit_job_card(job_id, card_date):
                 f.save(fpath)
                 paths.append(fpath)
         return paths
+
     photo_paths        = save_files("completion_photos")
     parking_photos     = save_files("parking_photo")
     receipt_photos     = save_files("receipt_photos")
     parking_photo_path = parking_photos[0] if parking_photos else None
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
     job = cur.fetchone()
+
     card = {
         "job_id": job_id,
         "card_date": datetime.strptime(card_date, "%Y-%m-%d").date(),
@@ -1014,7 +1188,8 @@ def submit_job_card(job_id, card_date):
         "description_planned": desc_planned or (job["description"] if job else ""),
         "description_actual": desc_actual,
         "time_start": time_start, "time_finish": time_finish,
-        "hours_on_site": hours, "labour_type": f"{labour_type} + {overtime_h}hrs OT" if overtime_h else labour_type,
+        "hours_on_site": hours,
+        "labour_type": f"{labour_type} + {overtime_h}hrs OT" if overtime_h else labour_type,
         "base_day_rate": contractor["day_rate"], "overtime_hours": overtime_h,
         "overtime_rate": contractor["overtime_rate"], "labour_cost": labour_cost,
         "mileage_miles": mileage_miles, "mileage_cost": mileage_cost,
@@ -1028,6 +1203,7 @@ def submit_job_card(job_id, card_date):
         "net_payment": net_payment, "photo_paths": photo_paths,
         "parking_photo_path": parking_photo_path, "receipt_photo_paths": receipt_photos,
     }
+
     cur.execute("""
         INSERT INTO job_cards (
             contractor_key, job_id, card_date, site_name, postcode,
@@ -1036,7 +1212,8 @@ def submit_job_card(job_id, card_date):
             labour_cost, mileage_miles, mileage_cost, parking_cost,
             materials_json, materials_total, reimburse_total, odometer,
             only_job_today, invoice_total, cis_deduction, net_payment,
-            photo_paths, parking_photo_path, receipt_photo_paths, status
+            photo_paths, parking_photo_path, receipt_photo_paths, status,
+            reimburse_parking, parking_items_json
         ) VALUES (
             %(contractor_key)s,%(job_id)s,%(card_date)s,%(site_name)s,%(postcode)s,
             %(description_planned)s,%(description_actual)s,%(time_start)s,%(time_finish)s,
@@ -1044,16 +1221,19 @@ def submit_job_card(job_id, card_date):
             %(labour_cost)s,%(mileage_miles)s,%(mileage_cost)s,%(parking_cost)s,
             %(materials_json)s,%(materials_total)s,%(reimburse_total)s,%(odometer)s,
             %(only_job_today)s,%(invoice_total)s,%(cis_deduction)s,%(net_payment)s,
-            %(photo_paths)s,%(parking_photo_path)s,%(receipt_photo_paths)s,'submitted'
+            %(photo_paths)s,%(parking_photo_path)s,%(receipt_photo_paths)s,'submitted',
+            %(reimburse_parking)s,%(parking_items_json)s
         ) ON CONFLICT DO NOTHING RETURNING id
-    """, {**card, "contractor_key": key, "materials_json": json.dumps(materials),
-          "photo_paths": json.dumps(photo_paths), "receipt_photo_paths": json.dumps(receipt_photos)})
+    """, {**card, "contractor_key": key,
+          "materials_json": json.dumps(materials),
+          "photo_paths": json.dumps(photo_paths),
+          "receipt_photo_paths": json.dumps(receipt_photos),
+          "parking_items_json": json.dumps(parking_items)})
     result = cur.fetchone()
     conn.commit()
+
     try:
         loc_cur = conn.cursor()
-        # ONLY carry forward site location if contractor explicitly used Drive to Next Job
-        # In ALL other cases (Travel Home, no journey, end of day) reset to home
         has_next_job_leg = any(l.get("type") == "nextjob" for l in journey_legs)
         if has_next_job_leg:
             new_location = job.get("postcode","") + " " + job.get("pub_name","")
@@ -1071,7 +1251,7 @@ def submit_job_card(job_id, card_date):
         loc_cur.close()
     except Exception as e:
         print(f"Could not save last location: {e}")
-    # Update vehicle mileage if odometer submitted
+
     if odometer:
         try:
             conn.cursor().execute(
@@ -1080,25 +1260,28 @@ def submit_job_card(job_id, card_date):
             conn.commit()
         except Exception:
             pass
+
     job_card_pdf = build_job_card_pdf(card, contractor)
     invoice_pdf  = build_invoice_pdf(card, contractor)
     filename_base = f"{contractor['name'].replace(' ','_')}_{job_id}_{card_date}"
+
     send_email(
         to_addresses=[ACCOUNTS_EMAIL, contractor["email"]],
-        subject=f"Redstone PDM — Invoice: {contractor['name']} | {job_id} | {card_date}",
+        subject=f"Redstone PDM -- Invoice: {contractor['name']} | {job_id} | {card_date}",
         body_html=f"""
             <p>Please find attached the self-billing invoice for:</p>
             <ul>
                 <li><b>Engineer:</b> {contractor['name']}</li>
-                <li><b>Job:</b> {job_id} — {card.get('site_name','')}</li>
+                <li><b>Job:</b> {job_id} -- {card.get('site_name','')}</li>
                 <li><b>Date:</b> {card_date}</li>
-                <li><b>Invoice Total:</b> £{invoice_total:.2f}</li>
-                <li><b>CIS Deduction:</b> £{cis_deduction:.2f}</li>
-                <li><b>Net Payment:</b> £{net_payment:.2f}</li>
+                <li><b>Invoice Total:</b> \u00a3{invoice_total:.2f}</li>
+                <li><b>CIS Deduction:</b> \u00a3{cis_deduction:.2f}</li>
+                <li><b>Net Payment:</b> \u00a3{net_payment:.2f}</li>
             </ul>
         """,
         attachments=[(f"{filename_base}_invoice.pdf", invoice_pdf)]
     )
+
     if result:
         card_id = result["id"]
         pdf_path = os.path.join(UPLOAD_FOLDER, f"{filename_base}_jobcard.pdf")
@@ -1106,6 +1289,7 @@ def submit_job_card(job_id, card_date):
             f.write(job_card_pdf)
         cur.execute("UPDATE job_cards SET notes=%s WHERE id=%s", (pdf_path, card_id))
         conn.commit()
+
     cur.close()
     conn.close()
     return redirect(url_for("card_submitted", job_id=job_id, card_date=card_date))
@@ -1162,8 +1346,8 @@ def request_profile_change():
                 (key, label, old_value, new_value, reason))
     conn.commit()
     send_email(to_addresses=[ACCOUNTS_EMAIL],
-               subject=f"Profile Change Request — {contractor['name']} — {label}",
-               body_html=f"<p><b>{contractor['name']}</b> requested change: {label} → {new_value}</p>")
+               subject=f"Profile Change Request -- {contractor['name']} -- {label}",
+               body_html=f"<p><b>{contractor['name']}</b> requested change: {label} to {new_value}</p>")
     cur.close()
     conn.close()
     return jsonify({"ok": True})
@@ -1224,34 +1408,111 @@ def admin_jobcards():
     cur = conn.cursor()
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
-    engineer_overview = []
+    week_end = week_start + timedelta(days=6)
+
     cards = []
     overdue = []
-    missing_cards = []
+    engineer_overview = []
 
+    all_contractors = get_all_contractors()
+
+    # Pull all job cards for this week
     try:
         cur.execute("""
             SELECT
-                a.contractor,
-                COUNT(DISTINCT a.id) as allocated,
-                COUNT(DISTINCT jc.id) as submitted,
-                SUM(jc.invoice_total) as week_total,
-                SUM(jc.net_payment) as week_net
+                jc.contractor_key, jc.status,
+                jc.labour_cost, jc.mileage_cost, jc.mileage_miles,
+                jc.parking_cost, jc.reimburse_parking,
+                jc.materials_total, jc.reimburse_total,
+                jc.invoice_total
+            FROM job_cards jc
+            WHERE jc.card_date BETWEEN %s AND %s
+        """, (week_start, week_end))
+        week_cards = cur.fetchall()
+    except Exception as e:
+        print(f"week_cards query failed: {e}")
+        conn.rollback()
+        week_cards = []
+
+    # Pull allocation counts per contractor name
+    alloc_rows = {}
+    try:
+        cur.execute("""
+            SELECT a.contractor, COUNT(DISTINCT a.id) as allocated
             FROM allocations a
-            LEFT JOIN job_cards jc ON jc.job_id = a.job_id
-                AND jc.contractor_key IN (
-                    SELECT contractor_key FROM contractors_db WHERE name = a.contractor
-                )
-                AND jc.card_date = a.day_date
             WHERE a.day_date BETWEEN %s AND %s
             GROUP BY a.contractor
-            ORDER BY a.contractor
-        """, (week_start, week_start + timedelta(days=6)))
-        engineer_overview = cur.fetchall()
+        """, (week_start, week_end))
+        alloc_rows = {r["contractor"]: r["allocated"] for r in cur.fetchall()}
     except Exception as e:
-        print(f"engineer_overview query failed: {e}")
+        print(f"alloc_rows query failed: {e}")
         conn.rollback()
 
+    # Aggregate stats per contractor_key
+    stats_by_key = defaultdict(lambda: {
+        "submitted": 0, "pending": 0, "queried": 0, "approved": 0, "paid": 0,
+        "total_labour": 0.0, "total_mileage": 0.0, "total_miles": 0.0,
+        "total_parking": 0.0, "reimburse_parking": 0.0,
+        "total_mats": 0.0, "reimburse_total": 0.0,
+        "gross_invoice": 0.0,
+    })
+    for wc in week_cards:
+        k = wc["contractor_key"]
+        s = stats_by_key[k]
+        s["submitted"] += 1
+        st = wc["status"]
+        if st == "submitted":   s["pending"] += 1
+        elif st == "queried":   s["queried"] += 1
+        elif st == "approved":  s["approved"] += 1
+        elif st == "paid":      s["paid"] += 1
+        s["total_labour"]      += float(wc["labour_cost"] or 0)
+        s["total_mileage"]     += float(wc["mileage_cost"] or 0)
+        s["total_miles"]       += float(wc["mileage_miles"] or 0)
+        s["total_parking"]     += float(wc["parking_cost"] or 0)
+        s["reimburse_parking"] += float(wc["reimburse_parking"] or 0)
+        s["total_mats"]        += float(wc["materials_total"] or 0)
+        s["reimburse_total"]   += float(wc["reimburse_total"] or 0)
+        s["gross_invoice"]     += float(wc["invoice_total"] or 0)
+
+    for key, c in all_contractors.items():
+        s = stats_by_key.get(key, {})
+        allocated    = alloc_rows.get(c["name"], 0)
+        submitted    = s.get("submitted", 0)
+        has_activity = submitted > 0
+
+        gross_invoice    = s.get("gross_invoice", 0.0)
+        total_mats       = s.get("total_mats", 0.0)
+        reimburse_total  = s.get("reimburse_total", 0.0)
+        total_parking    = s.get("total_parking", 0.0)
+        reimburse_park   = s.get("reimburse_parking", 0.0)
+
+        own_spend      = reimburse_total + reimburse_park
+        redstone_spend = (total_mats - reimburse_total) + (total_parking - reimburse_park)
+        total_cost     = gross_invoice + redstone_spend
+
+        engineer_overview.append({
+            "contractor":    c["name"],
+            "contractor_key": key,
+            "allocated":     allocated,
+            "submitted":     submitted,
+            "pending":       s.get("pending", 0),
+            "queried":       s.get("queried", 0),
+            "approved":      s.get("approved", 0),
+            "total_labour":  s.get("total_labour", 0.0),
+            "total_mileage": s.get("total_mileage", 0.0),
+            "total_miles":   s.get("total_miles", 0.0),
+            "total_mats":    total_mats,
+            "total_parking": total_parking,
+            "redstone_spend": redstone_spend,
+            "own_spend":     own_spend,
+            "gross_invoice": gross_invoice,
+            "total_cost":    total_cost,
+            "has_activity":  has_activity,
+        })
+
+    engineer_overview.sort(key=lambda x: x["contractor"])
+
+    # All job cards
     try:
         cur.execute("""
             SELECT jc.*, j.pub_name, j.description as job_description
@@ -1264,6 +1525,7 @@ def admin_jobcards():
         print(f"cards query failed: {e}")
         conn.rollback()
 
+    # Overdue cards
     try:
         now = datetime.now()
         saturday_6pm = week_start + timedelta(days=5, hours=18)
@@ -1277,7 +1539,7 @@ def admin_jobcards():
             WHERE a.day_date BETWEEN %s AND %s
             AND jc.id IS NULL
             ORDER BY a.day_date
-        """, (week_start, week_start + timedelta(days=6)))
+        """, (week_start, week_end))
         missing_cards = cur.fetchall()
         for mc in missing_cards:
             day_dt = datetime.combine(mc["day_date"], datetime.min.time())
@@ -1288,18 +1550,51 @@ def admin_jobcards():
             elif hrs_since > 24:
                 flag = "24hr"
             if flag:
-                overdue.append({**dict(mc), "flag": flag, "hrs_since": round(hrs_since,1)})
+                overdue.append({**dict(mc), "flag": flag, "hrs_since": round(hrs_since, 1)})
     except Exception as e:
         print(f"overdue query failed: {e}")
         conn.rollback()
 
+    # Quotes (5000 prefix)
+    quotes = []
+    try:
+        cur.execute("""
+            SELECT DISTINCT a.job_id, a.contractor, a.day_date,
+                   j.pub_name, j.postcode, j.description, j.trade_type,
+                   j.tab, j.tab_label, j.location_code
+            FROM allocations a
+            JOIN jobs j ON j.job_id = a.job_id
+            WHERE (j.job_id LIKE '5000%%' OR j.tab IN ('QUOTE','QUOTEREQUEST'))
+            ORDER BY a.day_date DESC
+            LIMIT 100
+        """)
+        quotes = cur.fetchall()
+    except Exception as e:
+        print(f"quotes query failed: {e}")
+        conn.rollback()
+
     cur.close()
     conn.close()
-    return render_template("admin_jobcards.html", cards=cards,
+
+    # Serialise quotes for JS
+    quotes_list = []
+    for q in quotes:
+        d = dict(q)
+        for k, v in d.items():
+            if hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+            elif hasattr(v, 'strftime'):
+                d[k] = str(v)
+        quotes_list.append(d)
+
+    return render_template("admin_jobcards.html",
+                           cards=cards,
                            engineer_overview=engineer_overview,
                            overdue=overdue,
                            week_start=week_start,
-                           contractors=CONTRACTORS)
+                           contractors=all_contractors,
+                           quotes=quotes,
+                           quotes_json=json.dumps(quotes_list))
 
 
 @app.route("/admin/approve/<int:card_id>", methods=["POST"])
@@ -1307,13 +1602,11 @@ def admin_jobcards():
 def approve_card(card_id):
     conn = get_db()
     cur = conn.cursor()
-    # Calculate expected payment date: 30 days from Friday of submission week
     cur.execute("SELECT submitted_at, card_date FROM job_cards WHERE id=%s", (card_id,))
     row = cur.fetchone()
     expected_pay = None
     if row and row["card_date"]:
         card_dt = row["card_date"]
-        # Find the Friday of that week
         days_to_friday = (4 - card_dt.weekday()) % 7
         week_friday = card_dt + timedelta(days=days_to_friday)
         expected_pay = week_friday + timedelta(days=30)
@@ -1340,7 +1633,6 @@ def query_card(card_id):
         UPDATE job_cards SET status='queried', query_note=%s WHERE id=%s
         RETURNING contractor_key, job_id, site_name
     """, (note, card_id))
-    row = cur.fetchone()
     conn.commit()
     cur.close()
     conn.close()
@@ -1362,7 +1654,6 @@ def mark_paid(card_id):
 @app.route("/card/<int:card_id>/detail")
 @admin_required
 def card_detail(card_id):
-    """Return full card detail as JSON for side panel."""
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
@@ -1377,7 +1668,6 @@ def card_detail(card_id):
     if not card:
         return jsonify({"error": "Not found"}), 404
     d = dict(card)
-    # Serialise dates
     for k, v in d.items():
         if hasattr(v, 'isoformat'):
             d[k] = v.isoformat()
@@ -1389,7 +1679,7 @@ def card_detail(card_id):
 @app.route("/card/<int:card_id>/jobcard.pdf")
 @login_required
 def download_job_card(card_id):
-    """Download job card PDF — accessible by admin or the contractor who owns it."""
+    """Admin gets job card PDF. Contractor gets their invoice PDF."""
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM job_cards WHERE id=%s", (card_id,))
@@ -1398,14 +1688,23 @@ def download_job_card(card_id):
     conn.close()
     if not card:
         return "Not found", 404
-    # Allow admin or the owning contractor
+
     role = session.get("role")
     key  = session.get("contractor_key")
+
     if role != "admin" and card["contractor_key"] != key:
         return redirect(url_for("login"))
-    contractor = CONTRACTORS.get(card["contractor_key"], {})
-    pdf = build_job_card_pdf(card, contractor)
-    return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=f"jobcard_{card_id}.pdf")
+
+    contractor = get_contractor(card["contractor_key"]) or CONTRACTORS.get(card["contractor_key"], {})
+
+    if role == "admin":
+        pdf = build_job_card_pdf(card, contractor)
+        filename = f"jobcard_{card_id}.pdf"
+    else:
+        pdf = build_invoice_pdf(card, contractor)
+        filename = f"invoice_{card_id}.pdf"
+
+    return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=filename)
 
 
 # ── Routes: Admin Contractors ─────────────────────────────────────────────────
@@ -1528,7 +1827,7 @@ def review_profile_change(change_id, action):
     if row and action == "approve":
         contractor = CONTRACTORS.get(row["contractor_key"], {})
         send_email(to_addresses=[contractor.get("email","")],
-                   subject="Redstone PDM — Profile Change Approved",
+                   subject="Redstone PDM -- Profile Change Approved",
                    body_html=f"<p>Hi {contractor.get('name','')}, your {row['field_name']} update to {row['new_value']} has been approved.</p>")
     return jsonify({"ok": True})
 
@@ -1638,8 +1937,6 @@ def update_vehicle(vid):
     return jsonify({"ok": True})
 
 
-# ── Routes: Vehicle Add/Delete ───────────────────────────────────────────────
-
 @app.route("/admin/vehicles/add", methods=["POST"])
 @admin_required
 def add_vehicle():
@@ -1684,7 +1981,7 @@ def delete_vehicle(vid):
     return jsonify({"ok": True})
 
 
-# ── Routes: Week Schedule (Publish/Lock) ──────────────────────────────────────
+# ── Routes: Week Schedule ─────────────────────────────────────────────────────
 
 @app.route("/admin/schedule/publish", methods=["POST"])
 @admin_required
@@ -1703,7 +2000,6 @@ def publish_week():
     """, (week_commencing,))
     conn.commit()
 
-    # Send schedule emails to all engineers
     week_dt = datetime.strptime(week_commencing, "%Y-%m-%d").date()
     week_end = week_dt + timedelta(days=4)
     cur.execute("""
@@ -1715,26 +2011,24 @@ def publish_week():
     """, (week_dt, week_end))
     allocs = cur.fetchall()
 
-    # Group by contractor
-    from collections import defaultdict
     by_contractor = defaultdict(list)
     for a in allocs:
         by_contractor[a["contractor"]].append(a)
 
     all_contractors = get_all_contractors()
     for cname, jobs in by_contractor.items():
-        # Find contractor by name
         c = next((v for v in all_contractors.values() if v["name"] == cname), None)
         if not c or not c.get("email"):
             continue
-        rows = "".join(f"<tr><td style='padding:6px;border:1px solid #ddd'>{j['day_date'].strftime('%A %d %b')}</td>"
-                       f"<td style='padding:6px;border:1px solid #ddd'>{j['pub_name']}</td>"
-                       f"<td style='padding:6px;border:1px solid #ddd'>{j['postcode']}</td>"
-                       f"<td style='padding:6px;border:1px solid #ddd'>{j['description'][:60]}...</td></tr>"
-                       for j in jobs)
+        rows = "".join(
+            f"<tr><td style='padding:6px;border:1px solid #ddd'>{j['day_date'].strftime('%A %d %b')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j['pub_name']}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j['postcode']}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j['description'][:60]}...</td></tr>"
+            for j in jobs)
         send_email(
             to_addresses=[c["email"]],
-            subject=f"Redstone PDM — Your Schedule w/c {week_dt.strftime('%d %b %Y')}",
+            subject=f"Redstone PDM -- Your Schedule w/c {week_dt.strftime('%d %b %Y')}",
             body_html=f"""
                 <p>Hi {c['name']},</p>
                 <p>Your schedule for the week commencing <b>{week_dt.strftime('%d %B %Y')}</b> is now confirmed.</p>
@@ -1774,7 +2068,6 @@ def reopen_week():
 
 @app.route("/api/schedule_status")
 def api_schedule_status():
-    """Called by planner to check publish status of a week."""
     week = request.args.get("week")
     if not week:
         return jsonify({"status": "draft"})
@@ -1787,7 +2080,7 @@ def api_schedule_status():
     return jsonify({"status": row["status"] if row else "draft"})
 
 
-# ── Routes: EEBS Payroll Summary ──────────────────────────────────────────────
+# ── Routes: Payroll ───────────────────────────────────────────────────────────
 
 @app.route("/admin/payroll")
 @admin_required
@@ -1822,13 +2115,11 @@ def admin_payroll():
     """, (sel_dt, week_end))
     summaries = cur.fetchall()
 
-    # Get past weeks for selector
     cur.execute("SELECT DISTINCT date_trunc('week', card_date)::date as wc FROM job_cards ORDER BY wc DESC LIMIT 12")
     past_weeks = cur.fetchall()
     cur.close()
     conn.close()
 
-    # Enrich with contractor names
     all_contractors = get_all_contractors()
     enriched = []
     grand = {"gross": 0, "cis": 0, "net": 0, "labour": 0, "mileage": 0}
@@ -1846,12 +2137,11 @@ def admin_payroll():
                            selected_week=sel_dt, week_end=week_end, past_weeks=past_weeks)
 
 
-# ── API: Odometer / Mileage / Location ───────────────────────────────────────
+# ── Routes: Contractor Invoice History ────────────────────────────────────────
 
 @app.route("/my_invoices")
 @login_required
 def my_invoices():
-    """Contractor invoice history page."""
     if session.get("role") == "admin":
         return redirect(url_for("admin_home"))
     key = session["contractor_key"]
@@ -1872,7 +2162,6 @@ def my_invoices():
 @app.route("/card/<int:card_id>/edit")
 @login_required
 def edit_card(card_id):
-    """Reopen a queried job card for editing."""
     key = session["contractor_key"]
     conn = get_db()
     cur = conn.cursor()
@@ -1897,7 +2186,6 @@ def edit_card(card_id):
 @app.route("/card/<int:card_id>/resubmit", methods=["POST"])
 @login_required
 def resubmit_card(card_id):
-    """Update a queried card and regenerate invoice."""
     key = session["contractor_key"]
     conn = get_db()
     cur = conn.cursor()
@@ -1906,10 +2194,7 @@ def resubmit_card(card_id):
     if not old_card:
         return redirect(url_for("my_invoices"))
 
-    # Get new revision number
     revision = (old_card["revision"] or 0) + 1
-
-    # Parse same fields as submit_job_card
     contractor = CONTRACTORS.get(key) or get_contractor(key) or {}
     time_start   = request.form.get("time_start", "")
     time_finish  = request.form.get("time_finish", "")
@@ -1928,7 +2213,7 @@ def resubmit_card(card_id):
     else:
         hourly_rate = float(contractor["day_rate"]) / 10
         base_labour = round(hours * hourly_rate, 2)
-        labour_type = f"Hourly ({hours}hrs × £{hourly_rate:.2f}/hr)"
+        labour_type = f"Hourly ({hours}hrs x \u00a3{hourly_rate:.2f}/hr)"
     overtime_cost = round(overtime_h * float(contractor["overtime_rate"]), 2)
     labour_cost = round(base_labour + overtime_cost, 2)
     mileage_cost = round(mileage_miles * float(contractor.get("mileage_rate", 0)), 2)
@@ -1988,11 +2273,8 @@ def resubmit_card(card_id):
           invoice_total, cis_deduction, net_payment, card_id))
     conn.commit()
 
-    # Rebuild card dict for PDF
     cur.execute("SELECT * FROM job_cards WHERE id=%s", (card_id,))
     updated = cur.fetchone()
-    cur.execute("SELECT * FROM jobs WHERE job_id=%s", (job_id,))
-    job = cur.fetchone()
     cur.close()
     conn.close()
 
@@ -2004,18 +2286,20 @@ def resubmit_card(card_id):
     filename_base = f"{contractor['name'].replace(' ','_')}_{job_id}_rev{revision}"
     send_email(
         to_addresses=[ACCOUNTS_EMAIL, contractor["email"]],
-        subject=f"Redstone PDM — REVISED Invoice v{revision}: {contractor['name']} | {job_id}",
+        subject=f"Redstone PDM -- REVISED Invoice v{revision}: {contractor['name']} | {job_id}",
         body_html=f"""
             <p><strong>REVISED INVOICE (v{revision})</strong></p>
             <p>Engineer: {contractor['name']}<br>
             Job: {job_id}<br>
-            Invoice Total: £{invoice_total:.2f}<br>
-            Net Payment: £{net_payment:.2f}</p>
+            Invoice Total: \u00a3{invoice_total:.2f}<br>
+            Net Payment: \u00a3{net_payment:.2f}</p>
         """,
         attachments=[(f"{filename_base}_invoice.pdf", invoice_pdf)]
     )
     return redirect(url_for("my_invoices"))
 
+
+# ── API: Odometer / Mileage / Location ───────────────────────────────────────
 
 @app.route("/api/odometer_needed")
 @login_required
@@ -2056,7 +2340,6 @@ def api_odometer_submit():
         INSERT INTO odometer_readings (contractor_key,van_reg,reading_date,week_commencing,odometer,miles_since_last)
         VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING
     """, (key, contractor.get("van_reg"), today, week_start, int(reading), miles_since_last))
-    # Also update vehicles table
     cur.execute("UPDATE vehicles SET current_mileage=%s, updated_at=NOW() WHERE contractor_key=%s",
                 (int(reading), key))
     conn.commit()
@@ -2082,10 +2365,8 @@ def api_last_location():
             last_date = row["updated_at"].date()
         except Exception:
             last_date = None
-        # Only use last location if it was set TODAY AND there's an active next-job chain
         if last_date == today and row["last_job_id"] is not None:
             return jsonify({"location": row["last_location"], "job_id": row["last_job_id"], "from_last_job": True})
-    # Default: always start from home
     return jsonify({"location": contractor["address"], "job_id": None, "from_last_job": False})
 
 
@@ -2121,7 +2402,7 @@ def api_mileage():
             extra, err2 = get_miles(dest, site)
             if not err2:
                 miles += extra
-        cost = round(miles * contractor["mileage_rate"], 2)
+        cost = round(miles * float(contractor.get("mileage_rate", 0)), 2)
         return jsonify({"miles": miles, "cost": cost})
     except Exception as e:
         return jsonify({"miles": 0, "cost": 0, "error": str(e)})
@@ -2136,7 +2417,6 @@ def admin_notes():
     week_start = today - timedelta(days=today.weekday())
     conn = get_db()
     cur = conn.cursor()
-    # Get all notes for this week
     cur.execute("""
         SELECT n.*, c.name as contractor_name
         FROM contractor_weekly_notes n
@@ -2185,7 +2465,6 @@ def save_note():
 @app.route("/api/my_note")
 @login_required
 def api_my_note():
-    """Return this week's note for the logged-in contractor."""
     key = session["contractor_key"]
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
