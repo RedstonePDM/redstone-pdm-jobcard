@@ -17,38 +17,66 @@
   .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
   .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
-  /* Layout — list + drawer */
   .layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
-  .list-panel { flex: 1; overflow-y: auto; padding: 24px; min-width: 0; transition: all 0.25s; }
+  .list-panel { flex: 1; overflow-y: auto; padding: 24px; min-width: 0; }
   .drawer {
     width: 0; overflow: hidden; background: white;
     border-left: 1px solid #e0e0e0; transition: width 0.25s ease;
     display: flex; flex-direction: column;
     box-shadow: -4px 0 16px rgba(0,0,0,0.1);
   }
-  .drawer.open { width: 460px; min-width: 460px; }
+  .drawer.open { width: 480px; min-width: 480px; }
 
   h2 { font-size: 20px; color: #1a2332; font-weight: 700; margin-bottom: 16px; }
 
-  /* Engineer overview */
-  .eng-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .eng-card { background: white; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
-  .eng-name { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 6px; }
-  .eng-stat { font-size: 12px; color: #555; }
-  .eng-bar { height: 4px; background: #eee; border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .eng-fill { height: 100%; background: #c0392b; border-radius: 2px; }
-  .eng-fill.green { background: #1a7a4a; }
-  .eng-fill.amber { background: #e6a817; }
+  /* Engineer overview grid */
+  .eng-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px; margin-bottom: 20px;
+  }
+  .eng-card {
+    background: white; border-radius: 10px; padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    border-left: 3px solid #e0e0e0;
+  }
+  .eng-card.active { border-left-color: #c0392b; }
+  .eng-card.inactive { opacity: 0.45; }
+  .eng-name { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 8px; }
+  .eng-headline { font-size: 12px; color: #555; margin-bottom: 8px; }
+
+  .eng-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; margin-bottom: 10px; }
+  .eng-stat-block {}
+  .eng-stat-label { font-size: 10px; color: #999; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+  .eng-stat-val { font-size: 13px; font-weight: 700; color: #1a2332; }
+  .eng-stat-val.red { color: #c0392b; }
+  .eng-stat-val.green { color: #1a7a4a; }
+  .eng-stat-val.blue { color: #084298; }
+
+  .eng-bar { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
+  .eng-fill { height: 100%; border-radius: 2px; background: #c0392b; }
+  .eng-fill.complete { background: #1a7a4a; }
+  .eng-fill.partial { background: #e6a817; }
+
+  .eng-totals-row {
+    display: flex; gap: 8px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid #f0f2f5; flex-wrap: wrap;
+  }
+  .eng-chip {
+    background: #f5f6f8; border-radius: 5px; padding: 3px 8px;
+    font-size: 11px; color: #333;
+  }
+  .eng-chip.reimburse { background: #fdf0ef; color: #c0392b; font-weight: 600; }
+  .eng-chip.cost { background: #1a2332; color: white; font-weight: 600; }
 
   /* Overdue */
   .overdue-bar { background: #fff3cd; border: 1px solid #ffecb5; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #856404; }
 
   /* Tabs */
-  .tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 0; background: white; border-radius: 10px 10px 0 0; }
+  .tabs { display: flex; border-bottom: 2px solid #e0e0e0; background: white; border-radius: 10px 10px 0 0; }
   .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; border: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .tab-btn.active { color: #c0392b; border-bottom-color: #c0392b; }
 
-  /* Table */
   .table-wrap { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -69,7 +97,7 @@
   .btn-paid    { background: #cfe2ff; color: #084298; }
   .empty { padding: 40px; text-align: center; color: #aaa; font-size: 14px; }
 
-  /* Drawer internals */
+  /* Drawer */
   .drawer-header {
     background: #1a2332; color: white; padding: 16px 20px;
     display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
@@ -90,21 +118,36 @@
   .d-table th { background: #1a2332; color: white; padding: 7px 8px; text-align: left; font-size: 10px; }
   .d-table td { padding: 7px 8px; border-bottom: 1px solid #f5f5f5; }
   .d-table tr:last-child td { border-bottom: none; }
-  .d-table tr:hover td { background: #fafbfc; }
+
+  /* Parking split block */
+  .parking-split { border-radius: 8px; overflow: hidden; margin-top: 6px; }
+  .parking-split-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f0f2f5; }
+  .parking-split-row:last-child { border-bottom: none; }
+  .parking-split-row.redstone { background: #f5f6f8; }
+  .parking-split-row.own { background: #fdf0ef; }
+  .parking-split-row.fine { background: #fff8ef; }
+  .parking-own-label { color: #c0392b; font-weight: 700; }
+  .parking-redstone-label { color: #555; }
+  .parking-fine-label { color: #856404; font-weight: 600; }
+  .parking-own-amount { color: #c0392b; font-weight: 700; }
+  .parking-reimburse-note { font-size: 10px; color: #c0392b; }
 
   .d-totals { background: #f5f6f8; border-radius: 8px; padding: 12px 14px; margin-top: 8px; }
   .d-total-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
   .d-total-row.grand { font-weight: 700; font-size: 14px; border-top: 1px solid #ddd; padding-top: 8px; margin-top: 4px; color: #1a2332; }
   .d-total-row.cis { color: #c0392b; }
   .d-total-row.net { color: #1a7a4a; font-weight: 700; }
+  .d-total-row.company { color: #666; font-size: 12px; }
 
-  /* Query form */
   .query-form { background: #fff8ef; border: 1px solid #ffd89b; border-radius: 8px; padding: 14px; margin-top: 12px; display: none; }
   .query-form textarea { width: 100%; padding: 10px; border: 1.5px solid #ddd; border-radius: 6px; font-size: 13px; font-family: inherit; min-height: 80px; resize: vertical; margin-bottom: 10px; }
   .query-form textarea:focus { outline: none; border-color: #c0392b; }
   .query-form-actions { display: flex; gap: 8px; }
   .btn-send-query { background: #c0392b; color: white; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
   .btn-cancel-query { background: #f0f2f5; color: #333; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+
+  /* Quote tab specific */
+  .quote-type-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; background: #e8f4fd; color: #0d6efd; }
 </style>
 </head>
 <body>
@@ -120,104 +163,199 @@
 </div>
 
 <div class="layout">
-  <!-- Left: list panel -->
   <div class="list-panel" id="list-panel">
     <h2>Job Cards — w/c {{ week_start.strftime('%d %B %Y') }}</h2>
 
-    <!-- Engineer overview -->
+    <!-- ── Engineer Overview Cards ── -->
     <div class="eng-grid">
       {% for e in engineer_overview %}
       {% set pct = [[(((e.submitted or 0) / (e.allocated or 1)) * 100)|int, 0]|max, 100]|min %}
-      <div class="eng-card">
+      <div class="eng-card {% if e.has_activity %}active{% else %}inactive{% endif %}">
         <div class="eng-name">{{ e.contractor }}</div>
-        <div class="eng-stat">{{ e.allocated or 0 }} allocated · {{ e.submitted or 0 }} submitted</div>
-        {% if e.week_net %}<div class="eng-stat" style="color:#1a7a4a;font-weight:600">£{{ '%.2f'|format(e.week_net|float) }} net</div>{% endif %}
-        <div class="eng-bar"><div class="eng-fill {% if pct==100 %}green{% elif pct>=50 %}amber{% endif %}" style="width:{{pct}}%"></div></div>
+        <div class="eng-headline">{{ e.allocated or 0 }} allocated &middot; {{ e.submitted or 0 }} submitted
+          {% if e.pending %}&middot; <span style="color:#856404">{{ e.pending }} pending</span>{% endif %}
+          {% if e.queried %}&middot; <span style="color:#c0392b">{{ e.queried }} queried</span>{% endif %}
+          {% if e.approved %}&middot; <span style="color:#1a7a4a">{{ e.approved }} approved</span>{% endif %}
+        </div>
+
+        {% if e.has_activity %}
+        <div class="eng-stats">
+          <div class="eng-stat-block">
+            <div class="eng-stat-label">Labour</div>
+            <div class="eng-stat-val">£{{ '%.2f'|format((e.total_labour or 0)|float) }}</div>
+          </div>
+          <div class="eng-stat-block">
+            <div class="eng-stat-label">Gross Invoice</div>
+            <div class="eng-stat-val green">£{{ '%.2f'|format((e.gross_invoice or 0)|float) }}</div>
+          </div>
+          {% if e.total_miles and e.total_miles > 0 %}
+          <div class="eng-stat-block">
+            <div class="eng-stat-label">Mileage</div>
+            <div class="eng-stat-val">{{ e.total_miles|int }} mi / £{{ '%.2f'|format((e.total_mileage or 0)|float) }}</div>
+          </div>
+          {% endif %}
+          <div class="eng-stat-block">
+            <div class="eng-stat-label">Total Cost</div>
+            <div class="eng-stat-val blue">£{{ '%.2f'|format((e.total_cost or 0)|float) }}</div>
+          </div>
+        </div>
+
+        <div class="eng-totals-row">
+          {% if e.redstone_spend and e.redstone_spend > 0 %}
+          <div class="eng-chip">Redstone card: £{{ '%.2f'|format(e.redstone_spend|float) }}</div>
+          {% endif %}
+          {% if e.own_spend and e.own_spend > 0 %}
+          <div class="eng-chip reimburse">Reimburse: £{{ '%.2f'|format(e.own_spend|float) }}</div>
+          {% endif %}
+          {% if e.total_parking and e.total_parking > 0 %}
+          <div class="eng-chip">Parking: £{{ '%.2f'|format(e.total_parking|float) }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="eng-bar" style="margin-top:10px">
+          <div class="eng-fill {% if pct==100 %}complete{% elif pct>=50 %}partial{% endif %}" style="width:{{pct}}%"></div>
+        </div>
       </div>
       {% endfor %}
     </div>
 
-    <!-- Overdue -->
+    <!-- ── Overdue ── -->
     {% if overdue %}
     <div class="overdue-bar">
-      ⚠ <strong>{{ overdue|length }} overdue card{{ 's' if overdue|length != 1 }}:</strong>
-      {% for o in overdue %}{{ o.contractor }} — {{ o.pub_name }} ({{ o.day_date.strftime('%a %d %b') }}){% if not loop.last %}, {% endif %}{% endfor %}
+      &#9888; <strong>{{ overdue|length }} overdue card{{ 's' if overdue|length != 1 }}:</strong>
+      {% for o in overdue %}{{ o.contractor }} &mdash; {{ o.pub_name }} ({{ o.day_date.strftime('%a %d %b') }}){% if not loop.last %}, {% endif %}{% endfor %}
     </div>
     {% endif %}
 
-    <!-- Tabs -->
+    <!-- ── Tabs ── -->
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('submitted',this)">Pending</button>
-      <button class="tab-btn" onclick="showTab('queried',this)">⚠ Queried</button>
+      <button class="tab-btn" onclick="showTab('queried',this)">&#9888; Queried</button>
       <button class="tab-btn" onclick="showTab('approved',this)">Approved</button>
       <button class="tab-btn" onclick="showTab('paid',this)">Paid</button>
       <button class="tab-btn" onclick="showTab('all',this)">All</button>
+      <button class="tab-btn" onclick="showTab('quotes',this)">Quotes</button>
     </div>
 
     <div class="table-wrap">
-      <table>
+      <!-- Job Cards table -->
+      <table id="cards-table">
         <thead>
           <tr>
             <th>Date</th><th>Engineer</th><th>Job / Site</th>
-            <th>Labour</th><th>Invoice</th><th>Net Pay</th><th>Status</th>
+            <th>Labour</th><th>Gross Invoice</th><th>Total Cost</th><th>Status</th>
           </tr>
         </thead>
         <tbody id="cards-tbody">
           {% for card in cards %}
+          {% set c = contractors.get(card.contractor_key, {}) %}
+          {% set redstone_mats = card.materials_total|float - card.reimburse_total|float %}
+          {% set total_cost = card.invoice_total|float + redstone_mats + (card.parking_cost|float - card.reimburse_parking|float) %}
           <tr data-status="{{ card.status }}" data-id="{{ card.id }}" onclick="openDrawer({{ card.id }}, this)">
-            <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '—' }}</td>
-            <td style="font-weight:600">{{ contractors.get(card.contractor_key, {}).get('name', card.contractor_key) }}</td>
+            <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '&mdash;' }}</td>
+            <td style="font-weight:600">{{ c.get('name', card.contractor_key) }}</td>
             <td>
               <div style="font-weight:600;font-size:12px;font-family:monospace">{{ card.job_id }}</div>
               <div style="color:#666;font-size:12px">{{ card.site_name }}</div>
             </td>
             <td>£{{ '%.2f'|format(card.labour_cost|float) }}</td>
-            <td style="font-weight:700">£{{ '%.2f'|format(card.invoice_total|float) }}</td>
-            <td style="color:#1a7a4a;font-weight:700">£{{ '%.2f'|format(card.net_payment|float) }}</td>
+            <td style="font-weight:700;color:#1a7a4a">£{{ '%.2f'|format(card.invoice_total|float) }}</td>
+            <td style="font-weight:700;color:#084298">£{{ '%.2f'|format(total_cost) }}</td>
             <td>
               <span class="pill pill-{{ card.status }}" id="pill-{{ card.id }}">
                 {% if card.status=='submitted' %}Pending
-                {% elif card.status=='queried' %}⚠ Queried
-                {% elif card.status=='approved' %}✓ Approved
-                {% elif card.status=='paid' %}💙 Paid
+                {% elif card.status=='queried' %}&#9888; Queried
+                {% elif card.status=='approved' %}&#10003; Approved
+                {% elif card.status=='paid' %}Paid
                 {% else %}{{ card.status }}{% endif %}
               </span>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="empty">No job cards found.</td></tr>
+          <tr class="no-data-row"><td colspan="7" class="empty">No job cards found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- Quotes table (hidden by default) -->
+      <table id="quotes-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Date</th><th>Engineer</th><th>Job / Site</th>
+            <th>Trade</th><th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="quotes-tbody">
+          {% for q in quotes %}
+          <tr onclick="openQuoteDrawer({{ loop.index0 }}, this)" style="cursor:pointer"
+              data-idx="{{ loop.index0 }}">
+            <td>{{ q.day_date.strftime('%d %b %Y') if q.day_date else '&mdash;' }}</td>
+            <td style="font-weight:600">{{ q.contractor }}</td>
+            <td>
+              <div style="font-weight:600;font-size:12px;font-family:monospace">{{ q.job_id }}</div>
+              <div style="color:#666;font-size:12px">{{ q.pub_name }}</div>
+              <div style="color:#999;font-size:11px">{{ q.postcode }}</div>
+            </td>
+            <td><span class="quote-type-pill">{{ q.trade_type or 'General' }}</span></td>
+            <td style="color:#555;font-size:12px;max-width:200px">{{ (q.description or '')[:80] }}{% if (q.description or '')|length > 80 %}&hellip;{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No quote / survey jobs found.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Right: detail drawer -->
+  <!-- ── Detail Drawer ── -->
   <div class="drawer" id="detail-drawer">
     <div class="drawer-header">
       <div class="drawer-title" id="drawer-title">Job Card Detail</div>
-      <button class="drawer-close" onclick="closeDrawer()">×</button>
+      <button class="drawer-close" onclick="closeDrawer()">&#215;</button>
     </div>
     <div class="drawer-body" id="drawer-body">
-      <div style="color:#aaa;font-size:14px;text-align:center;padding:40px">Select a job card to view details</div>
+      <div style="color:#aaa;font-size:14px;text-align:center;padding:40px">Select a row to view details</div>
     </div>
     <div class="drawer-actions" id="drawer-actions"></div>
   </div>
 </div>
 
 <script>
+// ── Quotes data passed from server ──
+const quotesData = {{ quotes_json|safe }};
+
 let currentCardId = null;
 let selectedRow = null;
+let currentTab = 'submitted';
 
 function showTab(status, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.querySelectorAll('#cards-tbody tr[data-status]').forEach(row => {
-    row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
-  });
-}
-showTab('submitted', document.querySelector('.tab-btn.active'));
+  currentTab = status;
+  closeDrawer();
 
+  const cardsTable = document.getElementById('cards-table');
+  const quotesTable = document.getElementById('quotes-table');
+
+  if (status === 'quotes') {
+    cardsTable.style.display = 'none';
+    quotesTable.style.display = '';
+  } else {
+    cardsTable.style.display = '';
+    quotesTable.style.display = 'none';
+    document.querySelectorAll('#cards-tbody tr[data-status]').forEach(row => {
+      row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+    });
+  }
+}
+
+// Apply default tab filter on load
+document.querySelectorAll('#cards-tbody tr[data-status]').forEach(row => {
+  row.style.display = row.dataset.status === 'submitted' ? '' : 'none';
+});
+
+// ── Job Card Drawer ──
 async function openDrawer(cardId, row) {
   currentCardId = cardId;
   if (selectedRow) selectedRow.classList.remove('selected');
@@ -230,97 +368,147 @@ async function openDrawer(cardId, row) {
 
   const res = await fetch(`/card/${cardId}/detail`);
   const card = await res.json();
-  if (card.error) { document.getElementById('drawer-body').innerHTML = '<div style="color:#c0392b;padding:20px">Error loading card</div>'; return; }
-
+  if (card.error) {
+    document.getElementById('drawer-body').innerHTML = '<div style="color:#c0392b;padding:20px">Error loading card</div>';
+    return;
+  }
   renderDrawer(card);
 }
 
 function renderDrawer(card) {
-  document.getElementById('drawer-title').textContent = `${card.job_id} — ${card.site_name || ''}`;
+  document.getElementById('drawer-title').textContent = `${card.job_id} \u2014 ${card.site_name || ''}`;
 
-  const statusLabels = { submitted:'Pending', queried:'⚠ Queried', approved:'✓ Approved', paid:'💙 Paid' };
-  const materials = card.materials_json || [];
-  const parking = card.parking_items_json || [];
+  const materials = Array.isArray(card.materials_json) ? card.materials_json : (card.materials_json ? JSON.parse(card.materials_json) : []);
+  const parkingItems = Array.isArray(card.parking_items_json) ? card.parking_items_json : (card.parking_items_json ? JSON.parse(card.parking_items_json) : []);
 
-  let matRows = '';
+  // Materials split
+  const redstone_mats = materials.filter(m => m.payment === 'Redstone Card');
+  const own_mats = materials.filter(m => m.payment !== 'Redstone Card');
+
+  let matHTML = '';
   if (materials.length) {
-    matRows = materials.map(m => `<tr>
-      <td>${m.description}</td><td>${m.qty}</td>
-      <td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td>
-      <td>£${parseFloat(m.total||0).toFixed(2)}</td>
-      <td style="font-size:11px;color:${m.payment!='Redstone Card'?'#c0392b':'#555'}">${m.payment}</td>
-    </tr>`).join('');
-    matRows += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Total Materials</td><td>£${parseFloat(card.materials_total||0).toFixed(2)}</td><td></td></tr>`;
+    let rows = '';
+    if (redstone_mats.length) {
+      rows += `<tr style="background:#f9f9f9"><td colspan="5" style="font-size:10px;font-weight:700;color:#555;padding:5px 8px">REDSTONE CARD</td></tr>`;
+      redstone_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td>£${parseFloat(m.total||0).toFixed(2)}</td><td style="font-size:10px;color:#555">Redstone Card</td></tr>`;
+      });
+    }
+    if (own_mats.length) {
+      rows += `<tr style="background:#fdf0ef"><td colspan="5" style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px">OWN CARD &mdash; REIMBURSE</td></tr>`;
+      own_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td><td style="font-size:10px;color:#c0392b;font-weight:700">${m.payment}</td></tr>`;
+      });
+    }
+    const reimb = parseFloat(card.reimburse_total || 0);
+    const redTotal = parseFloat(card.materials_total || 0) - reimb;
+    let totRow = '';
+    if (redTotal > 0) totRow += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Redstone Card Total</td><td>£${redTotal.toFixed(2)}</td><td></td></tr>`;
+    if (reimb > 0) totRow += `<tr style="background:#fdf0ef;font-weight:700;color:#c0392b"><td colspan="3">Reimbursable Total</td><td>£${reimb.toFixed(2)}</td><td></td></tr>`;
+
+    matHTML = `<div class="d-section">
+      <div class="d-section-title">Materials</div>
+      <table class="d-table">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th><th>Payment</th></tr></thead>
+        <tbody>${rows}${totRow}</tbody>
+      </table>
+    </div>`;
   }
 
-  let parkRows = '';
-  if (parking.length) {
-    parkRows = parking.map(p => `<tr>
-      <td>${p.description}</td>
-      <td>£${parseFloat(p.cost||0).toFixed(2)}</td>
-      <td>${p.payment}</td>
-      <td style="font-size:11px">${p.is_fine ? '⚠ Fine — approval needed' : p.payment!='Redstone Card' ? '✓ Reimburse' : 'Company expense'}</td>
-    </tr>`).join('');
-  } else if (card.parking_cost > 0) {
-    parkRows = `<tr><td colspan="4">£${parseFloat(card.parking_cost).toFixed(2)}</td></tr>`;
+  // Parking split
+  let parkHTML = '';
+  const parkingCost = parseFloat(card.parking_cost || 0);
+  if (parkingItems.length || parkingCost > 0) {
+    let parkRows = '';
+    if (parkingItems.length) {
+      parkingItems.forEach(p => {
+        const cost = parseFloat(p.cost || 0);
+        if (p.is_fine) {
+          parkRows += `<div class="parking-split-row fine">
+            <div><span class="parking-fine-label">&#9888; ${p.description}</span><div style="font-size:10px;color:#856404">Parking fine &mdash; awaiting approval</div></div>
+            <div style="font-weight:700;color:#856404">£${cost.toFixed(2)}</div>
+          </div>`;
+        } else if (p.payment === 'Redstone Card') {
+          parkRows += `<div class="parking-split-row redstone">
+            <div><span class="parking-redstone-label">${p.description}</span><div style="font-size:10px;color:#999">Redstone card &mdash; company expense</div></div>
+            <div style="color:#555;font-weight:600">£${cost.toFixed(2)}</div>
+          </div>`;
+        } else {
+          parkRows += `<div class="parking-split-row own">
+            <div><span class="parking-own-label">${p.description}</span><div class="parking-reimburse-note">Own card &mdash; reimburse on invoice</div></div>
+            <div class="parking-own-amount">£${cost.toFixed(2)}</div>
+          </div>`;
+        }
+      });
+    } else {
+      parkRows = `<div class="parking-split-row"><div>Parking</div><div>£${parkingCost.toFixed(2)}</div></div>`;
+    }
+
+    const reimb_p = parseFloat(card.reimburse_parking || 0);
+    const redstone_p = parkingCost - reimb_p;
+    let parkTotals = '';
+    if (parkingItems.length > 1) {
+      if (redstone_p > 0) parkTotals += `<div class="parking-split-row redstone" style="font-weight:700;border-top:2px solid #ddd"><div>Redstone Card Total</div><div>£${redstone_p.toFixed(2)}</div></div>`;
+      if (reimb_p > 0) parkTotals += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #ddd"><div class="parking-own-label">Reimbursable Total</div><div class="parking-own-amount">£${reimb_p.toFixed(2)}</div></div>`;
+    }
+
+    parkHTML = `<div class="d-section">
+      <div class="d-section-title">Parking</div>
+      <div class="parking-split">${parkRows}${parkTotals}</div>
+    </div>`;
   }
 
   const queryBlock = card.status === 'queried' && card.query_note ?
     `<div style="background:#fdf0ef;border:1px solid #f5a89a;border-radius:8px;padding:12px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:4px">⚠ QUERY FROM ADMIN</div>
+      <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:4px">&#9888; QUERY FROM ADMIN</div>
       <div style="font-size:13px;color:#333">${card.query_note}</div>
     </div>` : '';
+
+  const reimb_p = parseFloat(card.reimburse_parking || 0);
+  const redstone_p = parseFloat(card.parking_cost || 0) - reimb_p;
+  const redstone_mats_total = parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0);
+  const total_cost = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstone_p;
 
   document.getElementById('drawer-body').innerHTML = `
     ${queryBlock}
     <div class="d-section">
       <div class="d-section-title">Job Details</div>
-      <div class="d-row"><div class="d-label">Job Number</div><div class="d-val" style="font-family:monospace">${card.job_id}</div></div>
-      <div class="d-row"><div class="d-label">Date</div><div class="d-val">${card.card_date ? card.card_date.split('T')[0] : '—'}</div></div>
-      <div class="d-row"><div class="d-label">Site</div><div class="d-val">${card.site_name || '—'} ${card.postcode || ''}</div></div>
-      <div class="d-row"><div class="d-label">Works Done</div><div class="d-val">${card.description_actual || '—'}</div></div>
-      <div class="d-row"><div class="d-label">Time on Site</div><div class="d-val">${card.time_start || '—'} — ${card.time_finish || '—'} (${card.hours_on_site || 0} hrs)</div></div>
+      <div class="d-row"><div class="d-label">Job Number</div><div class="d-val" style="font-family:monospace;font-weight:700">${card.job_id}</div></div>
+      <div class="d-row"><div class="d-label">Date</div><div class="d-val">${card.card_date ? card.card_date.split('T')[0] : '&mdash;'}</div></div>
+      <div class="d-row"><div class="d-label">Site</div><div class="d-val">${card.site_name || '&mdash;'} ${card.postcode || ''}</div></div>
+      <div class="d-row"><div class="d-label">Works Done</div><div class="d-val">${card.description_actual || '&mdash;'}</div></div>
+      <div class="d-row"><div class="d-label">Time on Site</div><div class="d-val">${card.time_start || '&mdash;'} &mdash; ${card.time_finish || '&mdash;'} (${card.hours_on_site || 0} hrs)</div></div>
     </div>
 
     <div class="d-section">
       <div class="d-section-title">Labour</div>
-      <div class="d-row"><div class="d-label">Type</div><div class="d-val">${card.labour_type || '—'}</div></div>
+      <div class="d-row"><div class="d-label">Type</div><div class="d-val">${card.labour_type || '&mdash;'}</div></div>
       <div class="d-row"><div class="d-label">Overtime</div><div class="d-val">${parseFloat(card.overtime_hours||0) > 0 ? card.overtime_hours + ' hrs @ £' + parseFloat(card.overtime_rate||0).toFixed(2) + '/hr' : 'None'}</div></div>
       <div class="d-row"><div class="d-label">Labour Cost</div><div class="d-val" style="font-weight:700">£${parseFloat(card.labour_cost||0).toFixed(2)}</div></div>
     </div>
 
-    ${materials.length ? `<div class="d-section">
-      <div class="d-section-title">Materials</div>
-      <table class="d-table">
-        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th><th>Payment</th></tr></thead>
-        <tbody>${matRows}</tbody>
-      </table>
-    </div>` : ''}
+    ${matHTML}
 
-    ${card.mileage_miles > 0 ? `<div class="d-section">
+    ${parseFloat(card.mileage_miles||0) > 0 ? `<div class="d-section">
       <div class="d-section-title">Mileage</div>
-      <div class="d-row"><div class="d-label">Miles</div><div class="d-val">${card.mileage_miles} miles</div></div>
+      <div class="d-row"><div class="d-label">Miles</div><div class="d-val">${card.mileage_miles} miles (round trip)</div></div>
       <div class="d-row"><div class="d-label">Cost</div><div class="d-val">£${parseFloat(card.mileage_cost||0).toFixed(2)}</div></div>
     </div>` : ''}
 
-    ${parking.length || card.parking_cost > 0 ? `<div class="d-section">
-      <div class="d-section-title">Parking</div>
-      <table class="d-table">
-        <thead><tr><th>Description</th><th>Amount</th><th>Payment</th><th>Status</th></tr></thead>
-        <tbody>${parkRows}</tbody>
-      </table>
-    </div>` : ''}
+    ${parkHTML}
 
     <div class="d-section">
       <div class="d-section-title">Invoice Summary</div>
       <div class="d-totals">
         <div class="d-total-row"><span>Labour</span><span>£${parseFloat(card.labour_cost||0).toFixed(2)}</span></div>
         ${parseFloat(card.mileage_cost||0)>0?`<div class="d-total-row"><span>Mileage</span><span>£${parseFloat(card.mileage_cost).toFixed(2)}</span></div>`:''}
-        ${parseFloat(card.reimburse_parking||card.parking_cost||0)>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span>£${parseFloat(card.reimburse_parking||card.parking_cost).toFixed(2)}</span></div>`:''}
-        ${parseFloat(card.reimburse_total||0)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span>£${parseFloat(card.reimburse_total).toFixed(2)}</span></div>`:''}
+        ${reimb_p>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span style="color:#c0392b">£${reimb_p.toFixed(2)}</span></div>`:''}
+        ${parseFloat(card.reimburse_total||0)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span style="color:#c0392b">£${parseFloat(card.reimburse_total).toFixed(2)}</span></div>`:''}
         <div class="d-total-row grand"><span>Gross Invoice</span><span>£${parseFloat(card.invoice_total||0).toFixed(2)}</span></div>
         ${parseFloat(card.cis_deduction||0)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${parseFloat(card.cis_deduction).toFixed(2)}</span></div>`:''}
         <div class="d-total-row net"><span>Net to Contractor</span><span>£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
+        ${redstone_mats_total>0||redstone_p>0?`<div class="d-total-row company"><span>+ Redstone Card Spend</span><span>£${(redstone_mats_total+redstone_p).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row" style="font-weight:700;color:#084298;font-size:14px;border-top:1px solid #ddd;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${total_cost.toFixed(2)}</span></div>
       </div>
     </div>
 
@@ -337,14 +525,55 @@ function renderDrawer(card) {
   const status = card.status;
   let actions = '';
   if (status === 'submitted' || status === 'queried') {
-    actions += `<button class="btn btn-approve" onclick="approveCard()">✓ Approve</button>`;
-    actions += `<button class="btn btn-query" onclick="toggleQueryForm(true)">⚠ Query</button>`;
+    actions += `<button class="btn btn-approve" onclick="approveCard()">&#10003; Approve</button>`;
+    actions += `<button class="btn btn-query" onclick="toggleQueryForm(true)">&#9888; Query</button>`;
   }
   if (status === 'approved') {
-    actions += `<button class="btn btn-paid" onclick="markPaid()">💙 Mark Paid</button>`;
+    actions += `<button class="btn btn-paid" onclick="markPaid()">Mark Paid</button>`;
   }
   actions += `<a href="/card/${card.id}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
   document.getElementById('drawer-actions').innerHTML = actions;
+}
+
+// ── Quote Drawer ──
+function openQuoteDrawer(idx, row) {
+  const q = quotesData[idx];
+  if (!q) return;
+  if (selectedRow) selectedRow.classList.remove('selected');
+  selectedRow = row;
+  row.classList.add('selected');
+  currentCardId = null;
+
+  document.getElementById('detail-drawer').classList.add('open');
+  document.getElementById('drawer-title').textContent = `${q.job_id} \u2014 ${q.pub_name || ''}`;
+  document.getElementById('drawer-actions').innerHTML = '';
+
+  const tradeEmoji = {
+    'Electrical': '&#9889;', 'Plumbing': '&#128167;', 'HVAC': '&#10052;',
+    'Carpentry': '&#128296;', 'Painting': '&#127912;', 'General': '&#128295;',
+    'Gas': '&#128293;', 'Roofing': '&#127968;'
+  };
+  const emoji = tradeEmoji[q.trade_type] || '&#128295;';
+
+  document.getElementById('drawer-body').innerHTML = `
+    <div class="d-section">
+      <div class="d-section-title">Quote / Survey Job</div>
+      <div class="d-row"><div class="d-label">Job Number</div><div class="d-val" style="font-family:monospace;font-weight:700">${q.job_id}</div></div>
+      <div class="d-row"><div class="d-label">Allocated Date</div><div class="d-val">${q.day_date || '&mdash;'}</div></div>
+      <div class="d-row"><div class="d-label">Engineer</div><div class="d-val">${q.contractor}</div></div>
+      <div class="d-row"><div class="d-label">Site</div><div class="d-val">${q.pub_name || '&mdash;'}</div></div>
+      <div class="d-row"><div class="d-label">Postcode</div><div class="d-val">${q.postcode || '&mdash;'}</div></div>
+    </div>
+    <div class="d-section">
+      <div class="d-section-title">Trade &amp; Works</div>
+      <div class="d-row"><div class="d-label">Trade Type</div><div class="d-val">${emoji} ${q.trade_type || 'General'}</div></div>
+      <div class="d-row"><div class="d-label">Description</div><div class="d-val">${q.description || '&mdash;'}</div></div>
+      ${q.tab ? `<div class="d-row"><div class="d-label">Tab</div><div class="d-val" style="font-size:11px;color:#888">${q.tab}${q.tab_label ? ' &mdash; ' + q.tab_label : ''}</div></div>` : ''}
+      ${q.location_code ? `<div class="d-row"><div class="d-label">Location Code</div><div class="d-val" style="font-family:monospace">${q.location_code}</div></div>` : ''}
+    </div>
+    <div style="background:#f5f6f8;border-radius:8px;padding:14px;font-size:13px;color:#666;text-align:center">
+      Survey form coming in next module
+    </div>`;
 }
 
 function closeDrawer() {
@@ -363,9 +592,9 @@ async function approveCard() {
   const res = await fetch(`/admin/approve/${currentCardId}`, { method: 'POST' });
   const data = await res.json();
   if (data.ok) {
-    updateRowPill(currentCardId, 'approved', '✓ Approved');
+    updateRowPill(currentCardId, 'approved', '&#10003; Approved');
     document.getElementById('drawer-actions').innerHTML =
-      `<button class="btn btn-paid" onclick="markPaid()">💙 Mark Paid</button>
+      `<button class="btn btn-paid" onclick="markPaid()">Mark Paid</button>
        <a href="/card/${currentCardId}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
   }
 }
@@ -379,9 +608,9 @@ async function sendQuery() {
   });
   const data = await res.json();
   if (data.ok) {
-    updateRowPill(currentCardId, 'queried', '⚠ Queried');
+    updateRowPill(currentCardId, 'queried', '&#9888; Queried');
     toggleQueryForm(false);
-    alert('Query sent — engineer will see it on their next login.');
+    alert('Query sent to engineer.');
   }
 }
 
@@ -390,7 +619,7 @@ async function markPaid() {
   const res = await fetch(`/admin/mark_paid/${currentCardId}`, { method: 'POST' });
   const data = await res.json();
   if (data.ok) {
-    updateRowPill(currentCardId, 'paid', '💙 Paid');
+    updateRowPill(currentCardId, 'paid', 'Paid');
     document.getElementById('drawer-actions').innerHTML =
       `<a href="/card/${currentCardId}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
   }
@@ -401,7 +630,7 @@ function updateRowPill(id, status, label) {
   if (row) {
     row.dataset.status = status;
     const pill = document.getElementById(`pill-${id}`);
-    if (pill) { pill.className = `pill pill-${status}`; pill.textContent = label; }
+    if (pill) { pill.className = `pill pill-${status}`; pill.innerHTML = label; }
   }
 }
 </script>
