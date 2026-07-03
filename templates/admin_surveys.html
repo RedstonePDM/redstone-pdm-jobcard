@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Surveys — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar { background: #1a2332; height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .topbar-brand { font-weight: 700; font-size: 18px; color: white; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; margin-bottom: 8px; }
+  .sub { font-size: 13px; color: #888; margin-bottom: 24px; }
+
+  /* Trade type icons */
+  .trade-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; font-size: 18px; flex-shrink: 0; }
+  .trade-Flooring        { background: #fff8ef; }
+  .trade-Painting        { background: #fdf0ef; }
+  .trade-BuildingWorks   { background: #eff4ff; }
+  .trade-Tiling          { background: #f4efff; }
+  .trade-Plumbing        { background: #effbff; }
+  .trade-Electrical      { background: #fffbef; }
+  .trade-Cleaning        { background: #effdf4; }
+  .trade-General         { background: #f0f2f5; }
+
+  .survey-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+
+  .survey-card {
+    background: white; border-radius: 12px; padding: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    border-left: 4px solid #e0e0e0;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .survey-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+
+  .sc-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .sc-info { flex: 1; min-width: 0; }
+  .sc-pub { font-size: 15px; font-weight: 700; color: #1a2332; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-location { font-size: 12px; color: #888; margin-top: 2px; }
+
+  .sc-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .sc-meta-item { }
+  .sc-meta-label { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; }
+  .sc-meta-value { font-size: 13px; color: #1a2332; font-weight: 500; margin-top: 2px; }
+  .sc-meta-value.mono { font-family: monospace; }
+
+  .sc-desc { font-size: 12px; color: #666; line-height: 1.5; border-top: 1px solid #f5f5f5; padding-top: 10px; }
+
+  .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+  .search-bar input { flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; }
+  .search-bar input:focus { outline: none; border-color: #c0392b; }
+  .trade-filter { padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; background: white; }
+
+  .empty { text-align: center; padding: 60px; color: #aaa; font-size: 14px; }
+
+  .survey-form-notice {
+    background: #eff4ff; border: 1px solid #c5d8ff; border-radius: 10px;
+    padding: 14px 18px; font-size: 13px; color: #1a4fa0; margin-bottom: 24px;
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/jobcards">Job Cards</a>
+    <a href="/admin/contractors">Contractors</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <h2>📐 Surveys</h2>
+  <p class="sub">Quote jobs (5000 series) allocated to engineers. Use these as the basis for Wetherspoons quotes.</p>
+
+  <div class="survey-form-notice">
+    ℹ️ Survey forms coming soon — engineers will complete a detailed site survey form on each 5000 job. Those survey records will appear here with photos, measurements and notes for quoting.
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="search" placeholder="Search by pub, postcode, job number..." oninput="filterSurveys()">
+    <select class="trade-filter" id="trade-filter" onchange="filterSurveys()">
+      <option value="">All trades</option>
+      {% set trades = surveys | map(attribute='trade_type') | select | unique | list %}
+      {% for t in trades %}
+      <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if surveys %}
+  <div class="survey-grid" id="survey-grid">
+    {% for s in surveys %}
+    {% set trade = (s.trade_type or 'General').replace(' ','') %}
+    {% set trade_emoji = {
+      'Flooring': '🪵', 'Painting': '🎨', 'BuildingWorks': '🏗️',
+      'Tiling': '🔲', 'Plumbing': '🔧', 'Electrical': '⚡',
+      'Cleaning': '🧹', 'ExteriorCleaning': '🧹',
+      'General': '🔨', 'RMM': '🔧', 'Repair': '🔧'
+    }.get(trade, '🔨') %}
+    <div class="survey-card" data-trade="{{ s.trade_type }}" data-text="{{ (s.pub_name or '') ~ ' ' ~ (s.postcode or '') ~ ' ' ~ (s.job_id or '') | lower }}">
+      <div class="sc-header">
+        <div class="trade-icon trade-{{ trade }}">{{ trade_emoji }}</div>
+        <div class="sc-info">
+          <div class="sc-pub">{{ s.pub_name or '—' }}</div>
+          <div class="sc-location">{{ s.postcode or '—' }}{% if s.location_code %} · {{ s.location_code }}{% endif %}</div>
+        </div>
+      </div>
+      <div class="sc-meta">
+        <div class="sc-meta-item">
+          <div class="sc-meta-label">Quote Ref</div>
+          <div class="sc-meta-value mono">{{ s.job_id }}</div>
+        </div>
+        <div class="sc-meta-item">
+          <div class="sc-meta-label">Trade</div>
+          <div class="sc-meta-value">{{ s.trade_type or '—' }}</div>
+        </div>
+        <div class="sc-meta-item">
+          <div class="sc-meta-label">Engineer</div>
+          <div class="sc-meta-value">{{ s.contractor }}</div>
+        </div>
+        <div class="sc-meta-item">
+          <div class="sc-meta-label">Date</div>
+          <div class="sc-meta-value">{{ s.day_date.strftime('%d %b %Y') if s.day_date else '—' }}</div>
+        </div>
+      </div>
+      {% if s.description %}
+      <div class="sc-desc">{{ (s.description or '')[:200] }}{% if (s.description or '')|length > 200 %}...{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">No survey jobs found. 5000-series jobs allocated to engineers will appear here.</div>
+  {% endif %}
+</div>
+
+<script>
+function filterSurveys() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const trade = document.getElementById('trade-filter').value.toLowerCase();
+  document.querySelectorAll('.survey-card').forEach(card => {
+    const text = card.dataset.text || '';
+    const cardTrade = (card.dataset.trade || '').toLowerCase();
+    const matchText = !q || text.includes(q);
+    const matchTrade = !trade || cardTrade.includes(trade);
+    card.style.display = matchText && matchTrade ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>
