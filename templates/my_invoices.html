@@ -10,7 +10,7 @@
   .topbar {
     background: #1a2332; padding: 0 20px; height: 56px;
     display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    position: sticky; top: 0; z-index: 200; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
   .topbar-brand { font-weight: 700; font-size: 18px; color: white; }
   .topbar-brand span { color: #c0392b; }
@@ -18,23 +18,79 @@
   .topbar-nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 14px; border-radius: 6px; }
   .topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
 
+  /* Layout: list + drawer side by side */
+  .layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+  .list-panel { flex: 1; overflow-y: auto; padding: 28px 16px; min-width: 0; }
+
+  /* Drawer */
+  .drawer {
+    width: 0; overflow: hidden; background: white;
+    border-left: 1px solid #e0e0e0; transition: width 0.25s ease;
+    display: flex; flex-direction: column;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.12);
+    flex-shrink: 0;
+  }
+  .drawer.open { width: 460px; min-width: 460px; }
+  .drawer-header {
+    background: #1a2332; color: white; padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .drawer-title { font-size: 15px; font-weight: 700; }
+  .drawer-close { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 22px; cursor: pointer; line-height: 1; }
+  .drawer-close:hover { color: white; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .drawer-actions { padding: 14px 20px; border-top: 1px solid #f0f2f5; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* Drawer content styles */
+  .d-section { margin-bottom: 18px; }
+  .d-section-title { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #f0f2f5; }
+  .d-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .d-label { color: #888; width: 120px; flex-shrink: 0; font-weight: 600; }
+  .d-val { color: #1a2332; flex: 1; }
+
+  .d-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  .d-table th { background: #1a2332; color: white; padding: 7px 8px; text-align: left; font-size: 10px; }
+  .d-table td { padding: 7px 8px; border-bottom: 1px solid #f5f5f5; }
+  .d-table tr:last-child td { border-bottom: none; }
+
+  .parking-split { border-radius: 8px; overflow: hidden; margin-top: 6px; border: 1px solid #f0f2f5; }
+  .parking-split-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; font-size: 12px; border-bottom: 1px solid #f0f2f5; }
+  .parking-split-row:last-child { border-bottom: none; }
+  .parking-split-row.redstone { background: #f5f6f8; }
+  .parking-split-row.own      { background: #fdf0ef; }
+  .parking-split-row.fine     { background: #fff8ef; }
+  .parking-own-label       { color: #c0392b; font-weight: 700; }
+  .parking-redstone-label  { color: #888; }
+  .parking-fine-label      { color: #856404; font-weight: 600; }
+  .parking-own-amount      { color: #c0392b; font-weight: 700; }
+  .parking-grey-amount     { color: #aaa; font-style: italic; }
+
+  .d-totals { background: #f5f6f8; border-radius: 8px; padding: 12px 14px; margin-top: 8px; }
+  .d-total-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .d-total-row.grand { font-weight: 700; font-size: 14px; border-top: 1px solid #ddd; padding-top: 8px; margin-top: 4px; color: #1a2332; }
+  .d-total-row.cis   { color: #c0392b; }
+  .d-total-row.net   { color: #1a7a4a; font-weight: 700; }
+  .d-total-row.ref   { color: #aaa; font-size: 11px; font-style: italic; }
+
+  .grey-ref-block { background: #f8f8f8; border-left: 3px solid #ddd; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-top: 6px; }
+  .grey-ref-block .grey-label { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .grey-ref-item { font-size: 12px; color: #aaa; display: flex; justify-content: space-between; padding: 2px 0; }
+
+  /* Page content */
   .page { max-width: 1100px; margin: 0 auto; padding: 28px 16px; }
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
   h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
 
-  /* Summary strip */
   .summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
   .summary-card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
   .summary-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; }
   .summary-value { font-size: 22px; font-weight: 700; color: #1a2332; }
   .summary-sub { font-size: 12px; color: #888; margin-top: 2px; }
 
-  /* Status tabs */
   .status-tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 0; }
   .status-tab { padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; background: none; border: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .status-tab.active { color: #c0392b; border-bottom-color: #c0392b; }
 
-  /* Invoice table */
   .table-wrap { background: white; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: #1a2332; color: white; padding: 10px 12px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -44,12 +100,10 @@
 
   .query-notice {
     background: #fdf0ef; border: 1px solid #f5a89a; border-radius: 8px;
-    padding: 10px 14px; font-size: 12px; color: #c0392b; margin-top: 6px;
-    line-height: 1.5;
+    padding: 10px 14px; font-size: 12px; color: #c0392b; margin-top: 6px; line-height: 1.5;
   }
   .query-notice strong { display: block; margin-bottom: 3px; }
 
-  /* Status pills */
   .pill { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; }
   .pill-submitted { background: #fff3cd; color: #856404; }
   .pill-queried   { background: #fdf0ef; color: #c0392b; }
@@ -57,8 +111,10 @@
   .pill-paid      { background: #cfe2ff; color: #084298; }
 
   .btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; display: inline-block; }
-  .btn-edit { background: #c0392b; color: white; }
-  .btn-pdf  { background: #1a2332; color: white; }
+  .btn-edit   { background: #c0392b; color: white; }
+  .btn-view   { background: #1a2332; color: white; }
+  .btn-pdf    { background: #1a7a4a; color: white; }
+  .btn-close  { background: #f0f2f5; color: #333; }
 
   .rev-badge { font-size: 10px; color: #888; margin-left: 4px; }
   .expected-pay { font-size: 11px; color: #27ae60; margin-top: 3px; }
@@ -66,12 +122,14 @@
 
   @media (max-width: 700px) {
     .summary-strip { grid-template-columns: 1fr 1fr; }
+    .drawer.open { width: 100vw; min-width: 0; position: fixed; top: 56px; right: 0; height: calc(100vh - 56px); z-index: 300; }
     table { font-size: 12px; }
     th, td { padding: 8px; }
   }
 </style>
 </head>
 <body>
+
 <div class="topbar">
   <div class="topbar-brand">Redstone <span>PDM</span></div>
   <div class="topbar-nav">
@@ -82,126 +140,141 @@
   </div>
 </div>
 
-<div class="page">
-  <div class="page-header">
-    <h2>My Invoices</h2>
-    <div style="font-size:13px;color:#888">{{ contractor.name }}</div>
-  </div>
+<div class="layout">
+  <div class="list-panel">
 
-  <!-- Summary -->
-  {% set total_gross = invoices | sum(attribute='invoice_total') %}
-  {% set total_net = invoices | sum(attribute='net_payment') %}
-  {% set pending_count = invoices | selectattr('status', 'in', ['submitted', 'queried']) | list | length %}
-  {% set approved_count = invoices | selectattr('status', 'equalto', 'approved') | list | length %}
-  <div class="summary-strip">
-    <div class="summary-card">
-      <div class="summary-label">Total Invoiced</div>
-      <div class="summary-value">{{ invoices | length }}</div>
-      <div class="summary-sub">all time</div>
+    <div class="page-header">
+      <h2>My Invoices</h2>
+      <div style="font-size:13px;color:#888">{{ contractor.name }}</div>
     </div>
-    <div class="summary-card">
-      <div class="summary-label">Gross Total</div>
-      <div class="summary-value">£{{ '%.2f'|format(total_gross|float) }}</div>
-      <div class="summary-sub">all time</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Net (After CIS)</div>
-      <div class="summary-value">£{{ '%.2f'|format(total_net|float) }}</div>
-      <div class="summary-sub">all time</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Pending / Queried</div>
-      <div class="summary-value">{{ pending_count }}</div>
-      <div class="summary-sub">awaiting action</div>
-    </div>
-  </div>
 
-  <!-- Tabs -->
-  <div class="status-tabs">
-    <button class="status-tab active" onclick="filterTab('all', this)">All ({{ invoices|length }})</button>
-    <button class="status-tab" onclick="filterTab('submitted', this)">Pending</button>
-    <button class="status-tab" onclick="filterTab('queried', this)">⚠ Queried</button>
-    <button class="status-tab" onclick="filterTab('approved', this)">Approved</button>
-    <button class="status-tab" onclick="filterTab('paid', this)">Paid</button>
-  </div>
+    <!-- Summary strip -->
+    {% set total_gross = invoices | sum(attribute='invoice_total') %}
+    {% set total_net   = invoices | sum(attribute='net_payment') %}
+    {% set pending_count = invoices | selectattr('status', 'in', ['submitted', 'queried']) | list | length %}
+    <div class="summary-strip">
+      <div class="summary-card">
+        <div class="summary-label">Total Invoiced</div>
+        <div class="summary-value">{{ invoices | length }}</div>
+        <div class="summary-sub">all time</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Gross Total</div>
+        <div class="summary-value">£{{ '%.2f'|format(total_gross|float) }}</div>
+        <div class="summary-sub">all time</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Net (After CIS)</div>
+        <div class="summary-value">£{{ '%.2f'|format(total_net|float) }}</div>
+        <div class="summary-sub">all time</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Pending / Queried</div>
+        <div class="summary-value">{{ pending_count }}</div>
+        <div class="summary-sub">awaiting action</div>
+      </div>
+    </div>
 
-  <div class="table-wrap">
-    {% if invoices %}
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Job / Site</th>
-          <th>Description</th>
-          <th>Labour</th>
-          <th>Materials</th>
-          <th>Mileage</th>
-          <th>Parking</th>
-          <th>Gross</th>
-          <th>CIS</th>
-          <th>Net Pay</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in invoices %}
-        <tr data-status="{{ inv.status }}">
-          <td style="white-space:nowrap">
-            {{ inv.card_date.strftime('%d %b %Y') if inv.card_date else '—' }}
-            {% if inv.revision %}<div class="rev-badge">Rev v{{ inv.revision }}</div>{% endif %}
-          </td>
-          <td>
-            <div style="font-weight:600;font-size:12px;font-family:monospace">{{ inv.job_id }}</div>
-            <div style="color:#555">{{ inv.site_name or '—' }}</div>
-          </td>
-          <td style="max-width:160px">
-            <div style="font-size:12px;color:#555;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
-              {{ (inv.description_actual or '')[:80] }}
-            </div>
-            {% if inv.status == 'queried' and inv.query_note %}
-            <div class="query-notice">
-              <strong>⚠ Query from Redstone:</strong>
-              {{ inv.query_note }}
-            </div>
-            {% endif %}
-            {% if inv.expected_payment_date %}
-            <div class="expected-pay">💷 Expected payment: {{ inv.expected_payment_date.strftime('%d %b %Y') }}</div>
-            {% endif %}
-          </td>
-          <td>£{{ '%.2f'|format(inv.labour_cost|float) }}</td>
-          <td>£{{ '%.2f'|format(inv.materials_total|float) }}</td>
-          <td>£{{ '%.2f'|format(inv.mileage_cost|float) }}</td>
-          <td>£{{ '%.2f'|format((inv.reimburse_parking or inv.parking_cost or 0)|float) }}</td>
-          <td style="font-weight:700">£{{ '%.2f'|format(inv.invoice_total|float) }}</td>
-          <td style="color:#c0392b">-£{{ '%.2f'|format(inv.cis_deduction|float) }}</td>
-          <td style="font-weight:700;color:#1a7a4a">£{{ '%.2f'|format(inv.net_payment|float) }}</td>
-          <td>
-            <span class="pill pill-{{ inv.status }}">
-              {% if inv.status == 'submitted' %}Submitted
-              {% elif inv.status == 'queried' %}⚠ Queried
-              {% elif inv.status == 'approved' %}✓ Approved
-              {% elif inv.status == 'paid' %}💙 Paid
-              {% else %}{{ inv.status }}{% endif %}
-            </span>
-          </td>
-          <td>
-            <div style="display:flex;gap:6px;align-items:center">
-              {% if inv.status == 'queried' %}
-              <a href="/card/{{ inv.id }}/edit" class="btn btn-edit">Edit & Resubmit</a>
+    <!-- Tabs -->
+    <div class="status-tabs">
+      <button class="status-tab active" onclick="filterTab('all', this)">All ({{ invoices|length }})</button>
+      <button class="status-tab" onclick="filterTab('submitted', this)">Pending</button>
+      <button class="status-tab" onclick="filterTab('queried', this)">⚠ Queried</button>
+      <button class="status-tab" onclick="filterTab('approved', this)">Approved</button>
+      <button class="status-tab" onclick="filterTab('paid', this)">Paid</button>
+    </div>
+
+    <div class="table-wrap">
+      {% if invoices %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Job / Site</th>
+            <th>Description</th>
+            <th>Labour</th>
+            <th>Materials</th>
+            <th>Mileage</th>
+            <th>Parking</th>
+            <th>Gross</th>
+            <th>CIS</th>
+            <th>Net Pay</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inv in invoices %}
+          <tr data-status="{{ inv.status }}">
+            <td style="white-space:nowrap">
+              {{ inv.card_date.strftime('%d %b %Y') if inv.card_date else '—' }}
+              {% if inv.revision %}<div class="rev-badge">Rev v{{ inv.revision }}</div>{% endif %}
+            </td>
+            <td>
+              <div style="font-weight:600;font-size:12px;font-family:monospace">{{ inv.job_id }}</div>
+              <div style="color:#555">{{ inv.site_name or '—' }}</div>
+            </td>
+            <td style="max-width:160px">
+              <div style="font-size:12px;color:#555;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+                {{ (inv.description_actual or '')[:80] }}
+              </div>
+              {% if inv.status == 'queried' and inv.query_note %}
+              <div class="query-notice">
+                <strong>⚠ Query from Redstone:</strong>{{ inv.query_note }}
+              </div>
               {% endif %}
-              <a href="/card/{{ inv.id }}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty">No invoices yet. Submit your first job card to see it here.</div>
-    {% endif %}
+              {% if inv.expected_payment_date %}
+              <div class="expected-pay">💷 Expected payment: {{ inv.expected_payment_date.strftime('%d %b %Y') }}</div>
+              {% endif %}
+            </td>
+            <td>£{{ '%.2f'|format(inv.labour_cost|float) }}</td>
+            <td>£{{ '%.2f'|format(inv.materials_total|float) }}</td>
+            <td>£{{ '%.2f'|format(inv.mileage_cost|float) }}</td>
+            <td>£{{ '%.2f'|format((inv.reimburse_parking or inv.parking_cost or 0)|float) }}</td>
+            <td style="font-weight:700">£{{ '%.2f'|format(inv.invoice_total|float) }}</td>
+            <td style="color:#c0392b">-£{{ '%.2f'|format(inv.cis_deduction|float) }}</td>
+            <td style="font-weight:700;color:#1a7a4a">£{{ '%.2f'|format(inv.net_payment|float) }}</td>
+            <td>
+              <span class="pill pill-{{ inv.status }}">
+                {% if inv.status == 'submitted' %}Submitted
+                {% elif inv.status == 'queried' %}⚠ Queried
+                {% elif inv.status == 'approved' %}✓ Approved
+                {% elif inv.status == 'paid' %}💙 Paid
+                {% else %}{{ inv.status }}{% endif %}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                {% if inv.status == 'queried' %}
+                <a href="/card/{{ inv.id }}/edit" class="btn btn-edit">Edit &amp; Resubmit</a>
+                {% endif %}
+                <button class="btn btn-view" onclick="openDrawer({{ inv.id }})">View</button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No invoices yet. Submit your first job card to see it here.</div>
+      {% endif %}
+    </div>
+
+  </div><!-- /list-panel -->
+
+  <!-- ── Side Drawer ── -->
+  <div class="drawer" id="detail-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="drawer-title">Invoice Detail</div>
+      <button class="drawer-close" onclick="closeDrawer()">&#215;</button>
+    </div>
+    <div class="drawer-body" id="drawer-body">
+      <div style="color:#aaa;font-size:14px;text-align:center;padding:40px">Select a row to view details</div>
+    </div>
+    <div class="drawer-actions" id="drawer-actions"></div>
   </div>
-</div>
+
+</div><!-- /layout -->
 
 <script>
 function filterTab(status, btn) {
@@ -210,6 +283,256 @@ function filterTab(status, btn) {
   document.querySelectorAll('tbody tr[data-status]').forEach(row => {
     row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
   });
+}
+
+async function openDrawer(cardId) {
+  document.getElementById('detail-drawer').classList.add('open');
+  document.getElementById('drawer-body').innerHTML = '<div style="color:#aaa;text-align:center;padding:40px">Loading…</div>';
+  document.getElementById('drawer-actions').innerHTML = '';
+  document.getElementById('drawer-title').textContent = 'Invoice Detail';
+
+  const res = await fetch(`/card/${cardId}/detail`);
+  const card = await res.json();
+  if (card.error) {
+    document.getElementById('drawer-body').innerHTML = '<div style="color:#c0392b;padding:20px">Error loading invoice</div>';
+    return;
+  }
+  renderDrawer(card);
+}
+
+function closeDrawer() {
+  document.getElementById('detail-drawer').classList.remove('open');
+}
+
+function renderDrawer(card) {
+  document.getElementById('drawer-title').textContent = `${card.job_id} — ${card.site_name || ''}`;
+
+  const materials = Array.isArray(card.materials_json)
+    ? card.materials_json
+    : (card.materials_json ? JSON.parse(card.materials_json) : []);
+
+  const parkingItems = Array.isArray(card.parking_items_json)
+    ? card.parking_items_json
+    : (card.parking_items_json ? JSON.parse(card.parking_items_json) : []);
+
+  // Split materials
+  const ownMats      = materials.filter(m => m.payment !== 'Redstone Card');
+  const redstoneMats = materials.filter(m => m.payment === 'Redstone Card');
+
+  // ── Materials HTML ──
+  let matHTML = '';
+  if (materials.length) {
+    let ownRows = '';
+    ownMats.forEach(m => {
+      ownRows += `<tr>
+        <td>${m.description}</td>
+        <td>${m.qty}</td>
+        <td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td>
+        <td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td>
+      </tr>`;
+    });
+
+    let redRows = '';
+    redstoneMats.forEach(m => {
+      redRows += `<tr style="color:#aaa">
+        <td>${m.description}</td>
+        <td>${m.qty}</td>
+        <td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td>
+        <td>£${parseFloat(m.total||0).toFixed(2)}</td>
+      </tr>`;
+    });
+
+    const ownTotal = ownMats.reduce((s, m) => s + parseFloat(m.total||0), 0);
+    const redTotal = redstoneMats.reduce((s, m) => s + parseFloat(m.total||0), 0);
+
+    let ownSection = ownMats.length ? `
+      <div style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px;background:#fdf0ef">OWN CARD — REIMBURSABLE</div>
+      <table class="d-table">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
+        <tbody>${ownRows}
+          <tr style="font-weight:700;background:#fdf0ef">
+            <td colspan="3">Reimbursable Total</td>
+            <td style="color:#c0392b">£${ownTotal.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>` : '';
+
+    let redSection = redstoneMats.length ? `
+      <div style="font-size:10px;font-weight:700;color:#aaa;padding:5px 8px;background:#f8f8f8;margin-top:6px">REDSTONE CARD — REFERENCE ONLY (not reimbursed)</div>
+      <table class="d-table" style="opacity:0.6">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
+        <tbody>${redRows}
+          <tr style="font-weight:700;background:#f5f5f5;color:#aaa">
+            <td colspan="3">Redstone Card Total</td>
+            <td>£${redTotal.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>` : '';
+
+    matHTML = `<div class="d-section">
+      <div class="d-section-title">Materials</div>
+      ${ownSection}${redSection}
+    </div>`;
+  }
+
+  // ── Parking HTML ──
+  let parkHTML = '';
+  const parkingCost    = parseFloat(card.parking_cost || 0);
+  const reimbursePark  = parseFloat(card.reimburse_parking || 0);
+  const redstonePark   = parkingCost - reimbursePark;
+
+  if (parkingCost > 0) {
+    let parkRows = '';
+
+    if (parkingItems.length) {
+      parkingItems.forEach(p => {
+        const cost = parseFloat(p.cost || 0);
+        if (p.is_fine) {
+          parkRows += `<div class="parking-split-row fine">
+            <div>
+              <div class="parking-fine-label">⚠ ${p.description || 'Parking Fine'}</div>
+              <div style="font-size:10px;color:#856404">Pending approval — not on invoice</div>
+            </div>
+            <div style="color:#856404;font-weight:700">£${cost.toFixed(2)}</div>
+          </div>`;
+        } else if (p.payment === 'Redstone Card') {
+          parkRows += `<div class="parking-split-row redstone">
+            <div>
+              <div class="parking-redstone-label">${p.description || 'Parking'}</div>
+              <div style="font-size:10px;color:#aaa">Redstone card — reference only</div>
+            </div>
+            <div class="parking-grey-amount">£${cost.toFixed(2)}</div>
+          </div>`;
+        } else {
+          parkRows += `<div class="parking-split-row own">
+            <div>
+              <div class="parking-own-label">${p.description || 'Parking'}</div>
+              <div style="font-size:10px;color:#c0392b">Own card — reimbursable</div>
+            </div>
+            <div class="parking-own-amount">£${cost.toFixed(2)}</div>
+          </div>`;
+        }
+      });
+
+      if (parkingItems.length > 1) {
+        if (reimbursePark > 0) {
+          parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0">
+            <div class="parking-own-label">Reimbursable Total</div>
+            <div class="parking-own-amount">£${reimbursePark.toFixed(2)}</div>
+          </div>`;
+        }
+        if (redstonePark > 0) {
+          parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:2px solid #e0e0e0">
+            <div class="parking-redstone-label">Redstone Card Total (ref only)</div>
+            <div class="parking-grey-amount">£${redstonePark.toFixed(2)}</div>
+          </div>`;
+        }
+      }
+    } else {
+      // No itemised breakdown — show simple total
+      parkRows = `<div class="parking-split-row own">
+        <div><div class="parking-own-label">Parking</div></div>
+        <div class="parking-own-amount">£${parkingCost.toFixed(2)}</div>
+      </div>`;
+    }
+
+    parkHTML = `<div class="d-section">
+      <div class="d-section-title">Parking</div>
+      <div class="parking-split">${parkRows}</div>
+    </div>`;
+  }
+
+  // ── Query notice ──
+  const queryBlock = (card.status === 'queried' && card.query_note)
+    ? `<div style="background:#fdf0ef;border:1px solid #f5a89a;border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:4px">⚠ QUERY FROM REDSTONE</div>
+        <div style="font-size:13px;color:#333">${card.query_note}</div>
+      </div>` : '';
+
+  // ── Invoice totals ──
+  const labourCost   = parseFloat(card.labour_cost || 0);
+  const mileageCost  = parseFloat(card.mileage_cost || 0);
+  const ownMatsTotal = parseFloat(card.reimburse_total || 0);
+  const invoiceTotal = parseFloat(card.invoice_total || 0);
+  const cisDeduction = parseFloat(card.cis_deduction || 0);
+  const netPayment   = parseFloat(card.net_payment || 0);
+
+  const redMatTotal  = parseFloat(card.materials_total || 0) - ownMatsTotal;
+
+  let totalsHTML = `<div class="d-totals">
+    <div class="d-total-row"><span>Labour</span><span>£${labourCost.toFixed(2)}</span></div>
+    ${mileageCost > 0 ? `<div class="d-total-row"><span>Mileage</span><span>£${mileageCost.toFixed(2)}</span></div>` : ''}
+    ${ownMatsTotal > 0 ? `<div class="d-total-row"><span>Materials (Own card)</span><span style="color:#c0392b">£${ownMatsTotal.toFixed(2)}</span></div>` : ''}
+    ${reimbursePark > 0 ? `<div class="d-total-row"><span>Parking (Own card)</span><span style="color:#c0392b">£${reimbursePark.toFixed(2)}</span></div>` : ''}
+    <div class="d-total-row grand"><span>Gross Invoice</span><span>£${invoiceTotal.toFixed(2)}</span></div>
+    ${cisDeduction > 0 ? `<div class="d-total-row cis"><span>CIS Deduction (20% on labour)</span><span>-£${cisDeduction.toFixed(2)}</span></div>` : ''}
+    <div class="d-total-row net"><span>Net Payment to You</span><span>£${netPayment.toFixed(2)}</span></div>
+  </div>`;
+
+  // Redstone reference spend (greyed, separate, not part of your payment)
+  let refSpend = '';
+  if (redMatTotal > 0 || redstonePark > 0) {
+    refSpend = `<div style="margin-top:10px">
+      <div class="grey-ref-block">
+        <div class="grey-label">Redstone Card Spend — Reference Only</div>
+        ${redMatTotal > 0 ? `<div class="grey-ref-item"><span>Materials (Redstone card)</span><span>£${redMatTotal.toFixed(2)}</span></div>` : ''}
+        ${redstonePark > 0 ? `<div class="grey-ref-item"><span>Parking (Redstone card)</span><span>£${redstonePark.toFixed(2)}</span></div>` : ''}
+        <div class="grey-ref-item" style="border-top:1px solid #eee;padding-top:4px;margin-top:4px;font-weight:600">
+          <span>Total company spend</span><span>£${(redMatTotal + redstonePark).toFixed(2)}</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:center">These items were paid by Redstone and are shown for reference only. They do not form part of your invoice.</div>
+    </div>`;
+  }
+
+  // Payment terms
+  const payTerms = `<div style="margin-top:16px;font-size:11px;color:#888;line-height:1.6;background:#f5f6f8;border-radius:6px;padding:10px 12px">
+    <strong style="color:#555">Payment Terms:</strong> 30 days from the Friday of the week in which this invoice was submitted. Processed via EEBS. CIS applies to labour only.
+  </div>`;
+
+  document.getElementById('drawer-body').innerHTML = `
+    ${queryBlock}
+
+    <div class="d-section">
+      <div class="d-section-title">Job Details</div>
+      <div class="d-row"><div class="d-label">Job Number</div><div class="d-val" style="font-family:monospace;font-weight:700">${card.job_id}</div></div>
+      <div class="d-row"><div class="d-label">Date</div><div class="d-val">${card.card_date ? card.card_date.split('T')[0] : '—'}</div></div>
+      <div class="d-row"><div class="d-label">Site</div><div class="d-val">${card.site_name || '—'} ${card.postcode || ''}</div></div>
+      <div class="d-row"><div class="d-label">Works Done</div><div class="d-val">${card.description_actual || '—'}</div></div>
+      <div class="d-row"><div class="d-label">Time on Site</div><div class="d-val">${card.time_start || '—'} — ${card.time_finish || '—'} (${card.hours_on_site || 0} hrs)</div></div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-section-title">Labour</div>
+      <div class="d-row"><div class="d-label">Type</div><div class="d-val">${card.labour_type || '—'}</div></div>
+      ${parseFloat(card.overtime_hours||0) > 0 ? `<div class="d-row"><div class="d-label">Overtime</div><div class="d-val">${card.overtime_hours} hrs @ £${parseFloat(card.overtime_rate||0).toFixed(2)}/hr</div></div>` : ''}
+      <div class="d-row"><div class="d-label">Labour Cost</div><div class="d-val" style="font-weight:700">£${labourCost.toFixed(2)}</div></div>
+    </div>
+
+    ${matHTML}
+
+    ${mileageCost > 0 ? `<div class="d-section">
+      <div class="d-section-title">Mileage</div>
+      <div class="d-row"><div class="d-label">Miles</div><div class="d-val">${card.mileage_miles} miles</div></div>
+      <div class="d-row"><div class="d-label">Cost</div><div class="d-val">£${mileageCost.toFixed(2)}</div></div>
+    </div>` : ''}
+
+    ${parkHTML}
+
+    <div class="d-section">
+      <div class="d-section-title">Invoice Summary</div>
+      ${totalsHTML}
+      ${refSpend}
+      ${payTerms}
+    </div>`;
+
+  // Drawer action buttons
+  let actions = `<a href="/card/${card.id}/jobcard.pdf" class="btn btn-pdf" target="_blank">⬇ Download PDF</a>`;
+  if (card.status === 'queried') {
+    actions += `<a href="/card/${card.id}/edit" class="btn btn-edit">Edit &amp; Resubmit</a>`;
+  }
+  actions += `<button class="btn btn-close" onclick="closeDrawer()">Close</button>`;
+  document.getElementById('drawer-actions').innerHTML = actions;
 }
 </script>
 </body>
