@@ -272,6 +272,17 @@ def init_db():
             UNIQUE (contractor_key, week_commencing)
         );
 
+        CREATE TABLE IF NOT EXISTS planner_weekly_notes (
+            id              SERIAL PRIMARY KEY,
+            contractor_key  TEXT NOT NULL,
+            week_commencing DATE NOT NULL,
+            note            TEXT NOT NULL,
+            created_by      TEXT DEFAULT 'admin',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (contractor_key, week_commencing)
+        );
+
         CREATE TABLE IF NOT EXISTS week_schedules (
             id              SERIAL PRIMARY KEY,
             week_commencing DATE UNIQUE NOT NULL,
@@ -310,8 +321,7 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
-        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
-        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
+      "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
@@ -557,46 +567,7 @@ def build_job_card_pdf(card, contractor):
         ]))
         story.append(mat_table)
 
-    # Admin-only materials section — shown on job card PDF (admin operational doc) only
-    admin_materials = card.get("admin_materials_json") or []
-    if isinstance(admin_materials, str):
-        try:
-            admin_materials = json.loads(admin_materials)
-        except Exception:
-            admin_materials = []
-    if admin_materials:
-        story.append(Paragraph(" ADMIN MATERIALS (Redstone Ordered — Not on Engineer Invoice)", section_style))
-        story.append(Spacer(1, 4))
-        adm_data = [["#", "Description", "Supplier", "Qty", "Unit Cost", "Total"]]
-        adm_grand = 0.0
-        for i, m in enumerate(admin_materials, 1):
-            line_total = float(m.get("total", 0))
-            adm_grand += line_total
-            adm_data.append([
-                str(i),
-                m.get("description", ""),
-                m.get("supplier", ""),
-                str(m.get("qty", "")),
-                f"\u00a3{float(m.get('unit_cost', 0)):.2f}",
-                f"\u00a3{line_total:.2f}",
-            ])
-        adm_data.append(["", "ADMIN MATERIALS TOTAL", "", "", "", f"\u00a3{adm_grand:.2f}"])
-        adm_table = Table(adm_data, colWidths=[8*mm, 50*mm, 35*mm, 15*mm, 22*mm, 30*mm])
-        adm_table.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2c3e50")),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("FONTSIZE",(0,0),(-1,-1),8),
-            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white, REDSTONE_LIGHT]),
-            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
-            ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
-            ("LEFTPADDING",(0,0),(-1,-1),4),
-            ("RIGHTPADDING",(0,0),(-1,-1),4),
-            ("TOPPADDING",(0,0),(-1,-1),3),
-            ("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ]))
-        story.append(adm_table)
+    if contractor.get("mileage_rate", 0) > 0:
         story.append(Paragraph(" TRAVEL & MILEAGE", section_style))
         story.append(Spacer(1, 4))
         travel = Table([
@@ -643,17 +614,11 @@ def build_job_card_pdf(card, contractor):
                     status_label
                 ])
             reimburse_parking = float(card.get("reimburse_parking", 0) or 0)
-            # Calculate Redstone parking directly from items (not by subtraction)
-            redstone_items = [p for p in parking_items_stored if not p.get("is_fine") and p.get("payment") == "Redstone Card"]
-            own_items      = [p for p in parking_items_stored if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
-            fine_items     = [p for p in parking_items_stored if p.get("is_fine")]
-            redstone_park_total = sum(float(p.get("cost",0)) for p in redstone_items)
-            own_park_total      = sum(float(p.get("cost",0)) for p in own_items)
-            approved_fine_total = sum(float(p.get("cost",0)) for p in fine_items if p.get("fine_approved") == True)
-            if redstone_park_total > 0:
-                park_data.append(["Redstone Card Subtotal", f"\u00a3{redstone_park_total:.2f}", "", "Company expense"])
-            if own_park_total + approved_fine_total > 0:
-                park_data.append(["Own Card Subtotal (Reimburse)", f"\u00a3{(own_park_total + approved_fine_total):.2f}", "", "On invoice"])
+            redstone_parking = parking_cost - reimburse_parking
+            if redstone_parking > 0:
+                park_data.append(["Redstone Card Total", f"\u00a3{redstone_parking:.2f}", "", "Company expense"])
+            if reimburse_parking > 0:
+                park_data.append(["Own Card Total (Reimburse)", f"\u00a3{reimburse_parking:.2f}", "", "On invoice"])
             park_data.append(["TOTAL PARKING", f"\u00a3{parking_cost:.2f}", "", ""])
             park_table = Table(park_data, colWidths=[60*mm, 25*mm, 40*mm, 55*mm])
             park_table.setStyle(TableStyle([
@@ -684,22 +649,14 @@ def build_job_card_pdf(card, contractor):
     grand_mileage = float(card.get("mileage_cost", 0))
     grand_park    = float(card.get("parking_cost", 0))
     grand_mats    = float(card.get("materials_total", 0))
-    # Admin materials
-    admin_mats_raw = card.get("admin_materials_json") or []
-    if isinstance(admin_mats_raw, str):
-        try: admin_mats_raw = json.loads(admin_mats_raw)
-        except: admin_mats_raw = []
-    grand_admin   = sum(float(m.get("total", 0)) for m in admin_mats_raw)
-    grand_total   = grand_labour + grand_mileage + grand_park + grand_mats + grand_admin
+    grand_total   = grand_labour + grand_mileage + grand_park + grand_mats
     grand_data = [["Labour", f"\u00a3{grand_labour:.2f}"]]
     if grand_mileage > 0:
         grand_data.append(["Mileage", f"\u00a3{grand_mileage:.2f}"])
     if grand_park > 0:
         grand_data.append(["Parking (total)", f"\u00a3{grand_park:.2f}"])
     if grand_mats > 0:
-        grand_data.append(["Engineer Materials (total)", f"\u00a3{grand_mats:.2f}"])
-    if grand_admin > 0:
-        grand_data.append(["Admin Materials (Redstone ordered)", f"\u00a3{grand_admin:.2f}"])
+        grand_data.append(["Materials (total)", f"\u00a3{grand_mats:.2f}"])
     grand_data.append(["TOTAL JOB COST", f"\u00a3{grand_total:.2f}"])
     grand_table = Table(grand_data, colWidths=[140*mm, 40*mm])
     grand_table.setStyle(TableStyle([
@@ -742,7 +699,7 @@ def build_invoice_pdf(card, contractor):
         "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
 
-    eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
+eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
                                fontName="Helvetica", leading=16, spaceAfter=0)
     eng_label = ParagraphStyle("engl", fontSize=8, textColor=REDSTONE_GREY,
                                fontName="Helvetica-Bold", leading=14, spaceAfter=0)
@@ -1866,48 +1823,6 @@ def card_detail(card_id):
     return jsonify(d)
 
 
-@app.route("/card/<int:card_id>/admin_materials", methods=["POST"])
-@admin_required
-def save_admin_materials(card_id):
-    """Save admin-only material lines to a job card. Never visible to engineer."""
-    data = request.get_json()
-    admin_mats = data.get("admin_materials", [])
-    cleaned = []
-    for m in admin_mats:
-        desc = str(m.get("description", "")).strip()
-        if not desc:
-            continue
-        qty       = float(m.get("qty", 1) or 1)
-        unit_cost = float(m.get("unit_cost", 0) or 0)
-        total     = round(qty * unit_cost, 2)
-        supplier  = str(m.get("supplier", "")).strip()
-        cleaned.append({
-            "description": desc,
-            "qty":         qty,
-            "unit_cost":   unit_cost,
-            "total":       total,
-            "supplier":    supplier,
-            "admin_only":  True,
-        })
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE job_cards SET admin_materials_json=%s WHERE id=%s",
-        (json.dumps(cleaned), card_id)
-    )
-    conn.commit()
-    cur.execute("SELECT invoice_total, materials_total, reimburse_total, parking_cost, reimburse_parking FROM job_cards WHERE id=%s", (card_id,))
-    card_row = cur.fetchone()
-    cur.close()
-    conn.close()
-    admin_total = sum(m["total"] for m in cleaned)
-    invoice_total = float(card_row["invoice_total"] or 0)
-    redstone_mats = max(0, float(card_row["materials_total"] or 0) - float(card_row["reimburse_total"] or 0))
-    redstone_park = max(0, float(card_row["parking_cost"] or 0) - float(card_row["reimburse_parking"] or 0))
-    total_cost_to_business = round(invoice_total + redstone_mats + redstone_park + admin_total, 2)
-    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total, "total_cost_to_business": total_cost_to_business})
-
-
 @app.route("/card/<int:card_id>/jobcard.pdf")
 @login_required
 def download_job_card(card_id):
@@ -2707,6 +2622,30 @@ def api_my_note():
     try:
         cur.execute("""
             SELECT note FROM contractor_weekly_notes
+            WHERE contractor_key = %s AND week_commencing = %s
+        """, (key, week_start))
+        row = cur.fetchone()
+    except Exception:
+        conn.rollback()
+        row = None
+    cur.close()
+    conn.close()
+    return jsonify({"note": row["note"] if row else None,
+                    "week_commencing": str(week_start)})
+
+
+@app.route("/api/my_planner_note")
+@login_required
+def api_my_planner_note():
+    """Returns the planner note written for this contractor for the current week.
+    Separate from contractor_weekly_notes — written by the planner app, read-only here."""    key = session["contractor_key"]
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT note FROM planner_weekly_notes
             WHERE contractor_key = %s AND week_commencing = %s
         """, (key, week_start))
         row = cur.fetchone()
