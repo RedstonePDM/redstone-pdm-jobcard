@@ -1086,7 +1086,12 @@ window.addEventListener('DOMContentLoaded', function() {
           if (type === 'travel') { const btn = document.getElementById('btn_travel'); if (btn) btn.style.display = 'none'; }
         });
         updateJourneyTotal();
-        if (storedJourney.some(l => l.type === 'home' || l.type === 'nextjob')) closeJourney();
+        // In edit mode, don't lock the journey — engineer may need to add corrective legs
+        // Just hide Travel to Site if already shown
+        if (!storedJourney.some(l => l.type === 'travel')) {
+          const btn = document.getElementById('btn_travel');
+          if (btn) btn.style.display = '';
+        }
 
       } else if (storedMiles > 0) {
         // journey_json not stored (card predates feature) — show total only
