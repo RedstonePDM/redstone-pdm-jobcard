@@ -594,6 +594,7 @@ function renderDrawer(card) {
       </div>` : '';
 
   // ── Invoice summary ──
+
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = Math.max(0, n(card.materials_total) - n(card.reimburse_total));
   const total_cost          = n(card.invoice_total) + redstone_mats_total + redstoneParkTotal;
@@ -601,7 +602,7 @@ function renderDrawer(card) {
   const adminMatTotal       = adminMats.reduce((s, m) => s + n(m.total), 0);
   const baseGross           = n(card.invoice_total);
   const baseRedstone        = redstone_mats_total + redstoneParkTotal;
-  console.log('DEBUG', {total_cost, adminMatTotal, baseGross, baseRedstone, redstone_mats_total, redstoneParkTotal, ownParkReimburse});
+  console.log("TOTALS", {total_cost, adminMatTotal, baseGross, baseRedstone, redstone_mats_total, redstoneParkTotal, invoice_total: card.invoice_total});
   const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + n(p.cost), 0);
 
@@ -658,7 +659,7 @@ function renderDrawer(card) {
         ${redstone_mats_total>0?`<div class="d-total-row company summary-redstone-cost"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
         ${redstoneParkTotal>0?`<div class="d-total-row company summary-redstone-cost"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
         ${adminMatTotal>0?`<div class="d-total-row company" id="summary-admin-mat-line"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
-        <div class="d-total-row" id="summary-total-cost-row"
+        <div class="d-total-row" id="summary-total-cost-row" data-debug="${JSON.stringify({total_cost,adminMatTotal,baseGross,baseRedstone})}"
           data-gross="${baseGross.toFixed(2)}"
           data-redstone="${baseRedstone.toFixed(2)}"
           style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
