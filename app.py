@@ -732,7 +732,6 @@ eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
         ("LEFTPADDING", (1,0), (1,-1), 16),
     ]))
     story.append(parties)
-
     story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e0e0e0"), spaceAfter=8))
 
