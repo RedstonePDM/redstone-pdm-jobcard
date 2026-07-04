@@ -688,19 +688,49 @@ def build_invoice_pdf(card, contractor):
         "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
 
-    parties = Table([[
-        Paragraph(
-            f"<b>Engineer:</b> {contractor['name']}<br/>"
-            f"{contractor.get('address','')}<br/>"
-            f"UTR: {contractor.get('utr','--')}<br/>"
-            f"NI: {contractor.get('ni','--')}<br/>"
-            f"Bank: {contractor.get('sort_code','--')} / {contractor.get('account_no','--')}",
-            value_style),
-        Paragraph(
-            "<b>Bill to:</b><br/>Redstone PDM Ltd<br/>9 Canberra Gardens<br/>Cranfield<br/>MK43 1AQ<br/>"
-            "VAT Reg: 248 5387 69<br/>Company: 10070131",
-            value_style),
-    ]], colWidths=[90*mm, 90*mm])
+   eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
+                               fontName="Helvetica", leading=16, spaceAfter=0)
+    eng_label = ParagraphStyle("engl", fontSize=8, textColor=REDSTONE_GREY,
+                               fontName="Helvetica-Bold", leading=14, spaceAfter=0)
+    bill_style = ParagraphStyle("bill", fontSize=9, textColor=REDSTONE_DARK,
+                                fontName="Helvetica", leading=16, spaceAfter=0)
+
+    eng_block = [
+        Paragraph("<b>Engineer</b>", eng_label),
+        Spacer(1, 3),
+        Paragraph(contractor['name'], ParagraphStyle("ename", fontSize=11,
+                  textColor=REDSTONE_DARK, fontName="Helvetica-Bold", leading=14)),
+        Spacer(1, 6),
+        Paragraph(contractor.get('address','').replace(', ', '<br/>'), eng_style),
+        Spacer(1, 6),
+        Paragraph(f"<b>Tel:</b>  {contractor.get('phone','--')}", eng_style),
+        Paragraph(f"<b>Email:</b>  {contractor.get('email','--')}", eng_style),
+        Spacer(1, 6),
+        Paragraph(f"<b>UTR:</b>  {contractor.get('utr','--')}", eng_style),
+        Paragraph(f"<b>NI:</b>  {contractor.get('ni','--')}", eng_style),
+        Paragraph(f"<b>Bank:</b>  {contractor.get('sort_code','--')} &nbsp;/&nbsp; {contractor.get('account_no','--')}", eng_style),
+    ]
+
+    bill_block = [
+        Paragraph("<b>Bill to</b>", eng_label),
+        Spacer(1, 3),
+        Paragraph("Redstone PDM Ltd", ParagraphStyle("bname", fontSize=11,
+                  textColor=REDSTONE_DARK, fontName="Helvetica-Bold", leading=14)),
+        Spacer(1, 6),
+        Paragraph("9 Canberra Gardens<br/>Cranfield<br/>Bedfordshire<br/>MK43 1AQ", bill_style),
+        Spacer(1, 6),
+        Paragraph("<b>VAT Reg:</b>  248 5387 69", bill_style),
+        Paragraph("<b>Company:</b>  10070131", bill_style),
+    ]
+
+    parties = Table([[eng_block, bill_block]], colWidths=[95*mm, 85*mm])
+    parties.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("LEFTPADDING", (0,0), (-1,-1), 0),
+        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+        ("LINEAFTER", (0,0), (0,-1), 0.5, colors.HexColor("#e0e0e0")),
+        ("LEFTPADDING", (1,0), (1,-1), 16),
+    ]))
     story.append(parties)
     story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e0e0e0"), spaceAfter=8))
