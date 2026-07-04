@@ -1652,7 +1652,7 @@ def mark_paid(card_id):
 
 
 @app.route("/card/<int:card_id>/detail")
-@admin_required
+@login_required
 def card_detail(card_id):
     conn = get_db()
     cur = conn.cursor()
@@ -1667,6 +1667,8 @@ def card_detail(card_id):
     conn.close()
     if not card:
         return jsonify({"error": "Not found"}), 404
+    if session.get("role") != "admin" and card["contractor_key"] != session.get("contractor_key"):
+        return jsonify({"error": "Forbidden"}), 403
     d = dict(card)
     for k, v in d.items():
         if hasattr(v, 'isoformat'):
