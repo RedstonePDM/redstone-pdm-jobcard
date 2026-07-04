@@ -655,7 +655,10 @@ function renderDrawer(card) {
         ${redstone_mats_total>0?`<div class="d-total-row company summary-redstone-cost"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
         ${redstoneParkTotal>0?`<div class="d-total-row company summary-redstone-cost"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
         ${adminMatTotal>0?`<div class="d-total-row company" id="summary-admin-mat-line"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
-        <div class="d-total-row" id="summary-total-cost-row" style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
+        <div class="d-total-row" id="summary-total-cost-row"
+          data-gross="${parseFloat(card.invoice_total||0).toFixed(2)}"
+          data-redstone="${(redstone_mats_total + redstoneParkTotal).toFixed(2)}"
+          style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
       </div>
       ${fineNote}
     </div>
@@ -903,13 +906,9 @@ function recalcTotalCost(adminTotal) {
   const totalCostRow = document.getElementById('summary-total-cost-row');
   if (!totalCostRow) return;
 
-  const grossText = document.getElementById('drawer-gross')?.textContent || '£0';
-  const gross = parseFloat(grossText.replace(/[^0-9.]/g, '')) || 0;
-
-  let redstoneCosts = 0;
-  document.querySelectorAll('.summary-redstone-cost span:last-child').forEach(el => {
-    redstoneCosts += parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
-  });
+  // Read gross from data attribute set when drawer renders (not from formatted text)
+  const gross = parseFloat(totalCostRow.dataset.gross || 0);
+  const redstoneCosts = parseFloat(totalCostRow.dataset.redstone || 0);
 
   // Update admin mat line in summary
   const adminLineEl = document.getElementById('summary-admin-mat-line');
