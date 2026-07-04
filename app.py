@@ -41,7 +41,11 @@ FROM_EMAIL       = os.environ.get("FROM_EMAIL", "info@redstonepdm.com")
 ACCOUNTS_EMAIL   = os.environ.get("ACCOUNTS_EMAIL", "accounts@redstonepdm.com")
 GMAPS_API_KEY    = os.environ.get("GMAPS_API_KEY", "")
 PLANNER_URL      = os.environ.get("PLANNER_URL", "https://redstone-planner-production.up.railway.app")
-DVLA_API_KEY     = os.environ.get("DVLA_API_KEY", "")
+MOT_CLIENT_ID     = os.environ.get("MOT_CLIENT_ID", "")
+MOT_CLIENT_SECRET = os.environ.get("MOT_CLIENT_SECRET", "")
+MOT_API_KEY       = os.environ.get("MOT_API_KEY", "")
+MOT_TOKEN_URL     = "https://login.microsoftonline.com/a455b827-244f-4c97-b5b4-ce5d13b4d00c/oauth2/v2.0/token"
+MOT_SCOPE_URL     = "https://tapi.dvsa.gov.uk/.default"
 TEST_MODE        = os.environ.get("TEST_MODE", "false").lower() == "true"
 TEST_EMAIL       = os.environ.get("TEST_EMAIL", "dave@redstonepdm.com")
 
@@ -384,40 +388,103 @@ def admin_required(f):
     return decorated
 
 
-# ── DVLA MOT Lookup ───────────────────────────────────────────────────────────
+# ── DVSA MOT History API ──────────────────────────────────────────────────────
+
+def get_mot_token():
+    """Get OAuth2 bearer token from Microsoft identity platform."""
+    try:
+        resp = requests.post(MOT_TOKEN_URL, data={
+            "grant_type":    "client_credentials",
+            "client_id":     MOT_CLIENT_ID,
+            "client_secret": MOT_CLIENT_SECRET,
+            "scope":         MOT_SCOPE_URL,
+        }, timeout=10)
+        if resp.status_code == 200:
+            return resp.json().get("access_token")
+        print(f"MOT token error: {resp.status_code} {resp.text}")
+        return None
+    except Exception as e:
+        print(f"MOT token exception: {e}")
+        return None
+
 
 def lookup_mot(reg):
-    if not DVLA_API_KEY:
-        return {"status": "unknown", "expiry": None, "error": "No API key"}
+    if not MOT_CLIENT_ID or not MOT_CLIENT_SECRET or not MOT_API_KEY:
+        return {"status": "unknown", "expiry": None, "error": "MOT API credentials not configured"}
     try:
         reg_clean = reg.replace(" ", "").upper()
-        url = "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles"
-        headers = {"x-api-key": DVLA_API_KEY, "Content-Type": "application/json"}
-        payload = {"registrationNumber": reg_clean}
-        r = requests.post(url, headers=headers, json=payload, timeout=10)
+        token = get_mot_token()
+        if not token:
+            return {"status": "error", "expiry": None, "error": "Could not obtain MOT API token"}
+
+        url = f"https://history.mot.api.gov.uk/v1/trade/vehicles/registration/{reg_clean}"
+        headers = {
+            "Authorization":  f"Bearer {token}",
+            "X-Api-Key":      MOT_API_KEY,
+            "Content-Type":   "application/json",
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+
         if r.status_code == 200:
             data = r.json()
-            mot_expiry_str = data.get("motExpiryDate")
+            # API returns a list of vehicle records
+            vehicle = data[0] if isinstance(data, list) and data else data
+
+            mot_tests = vehicle.get("motTests", [])
             mot_expiry = None
             mot_status = "unknown"
-            if mot_expiry_str:
-                mot_expiry = datetime.strptime(mot_expiry_str, "%Y-%m-%d").date()
-                today = date.today()
-                days_left = (mot_expiry - today).days
-                if days_left < 0:
-                    mot_status = "expired"
-                elif days_left <= 30:
-                    mot_status = "due_soon"
-                else:
-                    mot_status = "valid"
+            last_test_date = None
+            last_odometer = None
+            advisories = []
+
+            if mot_tests:
+                # Most recent test is first
+                latest = mot_tests[0]
+                expiry_str = latest.get("expiryDate")
+                last_test_date = latest.get("completedDate", "")[:10] if latest.get("completedDate") else None
+                last_odometer = latest.get("odometerValue")
+
+                # Collect advisory notices from latest test
+                for item in latest.get("rfrAndComments", []):
+                    if item.get("type") in ("ADVISORY", "USER ENTERED"):
+                        advisories.append(item.get("text", ""))
+
+                if expiry_str:
+                    try:
+                        mot_expiry = datetime.strptime(expiry_str, "%Y.%m.%d").date()
+                    except Exception:
+                        try:
+                            mot_expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+                        except Exception:
+                            mot_expiry = None
+
+                if mot_expiry:
+                    days_left = (mot_expiry - date.today()).days
+                    if days_left < 0:
+                        mot_status = "expired"
+                    elif days_left <= 30:
+                        mot_status = "due_soon"
+                    else:
+                        mot_status = "valid"
+
             return {
-                "status": mot_status, "expiry": mot_expiry,
-                "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
-                "make": data.get("make", ""), "colour": data.get("colour", ""),
-                "year": data.get("yearOfManufacture"),
+                "status":         mot_status,
+                "expiry":         mot_expiry,
+                "days_left":      (mot_expiry - date.today()).days if mot_expiry else None,
+                "make":           vehicle.get("make", ""),
+                "model":          vehicle.get("model", ""),
+                "colour":         vehicle.get("primaryColour", ""),
+                "year":           vehicle.get("manufactureYear"),
+                "last_test_date": last_test_date,
+                "last_odometer":  last_odometer,
+                "advisories":     advisories,
             }
+
+        elif r.status_code == 404:
+            return {"status": "not_found", "expiry": None, "error": "Vehicle not found in MOT database"}
         else:
-            return {"status": "error", "expiry": None, "error": f"DVLA returned {r.status_code}"}
+            return {"status": "error", "expiry": None, "error": f"MOT API returned {r.status_code}: {r.text[:200]}"}
+
     except Exception as e:
         return {"status": "error", "expiry": None, "error": str(e)}
 
