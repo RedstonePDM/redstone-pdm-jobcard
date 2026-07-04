@@ -595,10 +595,12 @@ function renderDrawer(card) {
 
   // ── Invoice summary — use item-calculated values not DB fields ──
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
-  const redstone_mats_total = parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0);
+  const redstone_mats_total = Math.max(0, parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0));
   const total_cost          = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstoneParkTotal;
   const adminMats           = parseJson(card.admin_materials_json);
   const adminMatTotal       = adminMats.reduce((s, m) => s + parseFloat(m.total||0), 0);
+  const baseGross           = parseFloat(card.invoice_total || 0);
+  const baseRedstone        = redstone_mats_total + redstoneParkTotal;
   const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + parseFloat(p.cost || 0), 0);
 
@@ -656,8 +658,8 @@ function renderDrawer(card) {
         ${redstoneParkTotal>0?`<div class="d-total-row company summary-redstone-cost"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
         ${adminMatTotal>0?`<div class="d-total-row company" id="summary-admin-mat-line"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
         <div class="d-total-row" id="summary-total-cost-row"
-          data-gross="${parseFloat(card.invoice_total||0).toFixed(2)}"
-          data-redstone="${(redstone_mats_total + redstoneParkTotal).toFixed(2)}"
+          data-gross="${baseGross.toFixed(2)}"
+          data-redstone="${baseRedstone.toFixed(2)}"
           style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
       </div>
       ${fineNote}
@@ -902,16 +904,15 @@ function removeAdminMat(i) {
 }
 
 function recalcTotalCost(adminTotal) {
-  adminTotal = parseFloat(adminTotal) || 0;
+  adminTotal = isNaN(parseFloat(adminTotal)) ? 0 : parseFloat(adminTotal);
   const totalCostRow = document.getElementById('summary-total-cost-row');
   if (!totalCostRow) return;
 
-  // Read gross from data attribute set when drawer renders (not from formatted text)
-  const gross = parseFloat(totalCostRow.dataset.gross || 0);
-  const redstoneCosts = parseFloat(totalCostRow.dataset.redstone || 0);
+  const gross       = isNaN(parseFloat(totalCostRow.dataset.gross))    ? 0 : parseFloat(totalCostRow.dataset.gross);
+  const redstone    = isNaN(parseFloat(totalCostRow.dataset.redstone)) ? 0 : parseFloat(totalCostRow.dataset.redstone);
 
-  // Update admin mat line in summary
-  const adminLineEl = document.getElementById('summary-admin-mat-line');
+  // Update or create admin mat summary line
+  let adminLineEl = document.getElementById('summary-admin-mat-line');
   if (adminTotal > 0) {
     if (adminLineEl) {
       adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
@@ -926,7 +927,7 @@ function recalcTotalCost(adminTotal) {
     adminLineEl.remove();
   }
 
-  const newTotal = gross + redstoneCosts + adminTotal;
+  const newTotal = gross + redstone + adminTotal;
   totalCostRow.querySelector('span:last-child').textContent = `£${newTotal.toFixed(2)}`;
 }
 
