@@ -168,6 +168,10 @@
     font-size: 18px; cursor: pointer; padding: 2px 6px; line-height: 1;
   }
   .mat-total { font-size: 12px; color: #27ae60; font-weight: 700; margin-top: 6px; text-align: right; }
+  .mat-hint {
+    background: #fff8ef; border: 1px solid #ffd89b; border-radius: 8px;
+    padding: 8px 12px; font-size: 12px; color: #856404; margin: 6px 0; line-height: 1.5;
+  }
   .add-mat-btn {
     width: 100%; padding: 12px;
     background: #f0f2f5; border: 2px dashed #bdc3c7;
@@ -516,11 +520,7 @@
       <input type="hidden" name="material_count" id="material_count" value="0">
       <button type="button" class="add-mat-btn" onclick="addMaterial()">+ Add Material Line</button>
       <div style="margin-top:12px;font-size:13px;color:#7f8c8d;">
-        {% if contractor.redstone_card %}
-        Most materials on Redstone company card. Select "Own card/cash" only if card unavailable.
-        {% else %}
-        All materials on your own card — will be reimbursed on pay run.
-        {% endif %}
+        Select the correct source for each item. For van stock, enter the full unit cost and the decimal quantity used (e.g. 0.5 = half). Redstone Card and Redstone Van Stock are not reimbursed — they are billed to the customer by Redstone.
       </div>
     </div>
   </div>
@@ -882,33 +882,58 @@ function addMaterial(prefill) {
   const qty      = prefill ? (prefill.qty || 1)          : 1;
   const unitCost = prefill ? (prefill.unit_cost || 0)    : 0;
   const payment  = prefill ? (prefill.payment || 'Redstone Card') : 'Redstone Card';
-  const total    = prefill ? (prefill.total || 0)         : 0;
+  const total    = prefill ? (prefill.total || 0)        : 0;
   const n = matCount;
+  const isVanStock = payment === 'Redstone Van Stock' || payment === 'Own Van Stock';
   div.innerHTML = `
     <div class="mat-number">Item ${n}</div>
     <button type="button" class="remove-mat" onclick="removeMat(${n})">×</button>
     <div class="field"><label>Description</label>
-      <input type="text" name="mat_desc_${n}" value="${desc}" placeholder="e.g. Sand paper, Paint..."></div>
-    <div class="mat-grid">
-      <div class="field"><label>Qty</label>
-        <input type="number" name="mat_qty_${n}" value="${qty}" min="0.01" step="0.01" oninput="calcMatTotal(${n})"></div>
-      <div class="field"><label>Cost inc VAT (£)</label>
-        <input type="number" name="mat_cost_${n}" value="${unitCost}" min="0" step="0.01" oninput="calcMatTotal(${n})"></div>
-    </div>
-    <div class="field"><label>Payment Method</label>
-      <select name="mat_payment_${n}">
-        <option value="Redstone Card" ${payment === 'Redstone Card' ? 'selected' : ''}>Redstone Company Card</option>
-        <option value="Own card/cash" ${payment !== 'Redstone Card' ? 'selected' : ''}>Own Card / Cash (Reimburse me)</option>
+      <input type="text" name="mat_desc_${n}" value="${desc}" placeholder="e.g. Paint, Fixings, Altro..."></div>
+    <div class="field"><label>Payment / Source</label>
+      <select name="mat_payment_${n}" id="mat_payment_sel_${n}" onchange="onPaymentChange(${n})">
+        <option value="Redstone Card"      ${payment === 'Redstone Card'      ? 'selected' : ''}>🏢 Redstone Card (new purchase)</option>
+        <option value="Own card/cash"      ${payment === 'Own card/cash'      ? 'selected' : ''}>💳 Own Card / Cash (reimburse me)</option>
+        <option value="Redstone Van Stock" ${payment === 'Redstone Van Stock' ? 'selected' : ''}>🚐 Redstone Van Stock (pre-bought by Redstone)</option>
+        <option value="Own Van Stock"      ${payment === 'Own Van Stock'      ? 'selected' : ''}>🎒 Own Van Stock (pre-bought by me — reimburse)</option>
       </select></div>
-    <div class="mat-total" id="mat_total_${n}">Total: £${parseFloat(total).toFixed(2)}</div>`;
+    <div id="mat_hint_${n}" class="mat-hint" style="display:${isVanStock ? 'block' : 'none'}">
+      Enter the <strong>full unit cost</strong> of the item (e.g. £10 for a full tin), then the <strong>quantity used</strong> as a decimal (e.g. 0.5 = half a tin). System calculates the cost for this job.
+    </div>
+    <div class="mat-grid">
+      <div class="field">
+        <label id="mat_qty_label_${n}">${isVanStock ? 'Qty Used (decimal)' : 'Qty'}</label>
+        <input type="number" name="mat_qty_${n}" value="${qty}" min="0.001" step="0.001" oninput="calcMatTotal(${n})">
+      </div>
+      <div class="field">
+        <label id="mat_cost_label_${n}">${isVanStock ? 'Full Unit Cost (£)' : 'Cost inc VAT (£)'}</label>
+        <input type="number" name="mat_cost_${n}" value="${unitCost}" min="0" step="0.01" oninput="calcMatTotal(${n})">
+      </div>
+    </div>
+    <div class="mat-total" id="mat_total_${n}">Total for this job: £${parseFloat(total).toFixed(2)}</div>`;
   container.appendChild(div);
+}
+
+function onPaymentChange(n) {
+  const sel = document.getElementById(`mat_payment_sel_${n}`);
+  const payment = sel.value;
+  const isVanStock = payment === 'Redstone Van Stock' || payment === 'Own Van Stock';
+  const hint = document.getElementById(`mat_hint_${n}`);
+  const qtyLabel = document.getElementById(`mat_qty_label_${n}`);
+  const costLabel = document.getElementById(`mat_cost_label_${n}`);
+  if (hint)      hint.style.display     = isVanStock ? 'block' : 'none';
+  if (qtyLabel)  qtyLabel.textContent   = isVanStock ? 'Qty Used (decimal)' : 'Qty';
+  if (costLabel) costLabel.textContent  = isVanStock ? 'Full Unit Cost (£)' : 'Cost inc VAT (£)';
+  calcMatTotal(n);
 }
 
 function removeMat(n) { document.getElementById(`mat_${n}`)?.remove(); }
 function calcMatTotal(n) {
   const qty = parseFloat(document.querySelector(`[name=mat_qty_${n}]`)?.value || 0);
   const cost = parseFloat(document.querySelector(`[name=mat_cost_${n}]`)?.value || 0);
-  document.getElementById(`mat_total_${n}`).textContent = `Total: £${(qty*cost).toFixed(2)}`;
+  const lineTotal = (qty * cost).toFixed(2);
+  const el = document.getElementById(`mat_total_${n}`);
+  if (el) el.textContent = `Total for this job: £${lineTotal}`;
 }
 
 // ── Parking ────────────────────────────────────────────────
