@@ -450,7 +450,7 @@ function renderDrawer(card) {
     if (redstone_card_mats.length) {
       rows += `<tr style="background:#f9f9f9"><td colspan="5" style="font-size:10px;font-weight:700;color:#555;padding:5px 8px">REDSTONE CARD</td></tr>`;
       redstone_card_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#555">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${n(m.unit_cost).toFixed(2)}</td><td style="color:#555">£${n(m.total).toFixed(2)}</td></tr>`;
       });
     }
 
@@ -458,7 +458,7 @@ function renderDrawer(card) {
     if (redstone_van_mats.length) {
       rows += `<tr style="background:#f9f9f9"><td colspan="5" style="font-size:10px;font-weight:700;color:#555;padding:5px 8px">REDSTONE VAN STOCK</td></tr>`;
       redstone_van_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#555">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${n(m.unit_cost).toFixed(2)}</td><td style="color:#555">£${n(m.total).toFixed(2)}</td></tr>`;
       });
     }
 
@@ -466,7 +466,7 @@ function renderDrawer(card) {
     if (own_card_mats.length) {
       rows += `<tr style="background:#fdf0ef"><td colspan="5" style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px">OWN CARD — REIMBURSE</td></tr>`;
       own_card_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${n(m.unit_cost).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${n(m.total).toFixed(2)}</td></tr>`;
       });
     }
 
@@ -474,12 +474,12 @@ function renderDrawer(card) {
     if (own_van_mats.length) {
       rows += `<tr style="background:#fdf0ef"><td colspan="5" style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px">OWN VAN STOCK — REIMBURSE</td></tr>`;
       own_van_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${n(m.unit_cost).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${n(m.total).toFixed(2)}</td></tr>`;
       });
     }
 
     const reimb    = n(card.reimburse_total);
-    const redTotal = redstone_mats.reduce((s,m) => s + parseFloat(m.total||0), 0);
+    const redTotal = redstone_mats.reduce((s,m) => s + n(m.total), 0);
     let totRow = '';
     if (redTotal > 0) totRow += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Redstone Total (not reimbursed)</td><td></td><td>£${redTotal.toFixed(2)}</td></tr>`;
     if (reimb > 0)    totRow += `<tr style="background:#fdf0ef;font-weight:700;color:#c0392b"><td colspan="3">Reimbursable Total</td><td></td><td>£${reimb.toFixed(2)}</td></tr>`;
@@ -501,9 +501,9 @@ function renderDrawer(card) {
   const ownParkItems      = parkingItems.filter(p => !p.is_fine && p.payment !== 'Redstone Card');
   const redstoneParkItems = parkingItems.filter(p => !p.is_fine && p.payment === 'Redstone Card');
   const allFineItems      = parkingItems.filter(p => p.is_fine);
-  const ownParkTotal      = ownParkItems.reduce((s,p) => s + parseFloat(p.cost||0), 0);
-  const redstoneParkTotal = redstoneParkItems.reduce((s,p) => s + parseFloat(p.cost||0), 0);
-  const approvedFineTotal = allFineItems.filter(p => p.fine_approved === true).reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const ownParkTotal      = ownParkItems.reduce((s,p) => s + n(p.cost), 0);
+  const redstoneParkTotal = redstoneParkItems.reduce((s,p) => s + n(p.cost), 0);
+  const approvedFineTotal = allFineItems.filter(p => p.fine_approved === true).reduce((s,p) => s + n(p.cost), 0);
   const hasPendingFines   = card.status !== 'approved' && card.status !== 'paid' &&
     parkingItems.some(p => p.is_fine && p.fine_approved !== true && p.fine_approved !== false);
 
@@ -511,7 +511,7 @@ function renderDrawer(card) {
     let parkRows = '';
     if (parkingItems.length) {
       parkingItems.forEach((p, i) => {
-        const cost = parseFloat(p.cost || 0);
+        const cost = n(p.cost);
         if (p.is_fine) {
           let fineClass = 'fine-pending';
           let fineLabel = '⚠ Parking Fine — pending approval';
@@ -561,7 +561,7 @@ function renderDrawer(card) {
       let fineItems = '';
       parkingItems.forEach((p, i) => {
         if (p.is_fine && p.fine_approved !== true && p.fine_approved !== false) {
-          const cost = parseFloat(p.cost || 0);
+          const cost = n(p.cost);
           fineItems += `<div class="fine-item" id="fine-item-${i}">
             <div class="fine-item-desc">${p.description || 'Parking Fine'}</div>
             <div class="fine-item-cost">£${cost.toFixed(2)} — paid by engineer, pending your decision</div>
@@ -832,7 +832,7 @@ let adminMatCount = 0;
 
 function buildAdminMatSection(card) {
   const existing = parseJson(card.admin_materials_json);
-  const total = existing.reduce((s, m) => s + parseFloat(m.total||0), 0);
+  const total = existing.reduce((s, m) => s + n(m.total), 0);
   let cards = '';
   existing.forEach((m, i) => {
     cards += buildAdminMatCard(i, m.description||'', m.supplier||'', m.qty||1, m.unit_cost||0, m.total||0);
