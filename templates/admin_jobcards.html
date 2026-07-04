@@ -594,15 +594,6 @@ function renderDrawer(card) {
       </div>` : '';
 
   // ── Invoice summary ──
-  console.log('DEBUG renderDrawer:', {
-    invoice_total: card.invoice_total,
-    materials_total: card.materials_total,
-    reimburse_total: card.reimburse_total,
-    parking_cost: card.parking_cost,
-    reimburse_parking: card.reimburse_parking,
-    ownParkTotal, redstoneParkTotal, approvedFineTotal
-  });
-
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = Math.max(0, n(card.materials_total) - n(card.reimburse_total));
   const total_cost          = n(card.invoice_total) + redstone_mats_total + redstoneParkTotal;
@@ -610,6 +601,7 @@ function renderDrawer(card) {
   const adminMatTotal       = adminMats.reduce((s, m) => s + n(m.total), 0);
   const baseGross           = n(card.invoice_total);
   const baseRedstone        = redstone_mats_total + redstoneParkTotal;
+  console.log('DEBUG', {total_cost, adminMatTotal, baseGross, baseRedstone, redstone_mats_total, redstoneParkTotal, ownParkReimburse});
   const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + n(p.cost), 0);
 
