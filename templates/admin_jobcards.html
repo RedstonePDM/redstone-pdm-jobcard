@@ -593,8 +593,7 @@ function renderDrawer(card) {
         <div style="font-size:13px;color:#333">${card.query_note}</div>
       </div>` : '';
 
-  // ── Invoice summary — safe numeric helper ──
-  function n(v) { const f = parseFloat(v); return isNaN(f) ? 0 : f; }
+  // ── Invoice summary ──
 
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = Math.max(0, n(card.materials_total) - n(card.reimburse_total));
@@ -826,6 +825,9 @@ function parseJson(val) {
   if (Array.isArray(val)) return val;
   return [];
 }
+
+// Safe numeric parse — used everywhere to prevent NaN propagation
+function n(v) { const f = parseFloat(v); return isNaN(f) ? 0 : f; }
 
 // ── Admin Materials ──
 let adminMatCount = 0;
