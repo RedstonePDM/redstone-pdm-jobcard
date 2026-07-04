@@ -377,23 +377,33 @@ function renderDrawer(card) {
 
   // ── Parking HTML ──
   let parkHTML = '';
-  const parkingCost    = parseFloat(card.parking_cost || 0);
-  const reimbursePark  = parseFloat(card.reimburse_parking || 0);
-  const redstonePark   = parkingCost - reimbursePark;
+  const parkingCost = parseFloat(card.parking_cost || 0);
 
   if (parkingCost > 0) {
     let parkRows = '';
+
+    // Calculate totals directly from items (not by subtraction)
+    const ownParkItems      = parkingItems.filter(p => !p.is_fine && p.payment !== 'Redstone Card');
+    const redstoneParkItems = parkingItems.filter(p => !p.is_fine && p.payment === 'Redstone Card');
+    const fineItems         = parkingItems.filter(p => p.is_fine);
+    const ownParkTotal      = ownParkItems.reduce((s, p) => s + parseFloat(p.cost||0), 0);
+    const redstoneParkTotal = redstoneParkItems.reduce((s, p) => s + parseFloat(p.cost||0), 0);
+    const approvedFineTotal = fineItems.filter(p => p.fine_approved === true).reduce((s, p) => s + parseFloat(p.cost||0), 0);
 
     if (parkingItems.length) {
       parkingItems.forEach(p => {
         const cost = parseFloat(p.cost || 0);
         if (p.is_fine) {
+          const fineApproved = p.fine_approved === true;
+          const fineRejected = p.fine_approved === false;
+          const fineLabel = fineApproved ? '✓ Approved — reimbursable' : fineRejected ? '✗ Rejected — not on invoice' : 'Pending approval — not on invoice';
+          const fineColor = fineApproved ? '#1a7a4a' : '#856404';
           parkRows += `<div class="parking-split-row fine">
             <div>
               <div class="parking-fine-label">⚠ ${p.description || 'Parking Fine'}</div>
-              <div style="font-size:10px;color:#856404">Pending approval — not on invoice</div>
+              <div style="font-size:10px;color:${fineColor}">${fineLabel}</div>
             </div>
-            <div style="color:#856404;font-weight:700">£${cost.toFixed(2)}</div>
+            <div style="color:${fineApproved ? '#1a7a4a' : '#856404'};font-weight:700">£${cost.toFixed(2)}</div>
           </div>`;
         } else if (p.payment === 'Redstone Card') {
           parkRows += `<div class="parking-split-row redstone">
@@ -415,21 +425,25 @@ function renderDrawer(card) {
       });
 
       if (parkingItems.length > 1) {
-        if (reimbursePark > 0) {
+        const totalReimburse = ownParkTotal + approvedFineTotal;
+        if (totalReimburse > 0) {
           parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0">
-            <div class="parking-own-label">Reimbursable Total</div>
-            <div class="parking-own-amount">£${reimbursePark.toFixed(2)}</div>
+            <div class="parking-own-label">Own Card Total (Reimburse)</div>
+            <div class="parking-own-amount">£${totalReimburse.toFixed(2)}</div>
           </div>`;
         }
-        if (redstonePark > 0) {
-          parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:2px solid #e0e0e0">
+        if (redstoneParkTotal > 0) {
+          parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:1px solid #e0e0e0">
             <div class="parking-redstone-label">Redstone Card Total (ref only)</div>
-            <div class="parking-grey-amount">£${redstonePark.toFixed(2)}</div>
+            <div class="parking-grey-amount">£${redstoneParkTotal.toFixed(2)}</div>
           </div>`;
         }
+        parkRows += `<div class="parking-split-row" style="font-weight:700;background:#f0f2f5;border-top:2px solid #ccc">
+          <div style="color:#1a2332">Total Parking</div>
+          <div style="color:#1a2332;font-weight:700">£${parkingCost.toFixed(2)}</div>
+        </div>`;
       }
     } else {
-      // No itemised breakdown — show simple total
       parkRows = `<div class="parking-split-row own">
         <div><div class="parking-own-label">Parking</div></div>
         <div class="parking-own-amount">£${parkingCost.toFixed(2)}</div>
