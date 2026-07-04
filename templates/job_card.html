@@ -640,8 +640,12 @@ const IS_EDIT     = {{ 'true' if edit_card else 'false' }};
   }
   let _mRaw = {{ (edit_card.materials_json | tojson) if edit_card and edit_card.materials_json else '[]' }};
   let _pRaw = {{ (edit_card.parking_items_json | tojson) if edit_card and edit_card.parking_items_json else '[]' }};
+  let _jRaw = {{ (edit_card.journey_json | tojson) if edit_card and edit_card.journey_json else '[]' }};
   window.PREFILL_MATERIALS = safeJson(_mRaw);
   window.PREFILL_PARKING   = safeJson(_pRaw);
+  window.PREFILL_JOURNEY   = safeJson(_jRaw);
+  window.EDIT_MILES        = {{ edit_card.mileage_miles if edit_card and edit_card.mileage_miles else 0 }};
+  window.EDIT_MILEAGE_COST = {{ edit_card.mileage_cost if edit_card and edit_card.mileage_cost else 0 }};
 })();
 
 // ── Confirmation Modal ─────────────────────────────────────
@@ -1042,40 +1046,42 @@ window.addEventListener('DOMContentLoaded', function() {
   const parks = window.PREFILL_PARKING || [];
   if (parks.length > 0) parks.forEach(p => addParking(p));
 
-  // Rebuild journey display from stored journey_json (no API needed — just show recorded miles)
+  // Rebuild journey display from stored data
   if (IS_EDIT) {
     try {
-      const rawJourney = document.getElementById('journey_json').value || '[]';
-      const storedJourney = JSON.parse(rawJourney);
-      const storedMiles = parseFloat(document.getElementById('total_miles').value || 0);
+      const storedJourney = window.PREFILL_JOURNEY || [];
+      const storedMiles   = parseFloat(window.EDIT_MILES || 0);
+      const storedCost    = parseFloat(window.EDIT_MILEAGE_COST || 0);
 
-      if (storedJourney && storedJourney.length > 0) {
-        // Full journey data available — rebuild legs
+      if (storedJourney.length > 0) {
+        // Full leg-by-leg data — rebuild each leg as read-only display
         legs = storedJourney;
         legCount = storedJourney.length;
         const container = document.getElementById('journey_legs');
-        const typeLabels = { travel: '🚗 Travel to Site', materials: '🛒 Materials Run', home: '🏠 Travel Home', nextjob: '➡️ Drive to Next Job' };
+        const typeLabels   = { travel: '🚗 Travel to Site', materials: '🛒 Materials Run', home: '🏠 Travel Home', nextjob: '➡️ Drive to Next Job' };
         const badgeClasses = { travel: 'badge-travel', materials: 'badge-materials', home: 'badge-home', nextjob: 'badge-travel' };
-        const legClasses = { travel: 'travel', materials: 'materials', home: 'home', nextjob: 'travel' };
+        const legClasses   = { travel: 'travel', materials: 'materials', home: 'home', nextjob: 'travel' };
         storedJourney.forEach((leg, idx) => {
-          const id = idx + 1;
-          const type = leg.type || 'travel';
+          const id    = idx + 1;
+          const type  = leg.type || 'travel';
           const miles = parseFloat(leg.miles || 0);
-          const cost = parseFloat(leg.cost || 0);
-          const div = document.createElement('div');
+          const cost  = parseFloat(leg.cost || 0);
+          const div   = document.createElement('div');
           div.className = `journey-leg ${legClasses[type] || 'travel'}`;
           div.id = `leg_${id}`;
           div.innerHTML = `
             <span class="leg-type-badge ${badgeClasses[type] || 'badge-travel'}">${typeLabels[type] || type}</span>
+            <div style="font-size:11px;color:#888;margin:4px 0 8px;font-style:italic;">Recorded on original submission — read only</div>
             <div class="leg-row">
               <div class="field"><label>From</label>
-                <input type="text" id="leg_from_${id}" value="${leg.from || ''}" readonly style="background:#f8f8f8"></div>
-              <div class="field"><label>To</label>
-                <input type="text" id="leg_to_${id}" value="${leg.to || ''}" readonly style="background:#f8f8f8"></div>
+                <input type="text" value="${(leg.from || '').replace(/"/g,'&quot;')}" readonly style="background:#f8f8f8;color:#555;font-size:13px;padding:8px 10px;"></div>
+              <div class="field"><label>${type === 'materials' ? 'Merchant' : 'To'}</label>
+                <input type="text" value="${(leg.to || '').replace(/"/g,'&quot;')}" readonly style="background:#f8f8f8;color:#555;font-size:13px;padding:8px 10px;"></div>
             </div>
-            <div class="leg-miles" id="leg_miles_${id}">${miles > 0 ? (MILEAGE_RATE > 0 ? `${miles} miles — £${(miles * MILEAGE_RATE).toFixed(2)}` : `${miles} miles`) : 'No miles recorded'}</div>
-            ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this card</div>' : ''}
-          `;
+            <div class="leg-miles" id="leg_miles_${id}">
+              ${miles > 0 ? `${miles} miles${MILEAGE_RATE > 0 ? ' — £' + cost.toFixed(2) : ''}` : 'No miles recorded'}
+              ${type === 'nextjob' ? ' — not counted on this card' : ''}
+            </div>`;
           container.appendChild(div);
           if (type === 'travel') { const btn = document.getElementById('btn_travel'); if (btn) btn.style.display = 'none'; }
         });
@@ -1083,24 +1089,32 @@ window.addEventListener('DOMContentLoaded', function() {
         if (storedJourney.some(l => l.type === 'home' || l.type === 'nextjob')) closeJourney();
 
       } else if (storedMiles > 0) {
-        // No leg detail stored — show summary row from mileage_miles
+        // journey_json not stored (card predates feature) — show total only
         const container = document.getElementById('journey_legs');
-        const cost = storedMiles * MILEAGE_RATE;
         const div = document.createElement('div');
         div.className = 'journey-leg travel';
+        div.style.cssText = 'border-left:4px solid #2980b9;';
         div.innerHTML = `
-          <span class="leg-type-badge badge-travel">🚗 Recorded Journey</span>
-          <div style="font-size:12px;color:#555;margin:6px 0;">Journey legs not individually stored — total mileage retained below.</div>
-          <div class="leg-miles">${storedMiles} miles${MILEAGE_RATE > 0 ? ' — £' + cost.toFixed(2) : ''}</div>
-        `;
+          <span class="leg-type-badge badge-travel">🚗 Journey Summary</span>
+          <div style="background:#eaf4fb;border-radius:8px;padding:12px;margin-top:8px;">
+            <div style="font-size:14px;font-weight:700;color:#1a2332;margin-bottom:6px;">
+              ${storedMiles} miles${MILEAGE_RATE > 0 ? ' — £' + storedCost.toFixed(2) : ''}
+            </div>
+            <div style="font-size:12px;color:#555;line-height:1.6;">
+              Leg detail not stored for this submission (predates journey log feature).<br>
+              If your journey was the same, submit as-is — total mileage is retained.<br>
+              To correct mileage, add new legs using the buttons below.
+            </div>
+          </div>`;
         container.appendChild(div);
-        // Show the total bar
         const totalEl = document.getElementById('journey_total');
         const totalMilesEl = document.getElementById('journey_total_miles');
         if (totalEl) totalEl.style.display = 'flex';
-        if (totalMilesEl) totalMilesEl.textContent = MILEAGE_RATE > 0 ? `${storedMiles} miles — £${cost.toFixed(2)}` : `${storedMiles} miles`;
+        if (totalMilesEl) totalMilesEl.textContent = MILEAGE_RATE > 0
+          ? `${storedMiles} miles — £${storedCost.toFixed(2)}`
+          : `${storedMiles} miles`;
       }
-    } catch(e) { console.log('Could not restore journey:', e); }
+    } catch(e) { console.log('Journey restore error:', e); }
   }
   // Restore hours display if times already set
   const sh = document.getElementById('start_hour').value;
