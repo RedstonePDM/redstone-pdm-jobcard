@@ -201,18 +201,18 @@
 
   </div>
 
-  <!-- Planner note banner (populated by /api/my_planner_note — resets weekly with planner) -->
-  <div id="planner-note-banner" style="display:none;margin-bottom:20px;
-background:#fff8ef;border:1.5px solid #ffd89b;border-radius:12px;padding:16px 20px;">
-    <div style="font-size:12px;font-weight:700;color:#c77a10;margin-bottom:6px;">📋 Notes from Redstone this week</div>
-    <div id="planner-note-text" style="font-size:13px;color:#5c3d00;line-height:1.6;white-space:pre-wrap"></div>
-  </div>
-
   <!-- This week section -->
   <div id="section-this-week" class="section-card">
     <div class="section-title">
       <span>📅 This Week's Jobs</span>
       <span style="font-size:13px;color:#888;font-weight:400">w/c {{ week_start.strftime('%d %B') }}</span>
+    </div>
+
+    <!-- Planner note banner — sits at top of This Week's Jobs, populated by /api/my_planner_note -->
+    <div id="planner-note-banner" style="display:none;margin-bottom:16px;
+background:#fff8ef;border:1.5px solid #ffd89b;border-radius:10px;padding:14px 18px;">
+      <div style="font-size:11px;font-weight:700;color:#c77a10;margin-bottom:5px;">📋 Notes about your jobs this week</div>
+      <div id="planner-note-text" style="font-size:13px;color:#5c3d00;line-height:1.6;white-space:pre-wrap"></div>
     </div>
 
     {% if not week_published %}
