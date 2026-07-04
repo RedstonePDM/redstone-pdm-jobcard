@@ -1310,8 +1310,9 @@ def submit_job_card(job_id, card_date):
         qty       = float(request.form.get(f"mat_qty_{i}", 1) or 1)
         unit_cost = float(request.form.get(f"mat_cost_{i}", 0) or 0)
         payment   = request.form.get(f"mat_payment_{i}", "Redstone Card")
+        supplier  = request.form.get(f"mat_supplier_{i}", "").strip()
         total     = round(qty * unit_cost, 2)
-        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
+        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment, "supplier": supplier})
         # Reimburse: Own Card/Cash and Own Van Stock — engineer paid out of pocket
         # Redstone Card and Redstone Van Stock are NOT reimbursed (Redstone recoups via billing)
         if payment in ("Own card/cash", "Own Van Stock"):
@@ -2537,8 +2538,9 @@ def resubmit_card(card_id):
         qty = float(request.form.get(f"mat_qty_{i}", 1) or 1)
         unit_cost = float(request.form.get(f"mat_cost_{i}", 0) or 0)
         payment = request.form.get(f"mat_payment_{i}", "Redstone Card")
+        supplier = request.form.get(f"mat_supplier_{i}", "").strip()
         total = round(qty * unit_cost, 2)
-        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
+        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment, "supplier": supplier})
         if payment in ("Own card/cash", "Own Van Stock"):
             reimburse_total += total
 
