@@ -430,36 +430,64 @@ async function openDrawer(cardId, row) {
 function renderDrawer(card) {
   document.getElementById('drawer-title').textContent = `${card.job_id} \u2014 ${card.site_name || ''}`;
 
-  const materials    = parseJson(card.materials_json);
-  const parkingItems = parseJson(card.parking_items_json);
-  const redstone_mats = materials.filter(m => m.payment === 'Redstone Card');
-  const own_mats      = materials.filter(m => m.payment !== 'Redstone Card');
+  const materials     = parseJson(card.materials_json);
+  const parkingItems  = parseJson(card.parking_items_json);
+
+  // Split into four groups
+  const redstone_card_mats = materials.filter(m => m.payment === 'Redstone Card');
+  const redstone_van_mats  = materials.filter(m => m.payment === 'Redstone Van Stock');
+  const own_card_mats      = materials.filter(m => m.payment === 'Own card/cash');
+  const own_van_mats       = materials.filter(m => m.payment === 'Own Van Stock');
+  const redstone_mats      = [...redstone_card_mats, ...redstone_van_mats];
+  const own_mats           = [...own_card_mats, ...own_van_mats];
 
   // ── Materials HTML ──
   let matHTML = '';
   if (materials.length) {
     let rows = '';
-    if (redstone_mats.length) {
+
+    // Redstone Card (grey — company expense)
+    if (redstone_card_mats.length) {
       rows += `<tr style="background:#f9f9f9"><td colspan="5" style="font-size:10px;font-weight:700;color:#555;padding:5px 8px">REDSTONE CARD</td></tr>`;
-      redstone_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td>£${parseFloat(m.total||0).toFixed(2)}</td><td style="font-size:10px;color:#555">Redstone Card</td></tr>`;
+      redstone_card_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#555">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
       });
     }
-    if (own_mats.length) {
+
+    // Redstone Van Stock (grey — also company expense, not reimbursed)
+    if (redstone_van_mats.length) {
+      rows += `<tr style="background:#f9f9f9"><td colspan="5" style="font-size:10px;font-weight:700;color:#555;padding:5px 8px">REDSTONE VAN STOCK</td></tr>`;
+      redstone_van_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td style="color:#888;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#555">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+      });
+    }
+
+    // Own Card / Cash (red — reimbursable)
+    if (own_card_mats.length) {
       rows += `<tr style="background:#fdf0ef"><td colspan="5" style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px">OWN CARD — REIMBURSE</td></tr>`;
-      own_mats.forEach(m => {
-        rows += `<tr><td>${m.description}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td><td style="font-size:10px;color:#c0392b;font-weight:700">${m.payment}</td></tr>`;
+      own_card_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
       });
     }
-    const reimb = parseFloat(card.reimburse_total || 0);
-    const redTotal = parseFloat(card.materials_total || 0) - reimb;
+
+    // Own Van Stock (red — reimbursable)
+    if (own_van_mats.length) {
+      rows += `<tr style="background:#fdf0ef"><td colspan="5" style="font-size:10px;font-weight:700;color:#c0392b;padding:5px 8px">OWN VAN STOCK — REIMBURSE</td></tr>`;
+      own_van_mats.forEach(m => {
+        rows += `<tr><td>${m.description}</td><td style="color:#c0392b;font-size:11px">${m.supplier||'—'}</td><td>${m.qty}</td><td>£${parseFloat(m.unit_cost||0).toFixed(2)}</td><td style="color:#c0392b;font-weight:700">£${parseFloat(m.total||0).toFixed(2)}</td></tr>`;
+      });
+    }
+
+    const reimb    = parseFloat(card.reimburse_total || 0);
+    const redTotal = redstone_mats.reduce((s,m) => s + parseFloat(m.total||0), 0);
     let totRow = '';
-    if (redTotal > 0) totRow += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Redstone Card Total</td><td>£${redTotal.toFixed(2)}</td><td></td></tr>`;
-    if (reimb > 0)    totRow += `<tr style="background:#fdf0ef;font-weight:700;color:#c0392b"><td colspan="3">Reimbursable Total</td><td>£${reimb.toFixed(2)}</td><td></td></tr>`;
+    if (redTotal > 0) totRow += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Redstone Total (not reimbursed)</td><td></td><td>£${redTotal.toFixed(2)}</td></tr>`;
+    if (reimb > 0)    totRow += `<tr style="background:#fdf0ef;font-weight:700;color:#c0392b"><td colspan="3">Reimbursable Total</td><td></td><td>£${reimb.toFixed(2)}</td></tr>`;
+
     matHTML = `<div class="d-section">
       <div class="d-section-title">Materials</div>
       <table class="d-table">
-        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th><th>Payment</th></tr></thead>
+        <thead><tr><th>Description</th><th>Supplier</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
         <tbody>${rows}${totRow}</tbody>
       </table>
     </div>`;
@@ -569,6 +597,8 @@ function renderDrawer(card) {
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0);
   const total_cost          = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstoneParkTotal;
+  const adminMats           = parseJson(card.admin_materials_json);
+  const adminMatTotal       = adminMats.reduce((s, m) => s + parseFloat(m.total||0), 0);
   const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + parseFloat(p.cost || 0), 0);
 
@@ -620,8 +650,12 @@ function renderDrawer(card) {
         <div class="d-total-row grand"><span>Gross Invoice</span><span id="drawer-gross">£${parseFloat(card.invoice_total||0).toFixed(2)}</span></div>
         ${parseFloat(card.cis_deduction||0)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${parseFloat(card.cis_deduction).toFixed(2)}</span></div>`:''}
         <div class="d-total-row net"><span>Net to Contractor</span><span id="drawer-net">£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
-        ${redstone_mats_total>0||redstoneParkTotal>0?`<div class="d-total-row company"><span>+ Redstone Card Spend</span><span>£${(redstone_mats_total+redstoneParkTotal).toFixed(2)}</span></div>`:''}
-        <div class="d-total-row" style="font-weight:700;color:#084298;font-size:14px;border-top:1px solid #ddd;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${total_cost.toFixed(2)}</span></div>
+        <div style="border-top:1px dashed #ddd;margin:8px 0;"></div>
+        <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;padding:4px 0">Redstone Costs (not on engineer invoice)</div>
+        ${redstone_mats_total>0?`<div class="d-total-row company"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
+        ${redstoneParkTotal>0?`<div class="d-total-row company"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
+        ${adminMatTotal>0?`<div class="d-total-row company"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
+        <div class="d-total-row" style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
       </div>
       ${fineNote}
     </div>
