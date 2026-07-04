@@ -71,9 +71,10 @@
   /* Modal */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
   .modal-overlay.show { display: flex; }
-  .modal { background: white; border-radius: 14px; padding: 28px; width: 100%; max-width: 540px; box-shadow: 0 8px 40px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+  .modal { background: white; border-radius: 14px; padding: 28px; width: 100%; max-width: 580px; box-shadow: 0 8px 40px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
   .modal h3 { font-size: 18px; color: #1a2332; margin-bottom: 18px; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .form-group { margin-bottom: 14px; }
   label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
   input, select { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; color: #1a2332; background: white; }
@@ -82,6 +83,7 @@
   .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
   .btn-cancel { background: #f0f2f5; color: #333; }
   .btn-cancel:hover { background: #e2e6ea; }
+  .field-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -118,6 +120,7 @@
       data-ni="{{ c.ni or '' }}"
       data-van="{{ 'yes' if c.redstone_vehicle else 'no' }}"
       data-van-reg="{{ c.van_reg or '' }}"
+      data-mileage-rate="{{ c.mileage_rate or 0 }}"
       data-sort="{{ c.sort_code or '' }}"
       data-account="{{ c.account_no or '' }}"
       data-card="{{ 'yes' if c.redstone_card else 'no' }}"
@@ -204,46 +207,65 @@
   {% endif %}
 </div>
 
-<!-- Add Modal -->
+<!-- ── Add Modal ── -->
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <h3>Add Contractor</h3>
+
+    <div class="modal-section">Personal Details</div>
     <div class="form-group"><label>Full Name *</label><input type="text" id="add-name" placeholder="First Last"></div>
     <div class="form-row">
       <div class="form-group"><label>Email</label><input type="email" id="add-email"></div>
       <div class="form-group"><label>Phone</label><input type="text" id="add-phone"></div>
     </div>
     <div class="form-group"><label>Home Address</label><input type="text" id="add-address"></div>
+
     <div class="modal-section">Pay & CIS</div>
     <div class="form-row">
       <div class="form-group"><label>Day Rate (£)</label><input type="number" id="add-day-rate" placeholder="180"></div>
       <div class="form-group"><label>CIS Rate</label>
-        <select id="add-cis"><option value="0.20">20% (standard)</option><option value="0">Exempt (Director)</option></select>
+        <select id="add-cis">
+          <option value="0.20">20% (standard)</option>
+          <option value="0">Exempt (Director)</option>
+        </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>UTR Number</label><input type="text" id="add-utr"></div>
       <div class="form-group"><label>NI Number</label><input type="text" id="add-ni"></div>
     </div>
-    <div class="modal-section">Vehicle</div>
+
+    <div class="modal-section">Vehicle & Mileage</div>
     <div class="form-row">
       <div class="form-group"><label>Redstone Vehicle?</label>
-        <select id="add-van"><option value="yes">Yes — Redstone Van</option><option value="no">No — Own Vehicle</option></select>
+        <select id="add-van">
+          <option value="yes">Yes — Redstone Van</option>
+          <option value="no">No — Own Vehicle</option>
+        </select>
       </div>
-      <div class="form-group"><label>Van Reg</label><input type="text" id="add-van-reg" style="text-transform:uppercase"></div>
+      <div class="form-group"><label>Van / Car Reg</label><input type="text" id="add-van-reg" style="text-transform:uppercase"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Mileage Rate (p/mile)</label>
+        <input type="number" id="add-mileage-rate" placeholder="0" min="0" step="1" value="0">
+        <div class="field-hint">e.g. 25 = 25p/mile. Use 0 for Redstone van drivers.</div>
+      </div>
+      <div class="form-group">
+        <label>Redstone Card?</label>
+        <select id="add-card"><option value="yes">Yes</option><option value="no">No — Reimburse</option></select>
+      </div>
+    </div>
+
     <div class="modal-section">Bank Details</div>
     <div class="form-row">
       <div class="form-group"><label>Sort Code</label><input type="text" id="add-sort" placeholder="00-00-00"></div>
       <div class="form-group"><label>Account Number</label><input type="text" id="add-account"></div>
     </div>
+
     <div class="modal-section">Login</div>
-    <div class="form-row">
-      <div class="form-group"><label>Redstone Card?</label>
-        <select id="add-card"><option value="yes">Yes</option><option value="no">No — Reimburse</option></select>
-      </div>
-      <div class="form-group"><label>Password</label><input type="text" id="add-password" placeholder="Surname2024!"></div>
-    </div>
+    <div class="form-group"><label>Password</label><input type="text" id="add-password" placeholder="Surname2024!"></div>
+
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
       <button class="btn btn-primary" onclick="addContractor()">Add Contractor</button>
@@ -251,47 +273,66 @@
   </div>
 </div>
 
-<!-- Edit Modal -->
+<!-- ── Edit Modal ── -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
     <h3>Edit Contractor</h3>
     <input type="hidden" id="edit-key">
+
+    <div class="modal-section">Personal Details</div>
     <div class="form-group"><label>Full Name</label><input type="text" id="edit-name"></div>
     <div class="form-row">
       <div class="form-group"><label>Email</label><input type="email" id="edit-email"></div>
       <div class="form-group"><label>Phone</label><input type="text" id="edit-phone"></div>
     </div>
     <div class="form-group"><label>Home Address</label><input type="text" id="edit-address"></div>
+
     <div class="modal-section">Pay & CIS</div>
     <div class="form-row">
       <div class="form-group"><label>Day Rate (£)</label><input type="number" id="edit-day-rate"></div>
       <div class="form-group"><label>CIS Rate</label>
-        <select id="edit-cis"><option value="0.20">20% (standard)</option><option value="0">Exempt (Director)</option></select>
+        <select id="edit-cis">
+          <option value="0.20">20% (standard)</option>
+          <option value="0">Exempt (Director)</option>
+        </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>UTR Number</label><input type="text" id="edit-utr"></div>
       <div class="form-group"><label>NI Number</label><input type="text" id="edit-ni"></div>
     </div>
-    <div class="modal-section">Vehicle</div>
+
+    <div class="modal-section">Vehicle & Mileage</div>
     <div class="form-row">
       <div class="form-group"><label>Redstone Vehicle?</label>
-        <select id="edit-van"><option value="yes">Yes — Redstone Van</option><option value="no">No — Own Vehicle</option></select>
+        <select id="edit-van" onchange="toggleMileageEdit()">
+          <option value="yes">Yes — Redstone Van</option>
+          <option value="no">No — Own Vehicle</option>
+        </select>
       </div>
-      <div class="form-group"><label>Van Reg</label><input type="text" id="edit-van-reg" style="text-transform:uppercase"></div>
+      <div class="form-group"><label>Van / Car Reg</label><input type="text" id="edit-van-reg" style="text-transform:uppercase"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Mileage Rate (p/mile)</label>
+        <input type="number" id="edit-mileage-rate" placeholder="0" min="0" step="1">
+        <div class="field-hint">Enter pence per mile e.g. 25. Use 0 for Redstone van drivers.</div>
+      </div>
+      <div class="form-group">
+        <label>Redstone Card?</label>
+        <select id="edit-card"><option value="yes">Yes</option><option value="no">No — Reimburse</option></select>
+      </div>
+    </div>
+
     <div class="modal-section">Bank Details</div>
     <div class="form-row">
       <div class="form-group"><label>Sort Code</label><input type="text" id="edit-sort"></div>
       <div class="form-group"><label>Account Number</label><input type="text" id="edit-account"></div>
     </div>
+
     <div class="modal-section">Login</div>
-    <div class="form-row">
-      <div class="form-group"><label>Redstone Card?</label>
-        <select id="edit-card"><option value="yes">Yes</option><option value="no">No — Reimburse</option></select>
-      </div>
-      <div class="form-group"><label>Password</label><input type="text" id="edit-password"></div>
-    </div>
+    <div class="form-group"><label>Password</label><input type="text" id="edit-password"></div>
+
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
       <button class="btn btn-primary" onclick="saveContractor()">Save Changes</button>
@@ -315,72 +356,89 @@
     arrow.classList.toggle('open', !isOpen);
   }
 
+  function toggleMileageEdit() {
+    // Mileage rate always shown in edit modal — just highlight it if own vehicle
+    const isOwn = document.getElementById('edit-van').value === 'no';
+    const input = document.getElementById('edit-mileage-rate');
+    input.style.borderColor = isOwn ? '#c0392b' : '';
+  }
+
   function openAddModal() {
     document.getElementById('add-modal').classList.add('show');
   }
 
-  // Edit: read data from card's data attributes — no JSON serialisation needed
   function openEditModal(card) {
     const d = card.dataset;
-    document.getElementById('edit-key').value       = d.key;
-    document.getElementById('edit-name').value      = d.name;
-    document.getElementById('edit-email').value     = d.email;
-    document.getElementById('edit-phone').value     = d.phone;
-    document.getElementById('edit-address').value   = d.address;
-    document.getElementById('edit-day-rate').value  = d.dayRate;
-    document.getElementById('edit-utr').value       = d.utr;
-    document.getElementById('edit-ni').value        = d.ni;
-    document.getElementById('edit-van').value       = d.van;
-    document.getElementById('edit-van-reg').value   = d.vanReg;
-    document.getElementById('edit-sort').value      = d.sort;
-    document.getElementById('edit-account').value   = d.account;
-    document.getElementById('edit-card').value      = d.card;
-    document.getElementById('edit-password').value  = d.password;
-    // CIS rate — match to select option
+    document.getElementById('edit-key').value          = d.key;
+    document.getElementById('edit-name').value         = d.name;
+    document.getElementById('edit-email').value        = d.email;
+    document.getElementById('edit-phone').value        = d.phone;
+    document.getElementById('edit-address').value      = d.address;
+    document.getElementById('edit-day-rate').value     = d.dayRate;
+    document.getElementById('edit-utr').value          = d.utr;
+    document.getElementById('edit-ni').value           = d.ni;
+    document.getElementById('edit-van').value          = d.van;
+    document.getElementById('edit-van-reg').value      = d.vanReg;
+    document.getElementById('edit-sort').value         = d.sort;
+    document.getElementById('edit-account').value      = d.account;
+    document.getElementById('edit-card').value         = d.card;
+    document.getElementById('edit-password').value     = d.password;
+
+    // Mileage rate — stored as decimal (0.25), display as pence (25)
+    const mileageDecimal = parseFloat(d.mileageRate || 0);
+    document.getElementById('edit-mileage-rate').value = mileageDecimal > 0 ? Math.round(mileageDecimal * 100) : 0;
+
+    // CIS rate
     const cisVal = parseFloat(d.cisRate) === 0 ? '0' : '0.20';
     document.getElementById('edit-cis').value = cisVal;
+
+    toggleMileageEdit();
     document.getElementById('edit-modal').classList.add('show');
   }
 
   async function addContractor() {
     const name = document.getElementById('add-name').value.trim();
     if (!name) { alert('Name is required'); return; }
+    const mileagePence = parseFloat(document.getElementById('add-mileage-rate').value || 0);
     const form = new FormData();
-    form.append('name',            name);
-    form.append('email',           document.getElementById('add-email').value);
-    form.append('phone',           document.getElementById('add-phone').value);
-    form.append('address',         document.getElementById('add-address').value);
-    form.append('day_rate',        document.getElementById('add-day-rate').value);
-    form.append('cis_rate',        document.getElementById('add-cis').value);
-    form.append('utr',             document.getElementById('add-utr').value);
-    form.append('ni',              document.getElementById('add-ni').value);
-    form.append('redstone_vehicle',document.getElementById('add-van').value);
-    form.append('van_reg',         document.getElementById('add-van-reg').value);
-    form.append('sort_code',       document.getElementById('add-sort').value);
-    form.append('account_no',      document.getElementById('add-account').value);
-    form.append('redstone_card',   document.getElementById('add-card').value);
-    form.append('password',        document.getElementById('add-password').value);
+    form.append('name',             name);
+    form.append('email',            document.getElementById('add-email').value);
+    form.append('phone',            document.getElementById('add-phone').value);
+    form.append('address',          document.getElementById('add-address').value);
+    form.append('day_rate',         document.getElementById('add-day-rate').value);
+    form.append('cis_rate',         document.getElementById('add-cis').value);
+    form.append('utr',              document.getElementById('add-utr').value);
+    form.append('ni',               document.getElementById('add-ni').value);
+    form.append('redstone_vehicle', document.getElementById('add-van').value);
+    form.append('van_reg',          document.getElementById('add-van-reg').value);
+    form.append('mileage_rate',     (mileagePence / 100).toFixed(3));
+    form.append('sort_code',        document.getElementById('add-sort').value);
+    form.append('account_no',       document.getElementById('add-account').value);
+    form.append('redstone_card',    document.getElementById('add-card').value);
+    form.append('password',         document.getElementById('add-password').value);
     const res = await fetch('/admin/contractors/add', { method: 'POST', body: form });
     if (res.ok || res.redirected) { closeModals(); location.reload(); }
   }
 
   async function saveContractor() {
     const key = document.getElementById('edit-key').value;
+    const mileagePence = parseFloat(document.getElementById('edit-mileage-rate').value || 0);
     const form = new FormData();
-    form.append('name',            document.getElementById('edit-name').value);
-    form.append('email',           document.getElementById('edit-email').value);
-    form.append('phone',           document.getElementById('edit-phone').value);
-    form.append('address',         document.getElementById('edit-address').value);
-    form.append('day_rate',        document.getElementById('edit-day-rate').value);
-    form.append('cis_rate',        document.getElementById('edit-cis').value);
-    form.append('utr',             document.getElementById('edit-utr').value);
-    form.append('ni',              document.getElementById('edit-ni').value);
-    form.append('redstone_vehicle',document.getElementById('edit-van').value);
-    form.append('van_reg',         document.getElementById('edit-van-reg').value);
-    form.append('sort_code',       document.getElementById('edit-sort').value);
-    form.append('account_no',      document.getElementById('edit-account').value);
-    form.append('redstone_card',   document.getElementById('edit-card').value);
-    form.append('password',        document.getElementById('edit-password').value);
+    form.append('name',             document.getElementById('edit-name').value);
+    form.append('email',            document.getElementById('edit-email').value);
+    form.append('phone',            document.getElementById('edit-phone').value);
+    form.append('address',          document.getElementById('edit-address').value);
+    form.append('day_rate',         document.getElementById('edit-day-rate').value);
+    form.append('cis_rate',         document.getElementById('edit-cis').value);
+    form.append('utr',              document.getElementById('edit-utr').value);
+    form.append('ni',               document.getElementById('edit-ni').value);
+    form.append('redstone_vehicle', document.getElementById('edit-van').value);
+    form.append('van_reg',          document.getElementById('edit-van-reg').value);
+    form.append('mileage_rate',     (mileagePence / 100).toFixed(3));
+    form.append('sort_code',        document.getElementById('edit-sort').value);
+    form.append('account_no',       document.getElementById('edit-account').value);
+    form.append('redstone_card',    document.getElementById('edit-card').value);
+    form.append('password',         document.getElementById('edit-password').value);
     const res = await fetch(`/admin/contractors/${key}/edit`, { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) { closeModals(); location.reload(); }
@@ -388,7 +446,7 @@
   }
 
   async function archiveContractor(key, name) {
-    if (!confirm(`Archive ${name}? They won't be able to log in but records are kept. Restore anytime.`)) return;
+    if (!confirm(`Archive ${name}? They won't be able to log in but records are kept.`)) return;
     const res = await fetch(`/admin/contractors/${key}/archive`, { method: 'POST' });
     const data = await res.json();
     if (data.ok) location.reload();
