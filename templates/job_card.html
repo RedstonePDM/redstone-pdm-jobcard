@@ -471,10 +471,8 @@
     <div class="section-head">🚗 Journey Log</div>
     <div class="section-body">
       {% if edit_card and edit_card.mileage_miles %}
-      <div style="background:#eafaf1;border:1.5px solid #27ae60;border-radius:10px;padding:14px 16px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:700;color:#1a7a4a;margin-bottom:4px;">✓ Previous mileage retained</div>
-        <div style="font-size:13px;color:#1a2332;font-weight:600;">{{ edit_card.mileage_miles }} miles recorded</div>
-        <div style="font-size:12px;color:#555;margin-top:4px;">If your journey was the same, leave this as is. Only re-log below if your mileage needs correcting.</div>
+      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px;">
+        ⚠ Journey shown below was recorded on original submission. Add new legs above only if your mileage needs correcting — existing legs are read-only.
       </div>
       {% else %}
       <div class="info-box">
@@ -1043,6 +1041,48 @@ window.addEventListener('DOMContentLoaded', function() {
   // Prefill parking
   const parks = window.PREFILL_PARKING || [];
   if (parks.length > 0) parks.forEach(p => addParking(p));
+
+  // Rebuild journey display from stored journey_json (no API needed — just show recorded miles)
+  if (IS_EDIT) {
+    try {
+      const storedJourney = JSON.parse(document.getElementById('journey_json').value || '[]');
+      if (storedJourney && storedJourney.length > 0) {
+        legs = storedJourney;
+        legCount = storedJourney.length;
+        const container = document.getElementById('journey_legs');
+        const typeLabels = { travel: '🚗 Travel to Site', materials: '🛒 Materials Run', home: '🏠 Travel Home', nextjob: '➡️ Drive to Next Job' };
+        const badgeClasses = { travel: 'badge-travel', materials: 'badge-materials', home: 'badge-home', nextjob: 'badge-travel' };
+        const legClasses = { travel: 'travel', materials: 'materials', home: 'home', nextjob: 'travel' };
+        storedJourney.forEach((leg, idx) => {
+          const id = idx + 1;
+          const type = leg.type || 'travel';
+          const miles = parseFloat(leg.miles || 0);
+          const cost = parseFloat(leg.cost || 0);
+          const div = document.createElement('div');
+          div.className = `journey-leg ${legClasses[type] || 'travel'}`;
+          div.id = `leg_${id}`;
+          div.innerHTML = `
+            <span class="leg-type-badge ${badgeClasses[type] || 'badge-travel'}">${typeLabels[type] || type}</span>
+            <div class="leg-row">
+              <div class="field"><label>From</label>
+                <input type="text" id="leg_from_${id}" value="${leg.from || ''}" readonly style="background:#f8f8f8"></div>
+              <div class="field"><label>To</label>
+                <input type="text" id="leg_to_${id}" value="${leg.to || ''}" readonly style="background:#f8f8f8"></div>
+            </div>
+            <div class="leg-miles" id="leg_miles_${id}">${miles > 0 ? (MILEAGE_RATE > 0 ? `${miles} miles — £${cost.toFixed(2)}` : `${miles} miles`) : 'No miles recorded'}</div>
+            ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this card</div>' : ''}
+          `;
+          container.appendChild(div);
+          if (type === 'travel') { const btn = document.getElementById('btn_travel'); if (btn) btn.style.display = 'none'; }
+        });
+        updateJourneyTotal();
+        // If journey had a home or nextjob leg, mark it closed
+        if (storedJourney.some(l => l.type === 'home' || l.type === 'nextjob')) {
+          closeJourney();
+        }
+      }
+    } catch(e) { console.log('Could not restore journey:', e); }
+  }
   // Restore hours display if times already set
   const sh = document.getElementById('start_hour').value;
   const sm = document.getElementById('start_min').value;
