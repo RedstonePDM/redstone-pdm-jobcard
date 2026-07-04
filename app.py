@@ -587,7 +587,9 @@ def build_job_card_pdf(card, contractor):
             park_data = [["Description", "Amount", "Payment", "Status"]]
             for p in parking_items_stored:
                 cost = float(p.get("cost", 0))
-                if p.get("is_fine"):
+                if p.get("is_fine") and p.get("fine_approved") == True:
+                    status_label = "Fine \u2014 approved, reimburse"
+                elif p.get("is_fine"):
                     status_label = "Fine \u2014 pending approval"
                 elif p.get("payment") == "Redstone Card":
                     status_label = "Company expense"
@@ -747,9 +749,10 @@ def build_invoice_pdf(card, contractor):
 
     own_mats     = [m for m in materials_list if m.get("payment", "") != "Redstone Card"]
     redstone_mats = [m for m in materials_list if m.get("payment", "") == "Redstone Card"]
-    own_park_items = [p for p in parking_items_raw if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
-    red_park_items = [p for p in parking_items_raw if p.get("payment") == "Redstone Card" and not p.get("is_fine")]
-    fine_items     = [p for p in parking_items_raw if p.get("is_fine")]
+    own_park_items      = [p for p in parking_items_raw if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
+    red_park_items      = [p for p in parking_items_raw if p.get("payment") == "Redstone Card" and not p.get("is_fine")]
+    approved_fine_items = [p for p in parking_items_raw if p.get("is_fine") and p.get("fine_approved") == True]
+    pending_fine_items  = [p for p in parking_items_raw if p.get("is_fine") and p.get("fine_approved") != True]
 
     reimburse_parking = float(card.get("reimburse_parking", 0) or 0)
     parking_cost_total = float(card.get("parking_cost", 0) or 0)
@@ -830,14 +833,23 @@ def build_invoice_pdf(card, contractor):
         ])
 
     # Parking fines — not on invoice, noted for transparency
-    for p in fine_items:
+    for p in approved_fine_items:
+        cost_data.append([
+            Paragraph(
+                f"Parking Fine \u2014 {p.get('description','')}<br/>"
+                f"<font color='#c0392b' size='7'>Fine approved \u2014 reimbursable</font>",
+                ParagraphStyle("afi", fontSize=9, fontName="Helvetica", leading=13)),
+            f"\u00a3{float(p.get('cost',0)):.2f}"
+        ])
+
+    for p in pending_fine_items:
         cost_data.append([
             Paragraph(
                 f"Parking Fine \u2014 {p.get('description','')}<br/>"
                 f"<font color='#856404' size='7'>Pending approval \u2014 not included in invoice total</font>",
-                ParagraphStyle("fi", fontSize=9, fontName="Helvetica", leading=13)),
+                ParagraphStyle("pfi", fontSize=9, fontName="Helvetica", leading=13)),
             Paragraph(f"<font color='#aaaaaa'>\u00a3{float(p.get('cost',0)):.2f}</font>",
-                      ParagraphStyle("fiv", fontSize=9, fontName="Helvetica"))
+                      ParagraphStyle("pfiv", fontSize=9, fontName="Helvetica"))
         ])
 
     cost_table = Table(cost_data, colWidths=[140*mm, 40*mm])
