@@ -1045,8 +1045,12 @@ window.addEventListener('DOMContentLoaded', function() {
   // Rebuild journey display from stored journey_json (no API needed — just show recorded miles)
   if (IS_EDIT) {
     try {
-      const storedJourney = JSON.parse(document.getElementById('journey_json').value || '[]');
+      const rawJourney = document.getElementById('journey_json').value || '[]';
+      const storedJourney = JSON.parse(rawJourney);
+      const storedMiles = parseFloat(document.getElementById('total_miles').value || 0);
+
       if (storedJourney && storedJourney.length > 0) {
+        // Full journey data available — rebuild legs
         legs = storedJourney;
         legCount = storedJourney.length;
         const container = document.getElementById('journey_legs');
@@ -1069,17 +1073,32 @@ window.addEventListener('DOMContentLoaded', function() {
               <div class="field"><label>To</label>
                 <input type="text" id="leg_to_${id}" value="${leg.to || ''}" readonly style="background:#f8f8f8"></div>
             </div>
-            <div class="leg-miles" id="leg_miles_${id}">${miles > 0 ? (MILEAGE_RATE > 0 ? `${miles} miles — £${cost.toFixed(2)}` : `${miles} miles`) : 'No miles recorded'}</div>
+            <div class="leg-miles" id="leg_miles_${id}">${miles > 0 ? (MILEAGE_RATE > 0 ? `${miles} miles — £${(miles * MILEAGE_RATE).toFixed(2)}` : `${miles} miles`) : 'No miles recorded'}</div>
             ${type === 'nextjob' ? '<div style="font-size:11px;color:#e67e22;margin-top:4px;text-align:center;">⚠ These miles are NOT counted on this card</div>' : ''}
           `;
           container.appendChild(div);
           if (type === 'travel') { const btn = document.getElementById('btn_travel'); if (btn) btn.style.display = 'none'; }
         });
         updateJourneyTotal();
-        // If journey had a home or nextjob leg, mark it closed
-        if (storedJourney.some(l => l.type === 'home' || l.type === 'nextjob')) {
-          closeJourney();
-        }
+        if (storedJourney.some(l => l.type === 'home' || l.type === 'nextjob')) closeJourney();
+
+      } else if (storedMiles > 0) {
+        // No leg detail stored — show summary row from mileage_miles
+        const container = document.getElementById('journey_legs');
+        const cost = storedMiles * MILEAGE_RATE;
+        const div = document.createElement('div');
+        div.className = 'journey-leg travel';
+        div.innerHTML = `
+          <span class="leg-type-badge badge-travel">🚗 Recorded Journey</span>
+          <div style="font-size:12px;color:#555;margin:6px 0;">Journey legs not individually stored — total mileage retained below.</div>
+          <div class="leg-miles">${storedMiles} miles${MILEAGE_RATE > 0 ? ' — £' + cost.toFixed(2) : ''}</div>
+        `;
+        container.appendChild(div);
+        // Show the total bar
+        const totalEl = document.getElementById('journey_total');
+        const totalMilesEl = document.getElementById('journey_total_miles');
+        if (totalEl) totalEl.style.display = 'flex';
+        if (totalMilesEl) totalMilesEl.textContent = MILEAGE_RATE > 0 ? `${storedMiles} miles — £${cost.toFixed(2)}` : `${storedMiles} miles`;
       }
     } catch(e) { console.log('Could not restore journey:', e); }
   }
