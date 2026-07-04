@@ -1114,10 +1114,12 @@ def submit_job_card(job_id, card_date):
         cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
         payment = request.form.get(f"park_payment_{i}", "Redstone Card")
         is_fine = request.form.get(f"park_is_fine_{i}") == "yes"
-        if cost > 0:
+       if cost > 0:
             parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
             parking += cost
-            if payment == "Redstone Card":
+            if is_fine:
+                pass  # fines excluded from reimburse_parking until admin approves
+            elif payment == "Redstone Card":
                 redstone_parking += cost
             else:
                 reimburse_parking += cost
@@ -2320,7 +2322,9 @@ def resubmit_card(card_id):
         if cost > 0:
             parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
             parking += cost
-            if payment != "Redstone Card":
+            if is_fine:
+                pass  # fines excluded until admin approves
+            elif payment != "Redstone Card":
                 reimburse_parking += cost
 
     materials = []
