@@ -688,7 +688,7 @@ def build_invoice_pdf(card, contractor):
         "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
 
-   eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
+eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
                                fontName="Helvetica", leading=16, spaceAfter=0)
     eng_label = ParagraphStyle("engl", fontSize=8, textColor=REDSTONE_GREY,
                                fontName="Helvetica-Bold", leading=14, spaceAfter=0)
@@ -708,7 +708,7 @@ def build_invoice_pdf(card, contractor):
         Spacer(1, 6),
         Paragraph(f"<b>UTR:</b>  {contractor.get('utr','--')}", eng_style),
         Paragraph(f"<b>NI:</b>  {contractor.get('ni','--')}", eng_style),
-        Paragraph(f"<b>Bank:</b>  {contractor.get('sort_code','--')} &nbsp;/&nbsp; {contractor.get('account_no','--')}", eng_style),
+        Paragraph(f"<b>Bank:</b>  {contractor.get('sort_code','--')} / {contractor.get('account_no','--')}", eng_style),
     ]
 
     bill_block = [
@@ -732,6 +732,7 @@ def build_invoice_pdf(card, contractor):
         ("LEFTPADDING", (1,0), (1,-1), 16),
     ]))
     story.append(parties)
+
     story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e0e0e0"), spaceAfter=8))
 
