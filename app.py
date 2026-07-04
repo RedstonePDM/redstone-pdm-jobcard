@@ -41,11 +41,7 @@ FROM_EMAIL       = os.environ.get("FROM_EMAIL", "info@redstonepdm.com")
 ACCOUNTS_EMAIL   = os.environ.get("ACCOUNTS_EMAIL", "accounts@redstonepdm.com")
 GMAPS_API_KEY    = os.environ.get("GMAPS_API_KEY", "")
 PLANNER_URL      = os.environ.get("PLANNER_URL", "https://redstone-planner-production.up.railway.app")
-MOT_CLIENT_ID     = os.environ.get("MOT_CLIENT_ID", "")
-MOT_CLIENT_SECRET = os.environ.get("MOT_CLIENT_SECRET", "")
-MOT_API_KEY       = os.environ.get("MOT_API_KEY", "")
-MOT_TOKEN_URL     = "https://login.microsoftonline.com/a455b827-244f-4c97-b5b4-ce5d13b4d00c/oauth2/v2.0/token"
-MOT_SCOPE_URL     = "https://tapi.dvsa.gov.uk/.default"
+DVLA_API_KEY     = os.environ.get("DVLA_API_KEY", "")
 TEST_MODE        = os.environ.get("TEST_MODE", "false").lower() == "true"
 TEST_EMAIL       = os.environ.get("TEST_EMAIL", "dave@redstonepdm.com")
 
@@ -314,8 +310,7 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
-        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
-        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
+      "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
@@ -389,103 +384,40 @@ def admin_required(f):
     return decorated
 
 
-# ── DVSA MOT History API ──────────────────────────────────────────────────────
-
-def get_mot_token():
-    """Get OAuth2 bearer token from Microsoft identity platform."""
-    try:
-        resp = requests.post(MOT_TOKEN_URL, data={
-            "grant_type":    "client_credentials",
-            "client_id":     MOT_CLIENT_ID,
-            "client_secret": MOT_CLIENT_SECRET,
-            "scope":         MOT_SCOPE_URL,
-        }, timeout=10)
-        if resp.status_code == 200:
-            return resp.json().get("access_token")
-        print(f"MOT token error: {resp.status_code} {resp.text}")
-        return None
-    except Exception as e:
-        print(f"MOT token exception: {e}")
-        return None
-
+# ── DVLA MOT Lookup ───────────────────────────────────────────────────────────
 
 def lookup_mot(reg):
-    if not MOT_CLIENT_ID or not MOT_CLIENT_SECRET or not MOT_API_KEY:
-        return {"status": "unknown", "expiry": None, "error": "MOT API credentials not configured"}
+    if not DVLA_API_KEY:
+        return {"status": "unknown", "expiry": None, "error": "No API key"}
     try:
         reg_clean = reg.replace(" ", "").upper()
-        token = get_mot_token()
-        if not token:
-            return {"status": "error", "expiry": None, "error": "Could not obtain MOT API token"}
-
-        url = f"https://history.mot.api.gov.uk/v1/trade/vehicles/registration/{reg_clean}"
-        headers = {
-            "Authorization":  f"Bearer {token}",
-            "X-Api-Key":      MOT_API_KEY,
-            "Content-Type":   "application/json",
-        }
-        r = requests.get(url, headers=headers, timeout=10)
-
+        url = "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles"
+        headers = {"x-api-key": DVLA_API_KEY, "Content-Type": "application/json"}
+        payload = {"registrationNumber": reg_clean}
+        r = requests.post(url, headers=headers, json=payload, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            # API returns a list of vehicle records
-            vehicle = data[0] if isinstance(data, list) and data else data
-
-            mot_tests = vehicle.get("motTests", [])
+            mot_expiry_str = data.get("motExpiryDate")
             mot_expiry = None
             mot_status = "unknown"
-            last_test_date = None
-            last_odometer = None
-            advisories = []
-
-            if mot_tests:
-                # Most recent test is first
-                latest = mot_tests[0]
-                expiry_str = latest.get("expiryDate")
-                last_test_date = latest.get("completedDate", "")[:10] if latest.get("completedDate") else None
-                last_odometer = latest.get("odometerValue")
-
-                # Collect advisory notices from latest test
-                for item in latest.get("rfrAndComments", []):
-                    if item.get("type") in ("ADVISORY", "USER ENTERED"):
-                        advisories.append(item.get("text", ""))
-
-                if expiry_str:
-                    try:
-                        mot_expiry = datetime.strptime(expiry_str, "%Y.%m.%d").date()
-                    except Exception:
-                        try:
-                            mot_expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
-                        except Exception:
-                            mot_expiry = None
-
-                if mot_expiry:
-                    days_left = (mot_expiry - date.today()).days
-                    if days_left < 0:
-                        mot_status = "expired"
-                    elif days_left <= 30:
-                        mot_status = "due_soon"
-                    else:
-                        mot_status = "valid"
-
+            if mot_expiry_str:
+                mot_expiry = datetime.strptime(mot_expiry_str, "%Y-%m-%d").date()
+                today = date.today()
+                days_left = (mot_expiry - today).days
+                if days_left < 0:
+                    mot_status = "expired"
+                elif days_left <= 30:
+                    mot_status = "due_soon"
+                else:
+                    mot_status = "valid"
             return {
-                "status":         mot_status,
-                "expiry":         mot_expiry,
-                "days_left":      (mot_expiry - date.today()).days if mot_expiry else None,
-                "make":           vehicle.get("make", ""),
-                "model":          vehicle.get("model", ""),
-                "colour":         vehicle.get("primaryColour", ""),
-                "year":           vehicle.get("manufactureYear"),
-                "last_test_date": last_test_date,
-                "last_odometer":  last_odometer,
-                "advisories":     advisories,
+                "status": mot_status, "expiry": mot_expiry,
+                "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
+                "make": data.get("make", ""), "colour": data.get("colour", ""),
+                "year": data.get("yearOfManufacture"),
             }
-
-        elif r.status_code == 404:
-            return {"status": "not_found", "expiry": None, "error": "Vehicle not found in MOT database"}
         else:
-            return {"status": "error", "expiry": None, "error": f"MOT API returned {r.status_code}: {r.text[:200]}"}
-
+            return {"status": "error", "expiry": None, "error": f"DVLA returned {r.status_code}"}
     except Exception as e:
         return {"status": "error", "expiry": None, "error": str(e)}
 
@@ -602,7 +534,7 @@ def build_job_card_pdf(card, contractor):
     if materials:
         story.append(Paragraph(" MATERIALS", section_style))
         story.append(Spacer(1, 4))
-        mat_data = [["#", "Description", "Qty", "Unit Cost", "Total", "Source"]]
+        mat_data = [["#", "Description", "Qty", "Unit Cost", "Total", "Payment"]]
         mat_grand_total = 0.0
         for i, m in enumerate(materials, 1):
             line_total = float(m.get("total", 0))
@@ -623,38 +555,6 @@ def build_job_card_pdf(card, contractor):
             ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
         ]))
         story.append(mat_table)
-
-    # Admin-only materials — shown on job card PDF (admin doc) but NOT on invoice PDF
-    admin_materials = card.get("admin_materials_json") or []
-    if isinstance(admin_materials, str):
-        try:
-            admin_materials = json.loads(admin_materials)
-        except Exception:
-            admin_materials = []
-    if admin_materials:
-        story.append(Paragraph(" ADMIN MATERIALS (Not on Engineer Invoice)", section_style))
-        story.append(Spacer(1, 4))
-        adm_data = [["#", "Description", "Supplier", "Qty", "Unit Cost", "Total"]]
-        adm_grand = 0.0
-        for i, m in enumerate(admin_materials, 1):
-            line_total = float(m.get("total", 0))
-            adm_grand += line_total
-            adm_data.append([str(i), m.get("description",""), m.get("supplier",""),
-                             str(m.get("qty","")), f"\u00a3{float(m.get('unit_cost',0)):.2f}",
-                             f"\u00a3{line_total:.2f}"])
-        adm_data.append(["", "ADMIN MATERIALS TOTAL", "", "", "", f"\u00a3{adm_grand:.2f}"])
-        adm_table = Table(adm_data, colWidths=[8*mm,55*mm,30*mm,15*mm,22*mm,30*mm])
-        adm_table.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2c3e50")), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8),
-            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.HexColor("#fafafa"), REDSTONE_LIGHT]),
-            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
-            ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
-            ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
-            ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ]))
-        story.append(adm_table)
 
     if contractor.get("mileage_rate", 0) > 0:
         story.append(Paragraph(" TRAVEL & MILEAGE", section_style))
@@ -878,9 +778,8 @@ def build_invoice_pdf(card, contractor):
         except Exception:
             parking_items_raw = []
 
-    # Split materials by payment type — only Own Card/Cash and Own Van Stock are reimbursed to engineer
-    own_mats      = [m for m in materials_list if m.get("payment","") in ("Own card/cash", "Own Van Stock")]
-    redstone_mats = [m for m in materials_list if m.get("payment","") in ("Redstone Card", "Redstone Van Stock")]
+    own_mats     = [m for m in materials_list if m.get("payment", "") != "Redstone Card"]
+    redstone_mats = [m for m in materials_list if m.get("payment", "") == "Redstone Card"]
     own_park_items      = [p for p in parking_items_raw if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
     red_park_items      = [p for p in parking_items_raw if p.get("payment") == "Redstone Card" and not p.get("is_fine")]
     approved_fine_items = [p for p in parking_items_raw if p.get("is_fine") and p.get("fine_approved") == True]
@@ -901,43 +800,27 @@ def build_invoice_pdf(card, contractor):
             f"\u00a3{mileage_cost:.2f}"
         ])
 
-    # Own-card and own van stock materials (reimbursable) — appear on invoice
+    # Own-card materials (reimbursable) — these appear on invoice
     for m in own_mats:
-        is_van = m.get("payment","") == "Own Van Stock"
-        label = "Van Stock" if is_van else "Own card"
         cost_data.append([
             Paragraph(
                 f"Materials \u2014 {m.get('description','')} (x{m.get('qty',1)})<br/>"
-                f"<font color='#c0392b' size='7'>{label} \u2014 reimbursable</font>",
+                f"<font color='#c0392b' size='7'>Own card \u2014 reimbursable</font>",
                 ParagraphStyle("mi", fontSize=9, fontName="Helvetica", leading=13)),
             f"\u00a3{float(m.get('total',0)):.2f}"
         ])
 
-    # Redstone card and Redstone van stock — NOT reimbursed on invoice
+    # Redstone card materials noted but greyed — NOT reimbursed on invoice
     if redstone_mats:
         red_mat_total = sum(float(m.get("total", 0)) for m in redstone_mats)
-        redstone_card_mats = [m for m in redstone_mats if m.get("payment","") == "Redstone Card"]
-        redstone_van_mats  = [m for m in redstone_mats if m.get("payment","") == "Redstone Van Stock"]
-        if redstone_card_mats:
-            rct = sum(float(m.get("total",0)) for m in redstone_card_mats)
-            cost_data.append([
-                Paragraph(
-                    f"Materials ({len(redstone_card_mats)} item(s) on Redstone card)<br/>"
-                    f"<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
-                    ParagraphStyle("rmi", fontSize=9, fontName="Helvetica", leading=13)),
-                Paragraph(f"<font color='#aaaaaa'>\u00a3{rct:.2f}</font>",
-                          ParagraphStyle("rmiv", fontSize=9, fontName="Helvetica"))
-            ])
-        if redstone_van_mats:
-            rvt = sum(float(m.get("total",0)) for m in redstone_van_mats)
-            cost_data.append([
-                Paragraph(
-                    f"Materials ({len(redstone_van_mats)} item(s) from Redstone van stock)<br/>"
-                    f"<font color='#888888' size='7'>Redstone pre-purchased stock \u2014 not reimbursed on this invoice</font>",
-                    ParagraphStyle("rvmi", fontSize=9, fontName="Helvetica", leading=13)),
-                Paragraph(f"<font color='#aaaaaa'>\u00a3{rvt:.2f}</font>",
-                          ParagraphStyle("rvmiv", fontSize=9, fontName="Helvetica"))
-            ])
+        cost_data.append([
+            Paragraph(
+                f"Materials ({len(redstone_mats)} item(s) on Redstone card)<br/>"
+                f"<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
+                ParagraphStyle("rmi", fontSize=9, fontName="Helvetica", leading=13)),
+            Paragraph(f"<font color='#aaaaaa'>\u00a3{red_mat_total:.2f}</font>",
+                      ParagraphStyle("rmiv", fontSize=9, fontName="Helvetica"))
+        ])
 
     # Own-card parking (reimbursable) — on invoice
     for p in own_park_items:
@@ -1310,12 +1193,9 @@ def submit_job_card(job_id, card_date):
         qty       = float(request.form.get(f"mat_qty_{i}", 1) or 1)
         unit_cost = float(request.form.get(f"mat_cost_{i}", 0) or 0)
         payment   = request.form.get(f"mat_payment_{i}", "Redstone Card")
-        supplier  = request.form.get(f"mat_supplier_{i}", "").strip()
         total     = round(qty * unit_cost, 2)
-        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment, "supplier": supplier})
-        # Reimburse: Own Card/Cash and Own Van Stock — engineer paid out of pocket
-        # Redstone Card and Redstone Van Stock are NOT reimbursed (Redstone recoups via billing)
-        if payment in ("Own card/cash", "Own Van Stock"):
+        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
+        if payment != "Redstone Card":
             reimburse_total += total
 
     materials_total = sum(m["total"] for m in materials)
@@ -1932,16 +1812,46 @@ def card_detail(card_id):
     return jsonify(d)
 
 
-# Calculate total cost to business for live update
-    cur2 = conn.cursor()
-    cur2.execute("SELECT invoice_total, materials_total, reimburse_total, parking_cost, reimburse_parking FROM job_cards WHERE id=%s", (card_id,))
-    card_row = cur2.fetchone()
-    cur2.close()
+@app.route("/card/<int:card_id>/admin_materials", methods=["POST"])
+@admin_required
+def save_admin_materials(card_id):
+    """Save admin-only material lines to a job card. Never visible to engineer."""
+    data = request.get_json()
+    admin_mats = data.get("admin_materials", [])
+    cleaned = []
+    for m in admin_mats:
+        desc = str(m.get("description", "")).strip()
+        if not desc:
+            continue
+        qty       = float(m.get("qty", 1) or 1)
+        unit_cost = float(m.get("unit_cost", 0) or 0)
+        total     = round(qty * unit_cost, 2)
+        supplier  = str(m.get("supplier", "")).strip()
+        cleaned.append({
+            "description": desc,
+            "qty":         qty,
+            "unit_cost":   unit_cost,
+            "total":       total,
+            "supplier":    supplier,
+            "admin_only":  True,
+        })
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE job_cards SET admin_materials_json=%s WHERE id=%s",
+        (json.dumps(cleaned), card_id)
+    )
+    conn.commit()
+    cur.execute("SELECT invoice_total, materials_total, reimburse_total, parking_cost, reimburse_parking FROM job_cards WHERE id=%s", (card_id,))
+    card_row = cur.fetchone()
+    cur.close()
+    conn.close()
+    admin_total = sum(m["total"] for m in cleaned)
     invoice_total = float(card_row["invoice_total"] or 0)
     redstone_mats = max(0, float(card_row["materials_total"] or 0) - float(card_row["reimburse_total"] or 0))
     redstone_park = max(0, float(card_row["parking_cost"] or 0) - float(card_row["reimburse_parking"] or 0))
-    total_cost_to_business = invoice_total + redstone_mats + redstone_park + admin_total
-    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total, "total_cost_to_business": round(total_cost_to_business, 2)})
+    total_cost_to_business = round(invoice_total + redstone_mats + redstone_park + admin_total, 2)
+    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total, "total_cost_to_business": total_cost_to_business})
 
 
 @app.route("/card/<int:card_id>/jobcard.pdf")
@@ -2513,10 +2423,9 @@ def resubmit_card(card_id):
         qty = float(request.form.get(f"mat_qty_{i}", 1) or 1)
         unit_cost = float(request.form.get(f"mat_cost_{i}", 0) or 0)
         payment = request.form.get(f"mat_payment_{i}", "Redstone Card")
-        supplier = request.form.get(f"mat_supplier_{i}", "").strip()
         total = round(qty * unit_cost, 2)
-        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment, "supplier": supplier})
-        if payment in ("Own card/cash", "Own Van Stock"):
+        materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
+        if payment != "Redstone Card":
             reimburse_total += total
 
     materials_total = sum(m["total"] for m in materials)
