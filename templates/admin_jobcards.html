@@ -427,6 +427,20 @@ async function openDrawer(cardId, row) {
   }
   fineDecisions[cardId] = {};
   renderDrawer(card);
+
+  // Update the table row Total Cost cell with fresh data from DB
+  const adminMats  = parseJson(card.admin_materials_json);
+  const adminTotal = adminMats.reduce((s, m) => s + n(m.total), 0);
+  const matTotal   = n(card.materials_total);
+  const reimbTotal = n(card.reimburse_total);
+  const parkTotal  = n(card.parking_cost);
+  const reimbPark  = n(card.reimburse_parking);
+  const freshTotal = n(card.invoice_total) + (matTotal - reimbTotal) + (parkTotal - reimbPark) + adminTotal;
+  const tableRow   = document.querySelector(`tr[data-id="${cardId}"]`);
+  if (tableRow) {
+    const totalCell = tableRow.querySelector('td:nth-child(6)');
+    if (totalCell) totalCell.textContent = `£${freshTotal.toFixed(2)}`;
+  }
 }
 
 function renderDrawer(card) {
