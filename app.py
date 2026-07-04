@@ -310,6 +310,7 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
+      "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
@@ -1227,7 +1228,7 @@ def submit_job_card(job_id, card_date):
             materials_json, materials_total, reimburse_total, odometer,
             only_job_today, invoice_total, cis_deduction, net_payment,
             photo_paths, parking_photo_path, receipt_photo_paths, status,
-            reimburse_parking, parking_items_json
+            reimburse_parking, parking_items_json, journey_json
         ) VALUES (
             %(contractor_key)s,%(job_id)s,%(card_date)s,%(site_name)s,%(postcode)s,
             %(description_planned)s,%(description_actual)s,%(time_start)s,%(time_finish)s,
@@ -1236,13 +1237,14 @@ def submit_job_card(job_id, card_date):
             %(materials_json)s,%(materials_total)s,%(reimburse_total)s,%(odometer)s,
             %(only_job_today)s,%(invoice_total)s,%(cis_deduction)s,%(net_payment)s,
             %(photo_paths)s,%(parking_photo_path)s,%(receipt_photo_paths)s,'submitted',
-            %(reimburse_parking)s,%(parking_items_json)s
+            %(reimburse_parking)s,%(parking_items_json)s,%(journey_json)s
         ) ON CONFLICT DO NOTHING RETURNING id
     """, {**card, "contractor_key": key,
           "materials_json": json.dumps(materials),
           "photo_paths": json.dumps(photo_paths),
           "receipt_photo_paths": json.dumps(receipt_photos),
-          "parking_items_json": json.dumps(parking_items)})
+          "parking_items_json": json.dumps(parking_items),
+          "journey_json": json.dumps(journey_legs)})
     result = cur.fetchone()
     conn.commit()
 
