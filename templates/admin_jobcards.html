@@ -478,7 +478,7 @@ function renderDrawer(card) {
       });
     }
 
-    const reimb    = parseFloat(card.reimburse_total || 0);
+    const reimb    = n(card.reimburse_total);
     const redTotal = redstone_mats.reduce((s,m) => s + parseFloat(m.total||0), 0);
     let totRow = '';
     if (redTotal > 0) totRow += `<tr style="background:#f5f6f8;font-weight:700"><td colspan="3">Redstone Total (not reimbursed)</td><td></td><td>£${redTotal.toFixed(2)}</td></tr>`;
@@ -496,7 +496,7 @@ function renderDrawer(card) {
   // ── Parking HTML ──
   let parkHTML = '';
   let fineApprovalHTML = '';
-  const parkingCost       = parseFloat(card.parking_cost || 0);
+  const parkingCost       = n(card.parking_cost);
   // Calculate totals directly from items — never by subtraction
   const ownParkItems      = parkingItems.filter(p => !p.is_fine && p.payment !== 'Redstone Card');
   const redstoneParkItems = parkingItems.filter(p => !p.is_fine && p.payment === 'Redstone Card');
@@ -593,16 +593,18 @@ function renderDrawer(card) {
         <div style="font-size:13px;color:#333">${card.query_note}</div>
       </div>` : '';
 
-  // ── Invoice summary — use item-calculated values not DB fields ──
+  // ── Invoice summary — safe numeric helper ──
+  function n(v) { const f = parseFloat(v); return isNaN(f) ? 0 : f; }
+
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
-  const redstone_mats_total = Math.max(0, parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0));
-  const total_cost          = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstoneParkTotal;
+  const redstone_mats_total = Math.max(0, n(card.materials_total) - n(card.reimburse_total));
+  const total_cost          = n(card.invoice_total) + redstone_mats_total + redstoneParkTotal;
   const adminMats           = parseJson(card.admin_materials_json);
-  const adminMatTotal       = adminMats.reduce((s, m) => s + parseFloat(m.total||0), 0);
-  const baseGross           = parseFloat(card.invoice_total || 0);
+  const adminMatTotal       = adminMats.reduce((s, m) => s + n(m.total), 0);
+  const baseGross           = n(card.invoice_total);
   const baseRedstone        = redstone_mats_total + redstoneParkTotal;
   const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
-    .reduce((s, p) => s + parseFloat(p.cost || 0), 0);
+    .reduce((s, p) => s + n(p.cost), 0);
 
   let fineNote = '';
   if (pendingFineTotal > 0) {
@@ -626,16 +628,16 @@ function renderDrawer(card) {
     <div class="d-section">
       <div class="d-section-title">Labour</div>
       <div class="d-row"><div class="d-label">Type</div><div class="d-val">${card.labour_type || '&mdash;'}</div></div>
-      <div class="d-row"><div class="d-label">Overtime</div><div class="d-val">${parseFloat(card.overtime_hours||0) > 0 ? card.overtime_hours + ' hrs @ £' + parseFloat(card.overtime_rate||0).toFixed(2) + '/hr' : 'None'}</div></div>
-      <div class="d-row"><div class="d-label">Labour Cost</div><div class="d-val" style="font-weight:700">£${parseFloat(card.labour_cost||0).toFixed(2)}</div></div>
+      <div class="d-row"><div class="d-label">Overtime</div><div class="d-val">${n(card.overtime_hours) > 0 ? card.overtime_hours + ' hrs @ £' + n(card.overtime_rate).toFixed(2) + '/hr' : 'None'}</div></div>
+      <div class="d-row"><div class="d-label">Labour Cost</div><div class="d-val" style="font-weight:700">£${n(card.labour_cost).toFixed(2)}</div></div>
     </div>
 
     ${matHTML}
 
-    ${parseFloat(card.mileage_miles||0) > 0 ? `<div class="d-section">
+    ${n(card.mileage_miles) > 0 ? `<div class="d-section">
       <div class="d-section-title">Mileage</div>
       <div class="d-row"><div class="d-label">Miles</div><div class="d-val">${card.mileage_miles} miles</div></div>
-      <div class="d-row"><div class="d-label">Cost</div><div class="d-val">£${parseFloat(card.mileage_cost||0).toFixed(2)}</div></div>
+      <div class="d-row"><div class="d-label">Cost</div><div class="d-val">£${n(card.mileage_cost).toFixed(2)}</div></div>
     </div>` : ''}
 
     ${parkHTML}
@@ -645,13 +647,13 @@ function renderDrawer(card) {
     <div class="d-section">
       <div class="d-section-title">Invoice Summary</div>
       <div class="d-totals">
-        <div class="d-total-row"><span>Labour</span><span>£${parseFloat(card.labour_cost||0).toFixed(2)}</span></div>
-        ${parseFloat(card.mileage_cost||0)>0?`<div class="d-total-row"><span>Mileage</span><span>£${parseFloat(card.mileage_cost).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row"><span>Labour</span><span>£${n(card.labour_cost).toFixed(2)}</span></div>
+        ${n(card.mileage_cost)>0?`<div class="d-total-row"><span>Mileage</span><span>£${n(card.mileage_cost).toFixed(2)}</span></div>`:''}
         ${ownParkReimburse>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span style="color:#c0392b">£${ownParkReimburse.toFixed(2)}</span></div>`:''}
-        ${parseFloat(card.reimburse_total||0)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span style="color:#c0392b">£${parseFloat(card.reimburse_total).toFixed(2)}</span></div>`:''}
-        <div class="d-total-row grand"><span>Gross Invoice</span><span id="drawer-gross">£${parseFloat(card.invoice_total||0).toFixed(2)}</span></div>
-        ${parseFloat(card.cis_deduction||0)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${parseFloat(card.cis_deduction).toFixed(2)}</span></div>`:''}
-        <div class="d-total-row net"><span>Net to Contractor</span><span id="drawer-net">£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
+        ${n(card.reimburse_total)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span style="color:#c0392b">£${n(card.reimburse_total).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row grand"><span>Gross Invoice</span><span id="drawer-gross">£${n(card.invoice_total).toFixed(2)}</span></div>
+        ${n(card.cis_deduction)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${n(card.cis_deduction).toFixed(2)}</span></div>`:''}
+        <div class="d-total-row net"><span>Net to Contractor</span><span id="drawer-net">£${n(card.net_payment).toFixed(2)}</span></div>
         <div style="border-top:1px dashed #ddd;margin:8px 0;"></div>
         <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;padding:4px 0">Redstone Costs (not on engineer invoice)</div>
         ${redstone_mats_total>0?`<div class="d-total-row company summary-redstone-cost"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
