@@ -979,6 +979,15 @@ async function saveAdminMaterials() {
       totalCostRow.querySelector('span:last-child').textContent = `£${parseFloat(data.total_cost_to_business).toFixed(2)}`;
     }
 
+    // Also update the Total Cost cell in the main table row
+    if (currentCardId && data.total_cost_to_business !== undefined) {
+      const tableRow = document.querySelector(`tr[data-id="${currentCardId}"]`);
+      if (tableRow) {
+        const totalCell = tableRow.querySelector('td:nth-child(6)');
+        if (totalCell) totalCell.textContent = `£${parseFloat(data.total_cost_to_business).toFixed(2)}`;
+      }
+    }
+
     // Flash save button
     if (saveBtn) {
       saveBtn.textContent = '✓ Saved';
