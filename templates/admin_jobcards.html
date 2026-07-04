@@ -514,12 +514,11 @@ function renderDrawer(card) {
         <div style="font-size:13px;color:#333">${card.query_note}</div>
       </div>` : '';
 
-  // ── Invoice summary ──
-  const reimb_p         = parseFloat(card.reimburse_parking || 0);
-  const redstone_p      = parseFloat(card.parking_cost || 0) - reimb_p;
+  // ── Invoice summary — use item-calculated values not DB fields ──
+  const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0);
-  const total_cost      = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstone_p;
-  const pendingFineTotal = parkingItems.filter(p => p.is_fine && p.fine_approved !== true && p.fine_approved !== false)
+  const total_cost          = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstoneParkTotal;
+  const pendingFineTotal    = allFineItems.filter(p => p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + parseFloat(p.cost || 0), 0);
 
   let fineNote = '';
@@ -563,12 +562,12 @@ function renderDrawer(card) {
       <div class="d-totals">
         <div class="d-total-row"><span>Labour</span><span>£${parseFloat(card.labour_cost||0).toFixed(2)}</span></div>
         ${parseFloat(card.mileage_cost||0)>0?`<div class="d-total-row"><span>Mileage</span><span>£${parseFloat(card.mileage_cost).toFixed(2)}</span></div>`:''}
-        ${reimb_p>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span style="color:#c0392b">£${reimb_p.toFixed(2)}</span></div>`:''}
+        ${ownParkReimburse>0?`<div class="d-total-row"><span>Parking (Own Card)</span><span style="color:#c0392b">£${ownParkReimburse.toFixed(2)}</span></div>`:''}
         ${parseFloat(card.reimburse_total||0)>0?`<div class="d-total-row"><span>Materials (Reimbursable)</span><span style="color:#c0392b">£${parseFloat(card.reimburse_total).toFixed(2)}</span></div>`:''}
         <div class="d-total-row grand"><span>Gross Invoice</span><span id="drawer-gross">£${parseFloat(card.invoice_total||0).toFixed(2)}</span></div>
         ${parseFloat(card.cis_deduction||0)>0?`<div class="d-total-row cis"><span>CIS Deduction</span><span>-£${parseFloat(card.cis_deduction).toFixed(2)}</span></div>`:''}
         <div class="d-total-row net"><span>Net to Contractor</span><span id="drawer-net">£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
-        ${redstone_mats_total>0||redstone_p>0?`<div class="d-total-row company"><span>+ Redstone Card Spend</span><span>£${(redstone_mats_total+redstone_p).toFixed(2)}</span></div>`:''}
+        ${redstone_mats_total>0||redstoneParkTotal>0?`<div class="d-total-row company"><span>+ Redstone Card Spend</span><span>£${(redstone_mats_total+redstoneParkTotal).toFixed(2)}</span></div>`:''}
         <div class="d-total-row" style="font-weight:700;color:#084298;font-size:14px;border-top:1px solid #ddd;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${total_cost.toFixed(2)}</span></div>
       </div>
       ${fineNote}
