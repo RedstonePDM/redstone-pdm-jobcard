@@ -473,11 +473,20 @@ function renderDrawer(card) {
 
   const redMatTotal  = parseFloat(card.materials_total || 0) - ownMatsTotal;
 
+  // Parking own-card total for invoice summary (own card items + approved fines)
+  const ownParkItemsAll      = parkingItems.filter(p => !p.is_fine && p.payment !== 'Redstone Card');
+  const redstoneParkItemsAll = parkingItems.filter(p => !p.is_fine && p.payment === 'Redstone Card');
+  const approvedFineItemsAll = parkingItems.filter(p => p.is_fine && p.fine_approved === true);
+  const ownParkTotalAll      = ownParkItemsAll.reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const redstoneParkTotalAll = redstoneParkItemsAll.reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const approvedFineTotalAll = approvedFineItemsAll.reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const ownParkReimburse     = ownParkTotalAll + approvedFineTotalAll;
+
   let totalsHTML = `<div class="d-totals">
     <div class="d-total-row"><span>Labour</span><span>£${labourCost.toFixed(2)}</span></div>
     ${mileageCost > 0 ? `<div class="d-total-row"><span>Mileage</span><span>£${mileageCost.toFixed(2)}</span></div>` : ''}
     ${ownMatsTotal > 0 ? `<div class="d-total-row"><span>Materials (Own card)</span><span style="color:#c0392b">£${ownMatsTotal.toFixed(2)}</span></div>` : ''}
-    ${reimbursePark > 0 ? `<div class="d-total-row"><span>Parking (Own card)</span><span style="color:#c0392b">£${reimbursePark.toFixed(2)}</span></div>` : ''}
+    ${ownParkReimburse > 0 ? `<div class="d-total-row"><span>Parking (Own card)</span><span style="color:#c0392b">£${ownParkReimburse.toFixed(2)}</span></div>` : ''}
     <div class="d-total-row grand"><span>Gross Invoice</span><span>£${invoiceTotal.toFixed(2)}</span></div>
     ${cisDeduction > 0 ? `<div class="d-total-row cis"><span>CIS Deduction (20% on labour)</span><span>-£${cisDeduction.toFixed(2)}</span></div>` : ''}
     <div class="d-total-row net"><span>Net Payment to You</span><span>£${netPayment.toFixed(2)}</span></div>
@@ -485,14 +494,14 @@ function renderDrawer(card) {
 
   // Redstone reference spend (greyed, separate, not part of your payment)
   let refSpend = '';
-  if (redMatTotal > 0 || redstonePark > 0) {
+  if (redMatTotal > 0 || redstoneParkTotalAll > 0) {
     refSpend = `<div style="margin-top:10px">
       <div class="grey-ref-block">
         <div class="grey-label">Redstone Card Spend — Reference Only</div>
         ${redMatTotal > 0 ? `<div class="grey-ref-item"><span>Materials (Redstone card)</span><span>£${redMatTotal.toFixed(2)}</span></div>` : ''}
-        ${redstonePark > 0 ? `<div class="grey-ref-item"><span>Parking (Redstone card)</span><span>£${redstonePark.toFixed(2)}</span></div>` : ''}
+        ${redstoneParkTotalAll > 0 ? `<div class="grey-ref-item"><span>Parking (Redstone card)</span><span>£${redstoneParkTotalAll.toFixed(2)}</span></div>` : ''}
         <div class="grey-ref-item" style="border-top:1px solid #eee;padding-top:4px;margin-top:4px;font-weight:600">
-          <span>Total company spend</span><span>£${(redMatTotal + redstonePark).toFixed(2)}</span>
+          <span>Total company spend</span><span>£${(redMatTotal + redstoneParkTotalAll).toFixed(2)}</span>
         </div>
       </div>
       <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:center">These items were paid by Redstone and are shown for reference only. They do not form part of your invoice.</div>
