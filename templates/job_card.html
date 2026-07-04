@@ -470,10 +470,18 @@
   <div class="section">
     <div class="section-head">🚗 Journey Log</div>
     <div class="section-body">
+      {% if edit_card and edit_card.mileage_miles %}
+      <div style="background:#eafaf1;border:1.5px solid #27ae60;border-radius:10px;padding:14px 16px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:700;color:#1a7a4a;margin-bottom:4px;">✓ Previous mileage retained</div>
+        <div style="font-size:13px;color:#1a2332;font-weight:600;">{{ edit_card.mileage_miles }} miles recorded</div>
+        <div style="font-size:12px;color:#555;margin-top:4px;">If your journey was the same, leave this as is. Only re-log below if your mileage needs correcting.</div>
+      </div>
+      {% else %}
       <div class="info-box">
         <strong>Log every leg of your journey for this job</strong>
         All mileage is calculated automatically — no estimates accepted.
       </div>
+      {% endif %}
       <div id="start_point_banner" style="display:none;background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px;font-weight:500;"></div>
       <div id="journey_legs"></div>
       <input type="hidden" name="journey_json" id="journey_json" value="{{ edit_card.journey_json if edit_card and edit_card.journey_json else '[]' }}">
@@ -488,14 +496,9 @@
           <button type="button" class="add-leg-btn" onclick="addLeg('nextjob')">➡️ Drive to Next Job</button>
         </div>
         <div style="font-size:11px;color:#7f8c8d;margin-top:6px;text-align:center;">
-          "Drive to Next Job" closes mileage for this card — log on your next card as "Travel to Site".
+          Adding a new leg will replace the previous mileage total.
         </div>
       </div>
-      {% if edit_card and edit_card.mileage_miles %}
-      <div style="background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-top:10px;">
-        ⚠ Previous mileage: {{ edit_card.mileage_miles }} miles — re-log your journey above if it has changed, or leave as is.
-      </div>
-      {% endif %}
       <div class="journey-total" id="journey_total" style="display:{% if edit_card and edit_card.mileage_miles and edit_card.mileage_miles > 0 %}flex{% else %}none{% endif %};">
         <span>Total Mileage</span>
         <span id="journey_total_miles">{% if edit_card and edit_card.mileage_miles %}{{ edit_card.mileage_miles }} miles{% else %}0 miles — £0.00{% endif %}</span>
