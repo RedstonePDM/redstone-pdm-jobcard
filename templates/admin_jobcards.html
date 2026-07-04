@@ -837,7 +837,9 @@ function buildAdminMatSection(card) {
     <div id="admin_mat_container">${cards}</div>
     <button class="btn-add-admin-mat" onclick="addAdminMat()">+ Add Admin Material Line</button>
     <button class="btn-save-admin-mat" onclick="saveAdminMaterials()">💾 Save Admin Materials</button>
-    ${existing.length > 0 ? `<div class="admin-mat-footer"><span>${existing.length} line(s) saved</span><strong>Total: £${total.toFixed(2)}</strong></div>` : ''}
+    <div class="admin-mat-footer" id="admin_mat_footer" style="${existing.length > 0 ? 'display:flex' : 'display:none'}">
+      <span>${existing.length} line(s)</span><strong>Total: £${total.toFixed(2)}</strong>
+    </div>
   </div>`;
 }
 
@@ -874,10 +876,12 @@ function addAdminMat() {
   const div = document.createElement('div');
   div.innerHTML = buildAdminMatCard(i, '', '', 1, 0, 0);
   container.appendChild(div.firstElementChild);
+  updateAdminMatFooter();
 }
 
 function removeAdminMat(i) {
   document.getElementById(`admin_mat_row_${i}`)?.remove();
+  updateAdminMatFooter();
 }
 
 function calcAdminMatTotal(i) {
@@ -885,6 +889,29 @@ function calcAdminMatTotal(i) {
   const cost = parseFloat(document.getElementById(`adm_cost_${i}`)?.value || 0);
   const el   = document.getElementById(`adm_total_${i}`);
   if (el) el.textContent = `£${(qty * cost).toFixed(2)}`;
+  updateAdminMatFooter();
+}
+
+function updateAdminMatFooter() {
+  const container = document.getElementById('admin_mat_container');
+  if (!container) return;
+  const rows = container.querySelectorAll('[id^="admin_mat_row_"]');
+  let total = 0;
+  let count = 0;
+  rows.forEach(row => {
+    const idx = row.id.replace('admin_mat_row_', '');
+    const desc = document.getElementById(`adm_desc_${idx}`)?.value?.trim();
+    if (!desc) return;
+    const qty  = parseFloat(document.getElementById(`adm_qty_${idx}`)?.value || 0);
+    const cost = parseFloat(document.getElementById(`adm_cost_${idx}`)?.value || 0);
+    total += qty * cost;
+    count++;
+  });
+  const footer = document.getElementById('admin_mat_footer');
+  if (footer) {
+    footer.innerHTML = `<span>${count} line(s)</span><strong>Total: £${total.toFixed(2)}</strong>`;
+    footer.style.display = 'flex';
+  }
 }
 
 async function saveAdminMaterials() {
