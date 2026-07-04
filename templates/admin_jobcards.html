@@ -309,7 +309,9 @@
           {% for card in cards %}
           {% set c = contractors.get(card.contractor_key, {}) %}
           {% set redstone_mats = card.materials_total|float - card.reimburse_total|float %}
-          {% set total_cost = card.invoice_total|float + redstone_mats + (card.parking_cost|float - card.reimburse_parking|float) %}
+          {% set redstone_park = card.parking_cost|float - card.reimburse_parking|float %}
+          {% set admin_mats_total = card.admin_materials_json | map(attribute='total') | map('float') | sum if card.admin_materials_json else 0 %}
+          {% set total_cost = card.invoice_total|float + redstone_mats + redstone_park + admin_mats_total %}
           <tr data-status="{{ card.status }}" data-id="{{ card.id }}" onclick="openDrawer({{ card.id }}, this)">
             <td>{{ card.card_date.strftime('%d %b %Y') if card.card_date else '&mdash;' }}</td>
             <td style="font-weight:600">{{ c.get('name', card.contractor_key) }}</td>
