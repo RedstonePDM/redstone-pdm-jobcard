@@ -652,10 +652,10 @@ function renderDrawer(card) {
         <div class="d-total-row net"><span>Net to Contractor</span><span id="drawer-net">£${parseFloat(card.net_payment||0).toFixed(2)}</span></div>
         <div style="border-top:1px dashed #ddd;margin:8px 0;"></div>
         <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;padding:4px 0">Redstone Costs (not on engineer invoice)</div>
-        ${redstone_mats_total>0?`<div class="d-total-row company"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
-        ${redstoneParkTotal>0?`<div class="d-total-row company"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
-        ${adminMatTotal>0?`<div class="d-total-row company"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
-        <div class="d-total-row" style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
+        ${redstone_mats_total>0?`<div class="d-total-row company summary-redstone-cost"><span>Redstone Card &amp; Van Stock</span><span>£${redstone_mats_total.toFixed(2)}</span></div>`:''}
+        ${redstoneParkTotal>0?`<div class="d-total-row company summary-redstone-cost"><span>Parking (Redstone Card)</span><span>£${redstoneParkTotal.toFixed(2)}</span></div>`:''}
+        ${adminMatTotal>0?`<div class="d-total-row company" id="summary-admin-mat-line"><span>Admin Materials (Redstone ordered)</span><span>£${adminMatTotal.toFixed(2)}</span></div>`:''}
+        <div class="d-total-row" id="summary-total-cost-row" style="font-weight:700;color:#084298;font-size:14px;border-top:2px solid #084298;padding-top:8px;margin-top:4px"><span>Total Cost to Business</span><span>£${(total_cost + adminMatTotal).toFixed(2)}</span></div>
       </div>
       ${fineNote}
     </div>
@@ -936,7 +936,58 @@ async function saveAdminMaterials() {
   });
   const data = await res.json();
   if (data.ok) {
-    alert(`✓ Saved ${data.count} admin material line(s). Total: £${parseFloat(data.total).toFixed(2)}`);
+    const adminTotal = parseFloat(data.total || 0);
+
+    // Update the footer
+    updateAdminMatFooter();
+
+    // Update the Admin Materials line in the invoice summary
+    const adminLineEl = document.getElementById('summary-admin-mat-line');
+    if (adminTotal > 0) {
+      if (adminLineEl) {
+        adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
+      } else {
+        // Insert the line before total cost row if it doesn't exist yet
+        const totalRow = document.getElementById('summary-total-cost-row');
+        if (totalRow) {
+          const newRow = document.createElement('div');
+          newRow.className = 'd-total-row company';
+          newRow.id = 'summary-admin-mat-line';
+          newRow.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
+          totalRow.parentNode.insertBefore(newRow, totalRow);
+        }
+      }
+    } else if (adminLineEl) {
+      adminLineEl.remove();
+    }
+
+    // Recalculate and update Total Cost to Business
+    const totalCostEl = document.getElementById('summary-total-cost-row');
+    if (totalCostEl) {
+      // Read current gross invoice and redstone spend from DOM
+      const grossEl = document.getElementById('drawer-gross');
+      const gross = parseFloat(grossEl?.textContent?.replace('£','') || 0);
+
+      // Sum all redstone cost lines
+      let redstoneCosts = 0;
+      document.querySelectorAll('.summary-redstone-cost').forEach(el => {
+        redstoneCosts += parseFloat(el.textContent.replace('£','') || 0);
+      });
+
+      const newTotal = gross + redstoneCosts + adminTotal;
+      totalCostEl.querySelector('span:last-child').textContent = `£${newTotal.toFixed(2)}`;
+    }
+
+    // Visual confirmation — flash the save button green
+    const saveBtn = document.querySelector('.btn-save-admin-mat');
+    if (saveBtn) {
+      saveBtn.textContent = '✓ Saved';
+      saveBtn.style.background = '#1a7a4a';
+      setTimeout(() => {
+        saveBtn.textContent = '💾 Save Admin Materials';
+        saveBtn.style.background = '#c0392b';
+      }, 2000);
+    }
   } else {
     alert('Save failed — please try again');
   }
