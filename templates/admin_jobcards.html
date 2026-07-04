@@ -594,6 +594,14 @@ function renderDrawer(card) {
       </div>` : '';
 
   // ── Invoice summary ──
+  console.log('DEBUG renderDrawer:', {
+    invoice_total: card.invoice_total,
+    materials_total: card.materials_total,
+    reimburse_total: card.reimburse_total,
+    parking_cost: card.parking_cost,
+    reimburse_parking: card.reimburse_parking,
+    ownParkTotal, redstoneParkTotal, approvedFineTotal
+  });
 
   const ownParkReimburse    = ownParkTotal + approvedFineTotal;
   const redstone_mats_total = Math.max(0, n(card.materials_total) - n(card.reimburse_total));
