@@ -1932,41 +1932,16 @@ def card_detail(card_id):
     return jsonify(d)
 
 
-@app.route("/card/<int:card_id>/admin_materials", methods=["POST"])
-@admin_required
-def save_admin_materials(card_id):
-    """Save admin-only material lines to a job card. Never visible to engineer."""
-    data = request.get_json()
-    admin_mats = data.get("admin_materials", [])
-    # Validate and calculate totals
-    cleaned = []
-    for m in admin_mats:
-        desc = str(m.get("description", "")).strip()
-        if not desc:
-            continue
-        qty       = float(m.get("qty", 1) or 1)
-        unit_cost = float(m.get("unit_cost", 0) or 0)
-        total     = round(qty * unit_cost, 2)
-        supplier  = str(m.get("supplier", "")).strip()
-        cleaned.append({
-            "description": desc,
-            "qty":         qty,
-            "unit_cost":   unit_cost,
-            "total":       total,
-            "supplier":    supplier,
-            "admin_only":  True,
-        })
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE job_cards SET admin_materials_json=%s WHERE id=%s",
-        (json.dumps(cleaned), card_id)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-    admin_total = sum(m["total"] for m in cleaned)
-    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total})
+# Calculate total cost to business for live update
+    cur2 = conn.cursor()
+    cur2.execute("SELECT invoice_total, materials_total, reimburse_total, parking_cost, reimburse_parking FROM job_cards WHERE id=%s", (card_id,))
+    card_row = cur2.fetchone()
+    cur2.close()
+    invoice_total = float(card_row["invoice_total"] or 0)
+    redstone_mats = max(0, float(card_row["materials_total"] or 0) - float(card_row["reimburse_total"] or 0))
+    redstone_park = max(0, float(card_row["parking_cost"] or 0) - float(card_row["reimburse_parking"] or 0))
+    total_cost_to_business = invoice_total + redstone_mats + redstone_park + admin_total
+    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total, "total_cost_to_business": round(total_cost_to_business, 2)})
 
 
 @app.route("/card/<int:card_id>/jobcard.pdf")
