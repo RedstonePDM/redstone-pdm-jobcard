@@ -26,7 +26,6 @@
   .topbar-title { color: white; font-size: 16px; font-weight: 700; }
   .topbar-sub { color: #c0392b; font-size: 11px; margin-top: 1px; }
 
-  /* Job type badge */
   .job-type-badge {
     display: inline-block; padding: 3px 10px; border-radius: 12px;
     font-size: 11px; font-weight: 700; margin-bottom: 6px;
@@ -42,6 +41,14 @@
   }
   .job-header h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
   .job-header p { font-size: 13px; opacity: 0.85; }
+
+  /* Edit mode banner */
+  .edit-banner {
+    background: #fff3cd; border-bottom: 2px solid #ffc107;
+    padding: 12px 20px; font-size: 13px; color: #856404;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .edit-banner strong { font-size: 14px; }
 
   .content { padding: 16px; }
   .section {
@@ -100,7 +107,6 @@
   }
   .hours-display.has-hours { background: #1a2332; color: white; }
 
-  /* Journey Logger */
   .journey-leg {
     border: 1.5px solid #e8e8e8;
     border-radius: 10px;
@@ -149,7 +155,6 @@
     padding: 12px 14px; font-size: 13px; color: #27ae60; font-weight: 500;
   }
 
-  /* Materials */
   .mat-row {
     border: 1.5px solid #e8e8e8; border-radius: 10px;
     padding: 12px; margin-bottom: 10px; position: relative;
@@ -170,7 +175,6 @@
     font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px;
   }
 
-  /* Parking */
   .parking-row {
     border: 1.5px solid #e8e8e8; border-radius: 10px;
     padding: 12px; margin-bottom: 10px; position: relative;
@@ -201,7 +205,6 @@
     border-radius: 4px; accent-color: #c0392b;
   }
 
-  /* Photo upload */
   .photo-upload {
     border: 2px dashed #e0e0e0; border-radius: 10px;
     padding: 20px; text-align: center;
@@ -217,7 +220,6 @@
   .photo-previews { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .photo-preview { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; }
 
-  /* Toggle */
   .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
   .toggle-label { font-size: 14px; color: #1a2332; font-weight: 500; }
   .toggle { position: relative; width: 48px; height: 28px; }
@@ -272,7 +274,6 @@
     font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px;
   }
 
-  /* ── Confirmation Modal ── */
   .confirm-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.6); z-index: 500;
@@ -326,12 +327,18 @@
 <body>
 
 <div class="topbar">
-  <a href="/dashboard" class="back">‹</a>
+  <a href="{% if edit_card %}/my_invoices{% else %}/dashboard{% endif %}" class="back">‹</a>
   <div>
-    <div class="topbar-title">Job Card</div>
+    <div class="topbar-title">{% if edit_card %}Edit & Resubmit{% else %}Job Card{% endif %}</div>
     <div class="topbar-sub">{{ contractor.name }}</div>
   </div>
 </div>
+
+{% if edit_card %}
+<div class="edit-banner">
+  ⚠ <div><strong>Editing queried job card</strong> — correct the details below and resubmit</div>
+</div>
+{% endif %}
 
 <div class="job-header">
   {% set prefix = job.job_id[:4] %}
@@ -347,7 +354,7 @@
 </div>
 
 <div class="content">
-{% if existing_card %}
+{% if existing_card and not edit_card %}
 <div class="already-submitted">
   ✓ Job card already submitted.<br>
   <small style="font-weight:400;color:#555;display:block;margin-top:6px;">
@@ -358,8 +365,14 @@
 
 {% set prefix = job.job_id[:4] %}
 
+{# Determine form action — new submit or resubmit #}
+{% if edit_card %}
+<form method="POST" action="/card/{{ edit_card.id }}/resubmit"
+      enctype="multipart/form-data" id="jobForm">
+{% else %}
 <form method="POST" action="/job/{{ job.job_id }}/{{ card_date }}/submit"
       enctype="multipart/form-data" id="jobForm">
+{% endif %}
 
   <!-- Job Details -->
   <div class="section">
@@ -367,16 +380,16 @@
     <div class="section-body">
       <div class="field">
         <label>Date Work Carried Out *</label>
-        <input type="date" name="card_date" value="{{ card_date }}" required>
+        <input type="date" name="card_date" value="{{ edit_card.card_date if edit_card else card_date }}" required>
       </div>
       <div class="field">
         <label>Job Description (from Wisdom)</label>
         <textarea readonly style="background:#f8f8f8;color:#555;">{{ job.description }}</textarea>
-        <input type="hidden" name="description_planned" value="{{ job.description }}">
+        <input type="hidden" name="description_planned" value="{{ edit_card.description_planned if edit_card else job.description }}">
       </div>
       <div class="field">
         <label>Description of Works Carried Out *</label>
-        <textarea name="description_actual" placeholder="Describe exactly what you did on site..." required></textarea>
+        <textarea name="description_actual" placeholder="Describe exactly what you did on site..." required>{{ edit_card.description_actual if edit_card else '' }}</textarea>
       </div>
     </div>
   </div>
@@ -392,18 +405,24 @@
             <select id="start_hour" onchange="calcHours()" class="time-select">
               <option value="">HH</option>
               {% for h in range(5, 22) %}
-              <option value="{{ '%02d'|format(h) }}">{{ '%02d'|format(h) }}</option>
+              <option value="{{ '%02d'|format(h) }}"
+                {% if edit_card and edit_card.time_start and edit_card.time_start[:2] == '%02d'|format(h) %}selected{% endif %}>
+                {{ '%02d'|format(h) }}
+              </option>
               {% endfor %}
             </select>
             <span class="time-colon">:</span>
             <select id="start_min" onchange="calcHours()" class="time-select">
               <option value="">MM</option>
               {% for m in [0,15,30,45] %}
-              <option value="{{ '%02d'|format(m) }}">{{ '%02d'|format(m) }}</option>
+              <option value="{{ '%02d'|format(m) }}"
+                {% if edit_card and edit_card.time_start and edit_card.time_start[3:] == '%02d'|format(m) %}selected{% endif %}>
+                {{ '%02d'|format(m) }}
+              </option>
               {% endfor %}
             </select>
           </div>
-          <input type="hidden" name="time_start" id="time_start">
+          <input type="hidden" name="time_start" id="time_start" value="{{ edit_card.time_start if edit_card else '' }}">
         </div>
         <div class="field">
           <label>Left Site</label>
@@ -411,28 +430,34 @@
             <select id="finish_hour" onchange="calcHours()" class="time-select">
               <option value="">HH</option>
               {% for h in range(5, 23) %}
-              <option value="{{ '%02d'|format(h) }}">{{ '%02d'|format(h) }}</option>
+              <option value="{{ '%02d'|format(h) }}"
+                {% if edit_card and edit_card.time_finish and edit_card.time_finish[:2] == '%02d'|format(h) %}selected{% endif %}>
+                {{ '%02d'|format(h) }}
+              </option>
               {% endfor %}
             </select>
             <span class="time-colon">:</span>
             <select id="finish_min" onchange="calcHours()" class="time-select">
               <option value="">MM</option>
               {% for m in [0,15,30,45] %}
-              <option value="{{ '%02d'|format(m) }}">{{ '%02d'|format(m) }}</option>
+              <option value="{{ '%02d'|format(m) }}"
+                {% if edit_card and edit_card.time_finish and edit_card.time_finish[3:] == '%02d'|format(m) %}selected{% endif %}>
+                {{ '%02d'|format(m) }}
+              </option>
               {% endfor %}
             </select>
           </div>
-          <input type="hidden" name="time_finish" id="time_finish">
+          <input type="hidden" name="time_finish" id="time_finish" value="{{ edit_card.time_finish if edit_card else '' }}">
         </div>
       </div>
       <div class="hours-display" id="hours_display">Hours on site: —</div>
-      <input type="hidden" name="hours_on_site" id="hours_on_site">
-
-
+      <input type="hidden" name="hours_on_site" id="hours_on_site" value="{{ edit_card.hours_on_site if edit_card else '' }}">
 
       <div class="field" style="margin-top:14px;">
         <label>Overtime Hours (above 8hrs on site)</label>
-        <input type="number" name="overtime_hours" id="overtime_hours" min="0" max="8" step="0.5" value="0" placeholder="0" oninput="calcHours()">
+        <input type="number" name="overtime_hours" id="overtime_hours" min="0" max="8" step="0.5"
+               value="{{ edit_card.overtime_hours if edit_card else 0 }}"
+               placeholder="0" oninput="calcHours()">
         {% if prefix == '2000' %}
         <div style="font-size:11px;color:#27ae60;margin-top:6px;">PPM job — add 1hr for large sites to cover extended work</div>
         {% endif %}
@@ -451,8 +476,8 @@
       </div>
       <div id="start_point_banner" style="display:none;background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px;font-weight:500;"></div>
       <div id="journey_legs"></div>
-      <input type="hidden" name="journey_json" id="journey_json" value="[]">
-      <input type="hidden" name="total_miles" id="total_miles" value="0">
+      <input type="hidden" name="journey_json" id="journey_json" value="{{ edit_card.journey_json if edit_card and edit_card.journey_json else '[]' }}">
+      <input type="hidden" name="total_miles" id="total_miles" value="{{ edit_card.mileage_miles if edit_card else '0' }}">
       <div id="leg_buttons">
         <div class="add-leg-btns" id="btn_travel_row">
           <button type="button" class="add-leg-btn" id="btn_travel" onclick="addLeg('travel')">🚗 Travel to Site</button>
@@ -466,15 +491,20 @@
           "Drive to Next Job" closes mileage for this card — log on your next card as "Travel to Site".
         </div>
       </div>
-      <div class="journey-total" id="journey_total" style="display:none;">
+      {% if edit_card and edit_card.mileage_miles %}
+      <div style="background:#fff3cd;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-top:10px;">
+        ⚠ Previous mileage: {{ edit_card.mileage_miles }} miles — re-log your journey above if it has changed, or leave as is.
+      </div>
+      {% endif %}
+      <div class="journey-total" id="journey_total" style="display:{% if edit_card and edit_card.mileage_miles and edit_card.mileage_miles > 0 %}flex{% else %}none{% endif %};">
         <span>Total Mileage</span>
-        <span id="journey_total_miles">0 miles — £0.00</span>
+        <span id="journey_total_miles">{% if edit_card and edit_card.mileage_miles %}{{ edit_card.mileage_miles }} miles{% else %}0 miles — £0.00{% endif %}</span>
       </div>
     </div>
   </div>
   {% else %}
   <input type="hidden" name="journey_json" value="[]">
-  <input type="hidden" name="total_miles" value="0">
+  <input type="hidden" name="total_miles" value="{{ edit_card.mileage_miles if edit_card else '0' }}">
   {% endif %}
 
   <!-- Materials -->
@@ -544,7 +574,7 @@
   </div>
 
   <button type="button" class="submit-btn" onclick="openConfirm()">
-    Review & Submit Job Card →
+    {% if edit_card %}Review & Resubmit Job Card →{% else %}Review & Submit Job Card →{% endif %}
   </button>
 </form>
 {% endif %}
@@ -555,7 +585,7 @@
   <div class="confirm-sheet">
     <div class="confirm-title">Before you submit</div>
     <div class="confirm-subtitle">
-      Once submitted this job card cannot be edited. Tick each box to confirm before sending.
+      Once submitted this job card cannot be edited without a query. Tick each box to confirm.
     </div>
 
     <div class="warning-box">
@@ -595,9 +625,18 @@
 </div>
 
 <script>
-// Job type detection
-const JOB_PREFIX = "{{ job.job_id[:4] }}";
-const IS_PPM = JOB_PREFIX === '2000';
+const JOB_PREFIX  = "{{ job.job_id[:4] }}";
+const IS_PPM      = JOB_PREFIX === '2000';
+const IS_EDIT     = {{ 'true' if edit_card else 'false' }};
+
+// ── Prefill data from queried card ─────────────────────────
+(function() {
+  // psycopg2 may return JSONB as a Python object (array) or string — handle both
+  let _mRaw = {{ (edit_card.materials_json | tojson) if edit_card and edit_card.materials_json else '[]' }};
+  let _pRaw = {{ (edit_card.parking_items_json | tojson) if edit_card and edit_card.parking_items_json else '[]' }};
+  window.PREFILL_MATERIALS = (typeof _mRaw === 'string') ? JSON.parse(_mRaw) : (_mRaw || []);
+  window.PREFILL_PARKING   = (typeof _pRaw === 'string') ? JSON.parse(_pRaw) : (_pRaw || []);
+})();
 
 // ── Confirmation Modal ─────────────────────────────────────
 function openConfirm() {
@@ -606,7 +645,6 @@ function openConfirm() {
   const hours = parseFloat(document.getElementById('hours_on_site').value || 0);
   if (!hours) { alert('Please enter your start and finish times.'); return; }
   prepareJourneyData();
-  // Reset checkboxes
   for (let i = 1; i <= 5; i++) document.getElementById(`chk${i}`).checked = false;
   checkAll();
   document.getElementById('confirm-overlay').classList.add('show');
@@ -629,7 +667,6 @@ function doSubmit() {
   document.getElementById('jobForm').submit();
 }
 
-// Close on overlay tap
 document.getElementById('confirm-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeConfirm();
 });
@@ -657,7 +694,7 @@ async function loadStartPoint() {
     }
   } catch(e) { startPoint = HOME_ADDRESS; }
 }
-loadStartPoint();
+if (!IS_EDIT) loadStartPoint();
 
 function addLeg(type) {
   legCount++;
@@ -824,30 +861,36 @@ function updateJourneyTotal() {
 
 // ── Materials ──────────────────────────────────────────────
 let matCount = 0;
-function addMaterial() {
+function addMaterial(prefill) {
   matCount++;
   document.getElementById('material_count').value = matCount;
   const container = document.getElementById('materials_container');
   const div = document.createElement('div');
   div.className = 'mat-row';
   div.id = `mat_${matCount}`;
+  const desc     = prefill ? (prefill.description || '') : '';
+  const qty      = prefill ? (prefill.qty || 1)          : 1;
+  const unitCost = prefill ? (prefill.unit_cost || 0)    : 0;
+  const payment  = prefill ? (prefill.payment || 'Redstone Card') : 'Redstone Card';
+  const total    = prefill ? (prefill.total || 0)         : 0;
+  const n = matCount;
   div.innerHTML = `
-    <div class="mat-number">Item ${matCount}</div>
-    <button type="button" class="remove-mat" onclick="removeMat(${matCount})">×</button>
+    <div class="mat-number">Item ${n}</div>
+    <button type="button" class="remove-mat" onclick="removeMat(${n})">×</button>
     <div class="field"><label>Description</label>
-      <input type="text" name="mat_desc_${matCount}" placeholder="e.g. Sand paper, Paint..."></div>
+      <input type="text" name="mat_desc_${n}" value="${desc}" placeholder="e.g. Sand paper, Paint..."></div>
     <div class="mat-grid">
       <div class="field"><label>Qty</label>
-        <input type="number" name="mat_qty_${matCount}" value="1" min="0.01" step="0.01" oninput="calcMatTotal(${matCount})"></div>
+        <input type="number" name="mat_qty_${n}" value="${qty}" min="0.01" step="0.01" oninput="calcMatTotal(${n})"></div>
       <div class="field"><label>Cost inc VAT (£)</label>
-        <input type="number" name="mat_cost_${matCount}" value="0" min="0" step="0.01" oninput="calcMatTotal(${matCount})"></div>
+        <input type="number" name="mat_cost_${n}" value="${unitCost}" min="0" step="0.01" oninput="calcMatTotal(${n})"></div>
     </div>
     <div class="field"><label>Payment Method</label>
-      <select name="mat_payment_${matCount}">
-        <option value="Redstone Card">Redstone Company Card</option>
-        <option value="Own card/cash">Own Card / Cash (Reimburse me)</option>
+      <select name="mat_payment_${n}">
+        <option value="Redstone Card" ${payment === 'Redstone Card' ? 'selected' : ''}>Redstone Company Card</option>
+        <option value="Own card/cash" ${payment !== 'Redstone Card' ? 'selected' : ''}>Own Card / Cash (Reimburse me)</option>
       </select></div>
-    <div class="mat-total" id="mat_total_${matCount}">Total: £0.00</div>`;
+    <div class="mat-total" id="mat_total_${n}">Total: £${parseFloat(total).toFixed(2)}</div>`;
   container.appendChild(div);
 }
 
@@ -860,38 +903,43 @@ function calcMatTotal(n) {
 
 // ── Parking ────────────────────────────────────────────────
 let parkCount = 0;
-function addParking() {
+function addParking(prefill) {
   parkCount++;
   document.getElementById('parking_count').value = parkCount;
   const container = document.getElementById('parking_container');
   const div = document.createElement('div');
   div.className = 'parking-row';
   div.id = `park_${parkCount}`;
-  const n = parkCount;
+  const n       = parkCount;
+  const desc    = prefill ? (prefill.description || '') : '';
+  const cost    = prefill ? (prefill.cost || 0)         : 0;
+  const payment = prefill ? (prefill.payment || 'Redstone Card') : 'Redstone Card';
+  const isFine  = prefill ? !!prefill.is_fine           : false;
+  if (isFine) div.classList.add('is-fine');
   div.innerHTML = `
     <div class="parking-number">Parking Charge ${n}</div>
     <button type="button" class="remove-parking" onclick="removePark(${n})">×</button>
     <div class="field"><label>Description</label>
-      <input type="text" name="park_desc_${n}" placeholder="e.g. Pay & display, Parking fine"></div>
+      <input type="text" name="park_desc_${n}" value="${desc}" placeholder="e.g. Pay & display, Parking fine"></div>
     <div class="mat-grid">
       <div class="field"><label>Amount (£)</label>
-        <input type="number" name="park_cost_${n}" min="0" step="0.01" value="0"></div>
+        <input type="number" name="park_cost_${n}" min="0" step="0.01" value="${cost}"></div>
       <div class="field"><label>Payment</label>
         <select name="park_payment_${n}">
-          <option value="Redstone Card">Redstone Card</option>
-          <option value="Own card/cash">Own Card / Cash (Reimburse)</option>
+          <option value="Redstone Card" ${payment === 'Redstone Card' ? 'selected' : ''}>Redstone Card</option>
+          <option value="Own card/cash" ${payment !== 'Redstone Card' ? 'selected' : ''}>Own Card / Cash (Reimburse)</option>
         </select></div>
     </div>
     <div class="checkbox-row" style="margin-top:8px;">
       <input type="checkbox" name="park_is_fine_${n}" id="park_fine_${n}" value="yes"
+             ${isFine ? 'checked' : ''}
              onchange="toggleFineWarning(${n})">
       <label for="park_fine_${n}" style="font-size:14px;color:#c0392b;font-weight:600;text-transform:none;letter-spacing:0">
         ⚠ This is a parking fine
       </label>
     </div>
-    <div class="fine-warning" id="fine_warn_${n}">
+    <div class="fine-warning" id="fine_warn_${n}" style="display:${isFine ? 'block' : 'none'}">
       Parking fines are flagged for Redstone approval — reimbursement is at their discretion.
-      You will be notified of the decision as part of your weekly pay sign-off.
     </div>
     <div class="field" style="margin-top:8px;"><label>Receipt Photo</label>
       <div class="photo-upload" style="padding:12px;" onclick="this.querySelector('input').click()">
@@ -920,7 +968,7 @@ function calcHours() {
   const sm = document.getElementById('start_min')?.value;
   const fh = document.getElementById('finish_hour')?.value;
   const fm = document.getElementById('finish_min')?.value;
-  if (!sh || sm === '' || !fh || fm === '' || sm === undefined || fm === undefined) return;
+  if (!sh || sm === '' || sm === undefined || !fh || fm === '' || fm === undefined) return;
 
   const startStr = `${sh}:${sm}`;
   const finishStr = `${fh}:${fm}`;
@@ -934,7 +982,6 @@ function calcHours() {
   document.getElementById('hours_display').className = 'hours-display has-hours';
   document.getElementById('hours_on_site').value = hrs;
 
-  // Flag overtime prompt if over 8hrs
   if (hrs > 8) {
     const display = document.getElementById('hours_display');
     display.textContent = `Hours on site: ${hrs} hrs ⚠ Add overtime hours below`;
@@ -979,6 +1026,30 @@ function prepareJourneyData() {
   const total = legs.filter(l => l.type !== 'nextjob').reduce((s, l) => s + (l.miles || 0), 0);
   document.getElementById('total_miles').value = total.toFixed(1);
 }
+
+// ── Prefill on edit ────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function() {
+  // Prefill materials
+  const mats = window.PREFILL_MATERIALS || [];
+  if (mats.length > 0) mats.forEach(m => addMaterial(m));
+  // Prefill parking
+  const parks = window.PREFILL_PARKING || [];
+  if (parks.length > 0) parks.forEach(p => addParking(p));
+  // Restore hours display if times already set
+  const sh = document.getElementById('start_hour').value;
+  const sm = document.getElementById('start_min').value;
+  const fh = document.getElementById('finish_hour').value;
+  const fm = document.getElementById('finish_min').value;
+  if (sh && sm && fh && fm) calcHours();
+
+  // If hours_on_site already has a value (PPM or from hidden), show it
+  const hoursVal = document.getElementById('hours_on_site').value;
+  if (hoursVal && hoursVal !== '') {
+    const display = document.getElementById('hours_display');
+    display.textContent = `Hours on site: ${hoursVal} hrs`;
+    display.className = 'hours-display has-hours';
+  }
+});
 </script>
 
 <script>
