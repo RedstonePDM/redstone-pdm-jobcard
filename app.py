@@ -1740,7 +1740,7 @@ def admin_add_contractor():
           data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
           float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
           data.get("redstone_vehicle")=="yes", data.get("van_reg"),
-          0.25 if data.get("redstone_vehicle")!="yes" else 0,
+          float(data.get("mileage_rate") or 0),
           data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20), data.get("password")))
     conn.commit()
     cur.close()
@@ -1764,7 +1764,7 @@ def admin_edit_contractor(key):
           data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
           float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
           data.get("redstone_vehicle")=="yes", data.get("van_reg"),
-          0.25 if data.get("redstone_vehicle")!="yes" else 0,
+          float(data.get("mileage_rate") or 0),
           data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20),
           data.get("password"), key))
     conn.commit()
