@@ -417,12 +417,16 @@ function renderDrawer(card) {
   // ── Parking HTML ──
   let parkHTML = '';
   let fineApprovalHTML = '';
-  const parkingCost   = parseFloat(card.parking_cost || 0);
-  const reimbursePark = parseFloat(card.reimburse_parking || 0);
-  const redstonePark  = parkingCost - reimbursePark;
-  const pendingFines  = parkingItems.filter((p, i) => p.is_fine && p.fine_approved === undefined || p.is_fine && p.fine_approved === null);
-  const hasPendingFines = card.status !== 'approved' && card.status !== 'paid' &&
-    parkingItems.some((p, i) => p.is_fine && p.fine_approved == null);
+  const parkingCost       = parseFloat(card.parking_cost || 0);
+  // Calculate totals directly from items — never by subtraction
+  const ownParkItems      = parkingItems.filter(p => !p.is_fine && p.payment !== 'Redstone Card');
+  const redstoneParkItems = parkingItems.filter(p => !p.is_fine && p.payment === 'Redstone Card');
+  const allFineItems      = parkingItems.filter(p => p.is_fine);
+  const ownParkTotal      = ownParkItems.reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const redstoneParkTotal = redstoneParkItems.reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const approvedFineTotal = allFineItems.filter(p => p.fine_approved === true).reduce((s,p) => s + parseFloat(p.cost||0), 0);
+  const hasPendingFines   = card.status !== 'approved' && card.status !== 'paid' &&
+    parkingItems.some(p => p.is_fine && p.fine_approved !== true && p.fine_approved !== false);
 
   if (parkingItems.length || parkingCost > 0) {
     let parkRows = '';
@@ -460,10 +464,9 @@ function renderDrawer(card) {
         }
       });
       if (parkingItems.length > 1) {
-        const approvedFineTotal = parkingItems.filter(p => p.is_fine && p.fine_approved === true).reduce((s,p) => s + parseFloat(p.cost||0), 0);
-        const ownReimburseTotal = reimbursePark + approvedFineTotal;
-        if (ownReimburseTotal > 0) parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0"><div class="parking-own-label">Own Card Total (Reimburse)</div><div class="parking-own-amount">£${ownReimburseTotal.toFixed(2)}</div></div>`;
-        if (redstonePark > 0)     parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:1px solid #ddd"><div class="parking-redstone-label">Redstone Card Total</div><div style="color:#555;font-weight:600">£${redstonePark.toFixed(2)}</div></div>`;
+        const totalReimburse = ownParkTotal + approvedFineTotal;
+        if (totalReimburse > 0)    parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0"><div class="parking-own-label">Own Card Total (Reimburse)</div><div class="parking-own-amount">£${totalReimburse.toFixed(2)}</div></div>`;
+        if (redstoneParkTotal > 0) parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:1px solid #ddd"><div class="parking-redstone-label">Redstone Card Total</div><div style="color:#555;font-weight:600">£${redstoneParkTotal.toFixed(2)}</div></div>`;
         parkRows += `<div class="parking-split-row" style="font-weight:700;background:#f0f2f5;border-top:2px solid #ccc"><div style="color:#1a2332">Total Parking</div><div style="color:#1a2332;font-weight:700">£${parkingCost.toFixed(2)}</div></div>`;
       }
     } else {
@@ -478,7 +481,7 @@ function renderDrawer(card) {
     if (hasPendingFines) {
       let fineItems = '';
       parkingItems.forEach((p, i) => {
-        if (p.is_fine && (p.fine_approved == null || p.fine_approved === undefined)) {
+        if (p.is_fine && p.fine_approved !== true && p.fine_approved !== false) {
           const cost = parseFloat(p.cost || 0);
           fineItems += `<div class="fine-item" id="fine-item-${i}">
             <div class="fine-item-desc">${p.description || 'Parking Fine'}</div>
@@ -516,7 +519,7 @@ function renderDrawer(card) {
   const redstone_p      = parseFloat(card.parking_cost || 0) - reimb_p;
   const redstone_mats_total = parseFloat(card.materials_total || 0) - parseFloat(card.reimburse_total || 0);
   const total_cost      = parseFloat(card.invoice_total || 0) + redstone_mats_total + redstone_p;
-  const pendingFineTotal = parkingItems.filter(p => p.is_fine && (p.fine_approved == null || p.fine_approved === undefined))
+  const pendingFineTotal = parkingItems.filter(p => p.is_fine && p.fine_approved !== true && p.fine_approved !== false)
     .reduce((s, p) => s + parseFloat(p.cost || 0), 0);
 
   let fineNote = '';
