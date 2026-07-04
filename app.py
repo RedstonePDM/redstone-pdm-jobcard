@@ -310,7 +310,8 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
-      "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
