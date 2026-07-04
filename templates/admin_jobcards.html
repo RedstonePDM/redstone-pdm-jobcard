@@ -460,8 +460,11 @@ function renderDrawer(card) {
         }
       });
       if (parkingItems.length > 1) {
-        if (reimbursePark > 0) parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0"><div class="parking-own-label">Reimbursable Total</div><div class="parking-own-amount">£${reimbursePark.toFixed(2)}</div></div>`;
-        if (redstonePark > 0)  parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:2px solid #ddd"><div class="parking-redstone-label">Redstone Card Total</div><div style="color:#555;font-weight:600">£${redstonePark.toFixed(2)}</div></div>`;
+        const approvedFineTotal = parkingItems.filter(p => p.is_fine && p.fine_approved === true).reduce((s,p) => s + parseFloat(p.cost||0), 0);
+        const ownReimburseTotal = reimbursePark + approvedFineTotal;
+        if (ownReimburseTotal > 0) parkRows += `<div class="parking-split-row own" style="font-weight:700;border-top:2px solid #f0c0b0"><div class="parking-own-label">Own Card Total (Reimburse)</div><div class="parking-own-amount">£${ownReimburseTotal.toFixed(2)}</div></div>`;
+        if (redstonePark > 0)     parkRows += `<div class="parking-split-row redstone" style="font-weight:700;border-top:1px solid #ddd"><div class="parking-redstone-label">Redstone Card Total</div><div style="color:#555;font-weight:600">£${redstonePark.toFixed(2)}</div></div>`;
+        parkRows += `<div class="parking-split-row" style="font-weight:700;background:#f0f2f5;border-top:2px solid #ccc"><div style="color:#1a2332">Total Parking</div><div style="color:#1a2332;font-weight:700">£${parkingCost.toFixed(2)}</div></div>`;
       }
     } else {
       parkRows = `<div class="parking-split-row own"><div>Parking</div><div>£${parkingCost.toFixed(2)}</div></div>`;
@@ -637,19 +640,15 @@ async function approveCard() {
   const data = await res.json();
   if (data.ok) {
     updateRowPill(currentCardId, 'approved', '&#10003; Approved');
-    // Update invoice totals in drawer if fines changed them
-    if (data.fine_addition > 0) {
-      const grossEl = document.getElementById('drawer-gross');
-      const netEl   = document.getElementById('drawer-net');
-      if (grossEl) grossEl.textContent = `£${parseFloat(data.new_invoice_total).toFixed(2)}`;
-      if (netEl)   netEl.textContent   = `£${parseFloat(data.new_net_payment).toFixed(2)}`;
-    }
+    // Reload the drawer fresh from the server so all figures and statuses update
+    const cardRes = await fetch(`/card/${currentCardId}/detail`);
+    const updatedCard = await cardRes.json();
+    fineDecisions[currentCardId] = {};
+    renderDrawer(updatedCard);
+    // Set actions to Mark Paid + PDF (card is now approved)
     document.getElementById('drawer-actions').innerHTML =
       `<button class="btn btn-paid" onclick="markPaid()">Mark Paid</button>
        <a href="/card/${currentCardId}/jobcard.pdf" class="btn btn-pdf" target="_blank">PDF</a>`;
-    // Remove fine approval section from drawer
-    const fineSection = document.querySelector('.fine-approval-section');
-    if (fineSection) fineSection.remove();
   }
 }
 
