@@ -886,21 +886,7 @@ function addAdminMat() {
 
 function removeAdminMat(i) {
   document.getElementById(`admin_mat_row_${i}`)?.remove();
-  // Recalculate admin total from remaining rows
-  const container = document.getElementById('admin_mat_container');
-  let adminTotal = 0;
-  if (container) {
-    container.querySelectorAll('[id^="admin_mat_row_"]').forEach(row => {
-      const idx = row.id.replace('admin_mat_row_', '');
-      const desc = document.getElementById(`adm_desc_${idx}`)?.value?.trim();
-      if (!desc) return;
-      const qty  = parseFloat(document.getElementById(`adm_qty_${idx}`)?.value || 0);
-      const cost = parseFloat(document.getElementById(`adm_cost_${idx}`)?.value || 0);
-      adminTotal += qty * cost;
-    });
-  }
   updateAdminMatFooter();
-  recalcTotalCost(adminTotal);
 }
 
 function recalcTotalCost(adminTotal) {
@@ -976,35 +962,26 @@ async function saveAdminMaterials() {
     const supplier  = document.getElementById(`adm_sup_${idx}`)?.value?.trim() || '';
     mats.push({ description: desc, qty, unit_cost, total: parseFloat((qty * unit_cost).toFixed(2)), supplier });
   });
+
+  const saveBtn = document.querySelector('.btn-save-admin-mat');
+  if (saveBtn) { saveBtn.textContent = 'Saving...'; saveBtn.disabled = true; }
+
   const res = await fetch(`/card/${currentCardId}/admin_materials`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ admin_materials: mats })
   });
   const data = await res.json();
+
   if (data.ok) {
-    const adminTotal = parseFloat(data.total || 0);
-
-    // Update footer
-    updateAdminMatFooter();
-
-    // Update or insert the Admin Materials line in invoice summary
-    // then recalculate total — pass adminTotal directly, no DOM reading
-    updateAdminMatFooter();
-    recalcTotalCost(adminTotal);
-
-    // Flash save button green
-    const saveBtn = document.querySelector('.btn-save-admin-mat');
-    if (saveBtn) {
-      saveBtn.textContent = '✓ Saved';
-      saveBtn.style.background = '#1a7a4a';
-      setTimeout(() => {
-        saveBtn.textContent = '💾 Save Admin Materials';
-        saveBtn.style.background = '#c0392b';
-      }, 2000);
-    }
+    // Reload the drawer fresh from server — guaranteed correct values, no DOM arithmetic
+    const cardRes = await fetch(`/card/${currentCardId}/detail`);
+    const updatedCard = await cardRes.json();
+    fineDecisions[currentCardId] = fineDecisions[currentCardId] || {};
+    renderDrawer(updatedCard);
   } else {
     alert('Save failed — please try again');
+    if (saveBtn) { saveBtn.textContent = '💾 Save Admin Materials'; saveBtn.disabled = false; }
   }
 }
 </script>
