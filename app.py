@@ -604,11 +604,17 @@ def build_job_card_pdf(card, contractor):
                     status_label
                 ])
             reimburse_parking = float(card.get("reimburse_parking", 0) or 0)
-            redstone_parking = parking_cost - reimburse_parking
-            if redstone_parking > 0:
-                park_data.append(["Redstone Card Total", f"\u00a3{redstone_parking:.2f}", "", "Company expense"])
-            if reimburse_parking > 0:
-                park_data.append(["Own Card Total (Reimburse)", f"\u00a3{reimburse_parking:.2f}", "", "On invoice"])
+            # Calculate Redstone parking directly from items (not by subtraction)
+            redstone_items = [p for p in parking_items_stored if not p.get("is_fine") and p.get("payment") == "Redstone Card"]
+            own_items      = [p for p in parking_items_stored if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
+            fine_items     = [p for p in parking_items_stored if p.get("is_fine")]
+            redstone_park_total = sum(float(p.get("cost",0)) for p in redstone_items)
+            own_park_total      = sum(float(p.get("cost",0)) for p in own_items)
+            approved_fine_total = sum(float(p.get("cost",0)) for p in fine_items if p.get("fine_approved") == True)
+            if redstone_park_total > 0:
+                park_data.append(["Redstone Card Subtotal", f"\u00a3{redstone_park_total:.2f}", "", "Company expense"])
+            if own_park_total + approved_fine_total > 0:
+                park_data.append(["Own Card Subtotal (Reimburse)", f"\u00a3{(own_park_total + approved_fine_total):.2f}", "", "On invoice"])
             park_data.append(["TOTAL PARKING", f"\u00a3{parking_cost:.2f}", "", ""])
             park_table = Table(park_data, colWidths=[60*mm, 25*mm, 40*mm, 55*mm])
             park_table.setStyle(TableStyle([
@@ -639,14 +645,22 @@ def build_job_card_pdf(card, contractor):
     grand_mileage = float(card.get("mileage_cost", 0))
     grand_park    = float(card.get("parking_cost", 0))
     grand_mats    = float(card.get("materials_total", 0))
-    grand_total   = grand_labour + grand_mileage + grand_park + grand_mats
+    # Admin materials
+    admin_mats_raw = card.get("admin_materials_json") or []
+    if isinstance(admin_mats_raw, str):
+        try: admin_mats_raw = json.loads(admin_mats_raw)
+        except: admin_mats_raw = []
+    grand_admin   = sum(float(m.get("total", 0)) for m in admin_mats_raw)
+    grand_total   = grand_labour + grand_mileage + grand_park + grand_mats + grand_admin
     grand_data = [["Labour", f"\u00a3{grand_labour:.2f}"]]
     if grand_mileage > 0:
         grand_data.append(["Mileage", f"\u00a3{grand_mileage:.2f}"])
     if grand_park > 0:
         grand_data.append(["Parking (total)", f"\u00a3{grand_park:.2f}"])
     if grand_mats > 0:
-        grand_data.append(["Materials (total)", f"\u00a3{grand_mats:.2f}"])
+        grand_data.append(["Engineer Materials (total)", f"\u00a3{grand_mats:.2f}"])
+    if grand_admin > 0:
+        grand_data.append(["Admin Materials (Redstone ordered)", f"\u00a3{grand_admin:.2f}"])
     grand_data.append(["TOTAL JOB COST", f"\u00a3{grand_total:.2f}"])
     grand_table = Table(grand_data, colWidths=[140*mm, 40*mm])
     grand_table.setStyle(TableStyle([
