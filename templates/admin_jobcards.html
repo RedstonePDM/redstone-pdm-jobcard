@@ -881,12 +881,25 @@ function addAdminMat() {
 
 function removeAdminMat(i) {
   document.getElementById(`admin_mat_row_${i}`)?.remove();
+  // Recalculate admin total from remaining rows
+  const container = document.getElementById('admin_mat_container');
+  let adminTotal = 0;
+  if (container) {
+    container.querySelectorAll('[id^="admin_mat_row_"]').forEach(row => {
+      const idx = row.id.replace('admin_mat_row_', '');
+      const desc = document.getElementById(`adm_desc_${idx}`)?.value?.trim();
+      if (!desc) return;
+      const qty  = parseFloat(document.getElementById(`adm_qty_${idx}`)?.value || 0);
+      const cost = parseFloat(document.getElementById(`adm_cost_${idx}`)?.value || 0);
+      adminTotal += qty * cost;
+    });
+  }
   updateAdminMatFooter();
-  // Recalculate Total Cost to Business from footer total + existing DOM values
-  recalcTotalCost();
+  recalcTotalCost(adminTotal);
 }
 
-function recalcTotalCost() {
+function recalcTotalCost(adminTotal) {
+  adminTotal = parseFloat(adminTotal) || 0;
   const totalCostRow = document.getElementById('summary-total-cost-row');
   if (!totalCostRow) return;
 
@@ -898,19 +911,17 @@ function recalcTotalCost() {
     redstoneCosts += parseFloat(el.textContent.replace(/[^0-9.]/g, '')) || 0;
   });
 
-  // Get current admin mat total from footer
-  const footer = document.getElementById('admin_mat_footer');
-  let adminTotal = 0;
-  if (footer) {
-    const strongEl = footer.querySelector('strong');
-    if (strongEl) adminTotal = parseFloat(strongEl.textContent.replace(/[^0-9.]/g, '')) || 0;
-  }
-
   // Update admin mat line in summary
   const adminLineEl = document.getElementById('summary-admin-mat-line');
   if (adminTotal > 0) {
     if (adminLineEl) {
       adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
+    } else {
+      const newRow = document.createElement('div');
+      newRow.className = 'd-total-row company';
+      newRow.id = 'summary-admin-mat-line';
+      newRow.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
+      totalCostRow.parentNode.insertBefore(newRow, totalCostRow);
     }
   } else if (adminLineEl) {
     adminLineEl.remove();
@@ -978,24 +989,9 @@ async function saveAdminMaterials() {
     updateAdminMatFooter();
 
     // Update or insert the Admin Materials line in invoice summary
-    let adminLineEl = document.getElementById('summary-admin-mat-line');
-    const totalCostRow = document.getElementById('summary-total-cost-row');
-    if (adminTotal > 0) {
-      if (adminLineEl) {
-        adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
-      } else if (totalCostRow) {
-        adminLineEl = document.createElement('div');
-        adminLineEl.className = 'd-total-row company';
-        adminLineEl.id = 'summary-admin-mat-line';
-        adminLineEl.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
-        totalCostRow.parentNode.insertBefore(adminLineEl, totalCostRow);
-      }
-    } else if (adminLineEl) {
-      adminLineEl.remove();
-    }
-
-    // Recalculate Total Cost to Business
-    recalcTotalCost();
+    // then recalculate total — pass adminTotal directly, no DOM reading
+    updateAdminMatFooter();
+    recalcTotalCost(adminTotal);
 
     // Flash save button green
     const saveBtn = document.querySelector('.btn-save-admin-mat');
