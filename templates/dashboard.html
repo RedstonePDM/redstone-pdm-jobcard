@@ -37,7 +37,7 @@
   .hero-date { font-size: 13px; color: rgba(255,255,255,0.5); }
   .hero-week { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 3px; font-weight: 600; }
 
-  /* 3 main tiles */
+  /* 5 main tiles */
   .tile-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
   @media (max-width: 900px) { .tile-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 600px) { .tile-row { grid-template-columns: repeat(2, 1fr); } }
@@ -89,6 +89,7 @@
   .job-info { flex: 1; min-width: 0; }
   .job-name { font-size: 14px; font-weight: 700; color: #1a2332; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .job-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .job-desc { font-size: 12px; color: #aaa; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .job-status { flex-shrink: 0; }
   .status-pill { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
   .status-pill.todo     { background: #eff4ff; color: #1a4fa0; }
@@ -148,7 +149,7 @@
     </div>
   </div>
 
-  <!-- 3 tiles -->
+  <!-- 5 tiles -->
   <div class="tile-row">
 
     <div class="main-tile" onclick="showSection('this-week')">
@@ -229,6 +230,7 @@
         <div class="job-info">
           <div class="job-name">{{ job.pub_name or job.job_id }}</div>
           <div class="job-meta">{{ job.job_id }} · {{ job.postcode }}</div>
+          {% if job.description %}<div class="job-desc">{{ job.description[:80] }}{% if job.description|length > 80 %}…{% endif %}</div>{% endif %}
         </div>
         <div class="job-status"><span class="status-pill done">Card Submitted</span></div>
       </div>
@@ -238,6 +240,7 @@
         <div class="job-info">
           <div class="job-name">{{ job.pub_name or job.job_id }}</div>
           <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.trade_type or 'General' }}</div>
+          {% if job.description %}<div class="job-desc">{{ job.description[:80] }}{% if job.description|length > 80 %}…{% endif %}</div>{% endif %}
         </div>
         <div class="job-status">
           {% if job.day_date == today %}
@@ -281,7 +284,7 @@
       <div class="job-info">
         <div class="job-name">{{ job.pub_name or job.job_id }}</div>
         <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.day_date.strftime('%d %b %Y') if job.day_date else '' }}</div>
-        {% if job.description %}<div class="job-meta" style="margin-top:3px;color:#666">{{ (job.description or '')[:100] }}</div>{% endif %}
+        {% if job.description %}<div class="job-desc">{{ job.description[:80] }}{% if job.description|length > 80 %}…{% endif %}</div>{% endif %}
       </div>
       <span class="status-pill todo">Survey</span>
     </div>
@@ -298,7 +301,6 @@
     document.querySelectorAll('[id^="section-"]').forEach(s => s.style.display = 'none');
     const el = document.getElementById('section-' + name);
     if (el) { el.style.display = 'block'; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    // Highlight active tile
     document.querySelectorAll('.main-tile').forEach(t => t.style.borderColor = '');
   }
 
@@ -310,7 +312,6 @@
       badge.textContent = '📌 You have a note';
       badge.className = 'mt-badge badge-red';
       content.innerHTML = `<div style="background:#fff8ef;border:1px solid #ffd89b;border-radius:10px;padding:18px 20px;font-size:14px;line-height:1.7;color:#5c3d00;white-space:pre-wrap">${data.note}</div>`;
-      // Flash the tile
       document.getElementById('tile-reminders').style.borderColor = '#c0392b';
     } else {
       badge.textContent = 'No notes this week';
