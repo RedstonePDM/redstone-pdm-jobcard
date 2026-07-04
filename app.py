@@ -557,7 +557,46 @@ def build_job_card_pdf(card, contractor):
         ]))
         story.append(mat_table)
 
-    if contractor.get("mileage_rate", 0) > 0:
+    # Admin-only materials section — shown on job card PDF (admin operational doc) only
+    admin_materials = card.get("admin_materials_json") or []
+    if isinstance(admin_materials, str):
+        try:
+            admin_materials = json.loads(admin_materials)
+        except Exception:
+            admin_materials = []
+    if admin_materials:
+        story.append(Paragraph(" ADMIN MATERIALS (Redstone Ordered — Not on Engineer Invoice)", section_style))
+        story.append(Spacer(1, 4))
+        adm_data = [["#", "Description", "Supplier", "Qty", "Unit Cost", "Total"]]
+        adm_grand = 0.0
+        for i, m in enumerate(admin_materials, 1):
+            line_total = float(m.get("total", 0))
+            adm_grand += line_total
+            adm_data.append([
+                str(i),
+                m.get("description", ""),
+                m.get("supplier", ""),
+                str(m.get("qty", "")),
+                f"\u00a3{float(m.get('unit_cost', 0)):.2f}",
+                f"\u00a3{line_total:.2f}",
+            ])
+        adm_data.append(["", "ADMIN MATERIALS TOTAL", "", "", "", f"\u00a3{adm_grand:.2f}"])
+        adm_table = Table(adm_data, colWidths=[8*mm, 50*mm, 35*mm, 15*mm, 22*mm, 30*mm])
+        adm_table.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2c3e50")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+            ("FONTSIZE",(0,0),(-1,-1),8),
+            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+            ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white, REDSTONE_LIGHT]),
+            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
+            ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+            ("LEFTPADDING",(0,0),(-1,-1),4),
+            ("RIGHTPADDING",(0,0),(-1,-1),4),
+            ("TOPPADDING",(0,0),(-1,-1),3),
+            ("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ]))
+        story.append(adm_table)
         story.append(Paragraph(" TRAVEL & MILEAGE", section_style))
         story.append(Spacer(1, 4))
         travel = Table([
