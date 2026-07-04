@@ -314,7 +314,8 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
-      "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
@@ -601,7 +602,7 @@ def build_job_card_pdf(card, contractor):
     if materials:
         story.append(Paragraph(" MATERIALS", section_style))
         story.append(Spacer(1, 4))
-        mat_data = [["#", "Description", "Qty", "Unit Cost", "Total", "Payment"]]
+        mat_data = [["#", "Description", "Qty", "Unit Cost", "Total", "Source"]]
         mat_grand_total = 0.0
         for i, m in enumerate(materials, 1):
             line_total = float(m.get("total", 0))
@@ -622,6 +623,38 @@ def build_job_card_pdf(card, contractor):
             ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
         ]))
         story.append(mat_table)
+
+    # Admin-only materials — shown on job card PDF (admin doc) but NOT on invoice PDF
+    admin_materials = card.get("admin_materials_json") or []
+    if isinstance(admin_materials, str):
+        try:
+            admin_materials = json.loads(admin_materials)
+        except Exception:
+            admin_materials = []
+    if admin_materials:
+        story.append(Paragraph(" ADMIN MATERIALS (Not on Engineer Invoice)", section_style))
+        story.append(Spacer(1, 4))
+        adm_data = [["#", "Description", "Supplier", "Qty", "Unit Cost", "Total"]]
+        adm_grand = 0.0
+        for i, m in enumerate(admin_materials, 1):
+            line_total = float(m.get("total", 0))
+            adm_grand += line_total
+            adm_data.append([str(i), m.get("description",""), m.get("supplier",""),
+                             str(m.get("qty","")), f"\u00a3{float(m.get('unit_cost',0)):.2f}",
+                             f"\u00a3{line_total:.2f}"])
+        adm_data.append(["", "ADMIN MATERIALS TOTAL", "", "", "", f"\u00a3{adm_grand:.2f}"])
+        adm_table = Table(adm_data, colWidths=[8*mm,55*mm,30*mm,15*mm,22*mm,30*mm])
+        adm_table.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2c3e50")), ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8),
+            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#e0e0e0")),
+            ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.HexColor("#fafafa"), REDSTONE_LIGHT]),
+            ("BACKGROUND",(0,-1),(-1,-1),REDSTONE_LIGHT),
+            ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+            ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
+            ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ]))
+        story.append(adm_table)
 
     if contractor.get("mileage_rate", 0) > 0:
         story.append(Paragraph(" TRAVEL & MILEAGE", section_style))
@@ -845,8 +878,9 @@ def build_invoice_pdf(card, contractor):
         except Exception:
             parking_items_raw = []
 
-    own_mats     = [m for m in materials_list if m.get("payment", "") != "Redstone Card"]
-    redstone_mats = [m for m in materials_list if m.get("payment", "") == "Redstone Card"]
+    # Split materials by payment type — only Own Card/Cash and Own Van Stock are reimbursed to engineer
+    own_mats      = [m for m in materials_list if m.get("payment","") in ("Own card/cash", "Own Van Stock")]
+    redstone_mats = [m for m in materials_list if m.get("payment","") in ("Redstone Card", "Redstone Van Stock")]
     own_park_items      = [p for p in parking_items_raw if not p.get("is_fine") and p.get("payment") != "Redstone Card"]
     red_park_items      = [p for p in parking_items_raw if p.get("payment") == "Redstone Card" and not p.get("is_fine")]
     approved_fine_items = [p for p in parking_items_raw if p.get("is_fine") and p.get("fine_approved") == True]
@@ -867,27 +901,43 @@ def build_invoice_pdf(card, contractor):
             f"\u00a3{mileage_cost:.2f}"
         ])
 
-    # Own-card materials (reimbursable) — these appear on invoice
+    # Own-card and own van stock materials (reimbursable) — appear on invoice
     for m in own_mats:
+        is_van = m.get("payment","") == "Own Van Stock"
+        label = "Van Stock" if is_van else "Own card"
         cost_data.append([
             Paragraph(
                 f"Materials \u2014 {m.get('description','')} (x{m.get('qty',1)})<br/>"
-                f"<font color='#c0392b' size='7'>Own card \u2014 reimbursable</font>",
+                f"<font color='#c0392b' size='7'>{label} \u2014 reimbursable</font>",
                 ParagraphStyle("mi", fontSize=9, fontName="Helvetica", leading=13)),
             f"\u00a3{float(m.get('total',0)):.2f}"
         ])
 
-    # Redstone card materials noted but greyed — NOT reimbursed on invoice
+    # Redstone card and Redstone van stock — NOT reimbursed on invoice
     if redstone_mats:
         red_mat_total = sum(float(m.get("total", 0)) for m in redstone_mats)
-        cost_data.append([
-            Paragraph(
-                f"Materials ({len(redstone_mats)} item(s) on Redstone card)<br/>"
-                f"<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
-                ParagraphStyle("rmi", fontSize=9, fontName="Helvetica", leading=13)),
-            Paragraph(f"<font color='#aaaaaa'>\u00a3{red_mat_total:.2f}</font>",
-                      ParagraphStyle("rmiv", fontSize=9, fontName="Helvetica"))
-        ])
+        redstone_card_mats = [m for m in redstone_mats if m.get("payment","") == "Redstone Card"]
+        redstone_van_mats  = [m for m in redstone_mats if m.get("payment","") == "Redstone Van Stock"]
+        if redstone_card_mats:
+            rct = sum(float(m.get("total",0)) for m in redstone_card_mats)
+            cost_data.append([
+                Paragraph(
+                    f"Materials ({len(redstone_card_mats)} item(s) on Redstone card)<br/>"
+                    f"<font color='#888888' size='7'>Company expense \u2014 not reimbursed on this invoice</font>",
+                    ParagraphStyle("rmi", fontSize=9, fontName="Helvetica", leading=13)),
+                Paragraph(f"<font color='#aaaaaa'>\u00a3{rct:.2f}</font>",
+                          ParagraphStyle("rmiv", fontSize=9, fontName="Helvetica"))
+            ])
+        if redstone_van_mats:
+            rvt = sum(float(m.get("total",0)) for m in redstone_van_mats)
+            cost_data.append([
+                Paragraph(
+                    f"Materials ({len(redstone_van_mats)} item(s) from Redstone van stock)<br/>"
+                    f"<font color='#888888' size='7'>Redstone pre-purchased stock \u2014 not reimbursed on this invoice</font>",
+                    ParagraphStyle("rvmi", fontSize=9, fontName="Helvetica", leading=13)),
+                Paragraph(f"<font color='#aaaaaa'>\u00a3{rvt:.2f}</font>",
+                          ParagraphStyle("rvmiv", fontSize=9, fontName="Helvetica"))
+            ])
 
     # Own-card parking (reimbursable) — on invoice
     for p in own_park_items:
@@ -1262,7 +1312,9 @@ def submit_job_card(job_id, card_date):
         payment   = request.form.get(f"mat_payment_{i}", "Redstone Card")
         total     = round(qty * unit_cost, 2)
         materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
-        if payment != "Redstone Card":
+        # Reimburse: Own Card/Cash and Own Van Stock — engineer paid out of pocket
+        # Redstone Card and Redstone Van Stock are NOT reimbursed (Redstone recoups via billing)
+        if payment in ("Own card/cash", "Own Van Stock"):
             reimburse_total += total
 
     materials_total = sum(m["total"] for m in materials)
@@ -1879,6 +1931,43 @@ def card_detail(card_id):
     return jsonify(d)
 
 
+@app.route("/card/<int:card_id>/admin_materials", methods=["POST"])
+@admin_required
+def save_admin_materials(card_id):
+    """Save admin-only material lines to a job card. Never visible to engineer."""
+    data = request.get_json()
+    admin_mats = data.get("admin_materials", [])
+    # Validate and calculate totals
+    cleaned = []
+    for m in admin_mats:
+        desc = str(m.get("description", "")).strip()
+        if not desc:
+            continue
+        qty       = float(m.get("qty", 1) or 1)
+        unit_cost = float(m.get("unit_cost", 0) or 0)
+        total     = round(qty * unit_cost, 2)
+        supplier  = str(m.get("supplier", "")).strip()
+        cleaned.append({
+            "description": desc,
+            "qty":         qty,
+            "unit_cost":   unit_cost,
+            "total":       total,
+            "supplier":    supplier,
+            "admin_only":  True,
+        })
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE job_cards SET admin_materials_json=%s WHERE id=%s",
+        (json.dumps(cleaned), card_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    admin_total = sum(m["total"] for m in cleaned)
+    return jsonify({"ok": True, "count": len(cleaned), "total": admin_total})
+
+
 @app.route("/card/<int:card_id>/jobcard.pdf")
 @login_required
 def download_job_card(card_id):
@@ -2450,7 +2539,7 @@ def resubmit_card(card_id):
         payment = request.form.get(f"mat_payment_{i}", "Redstone Card")
         total = round(qty * unit_cost, 2)
         materials.append({"description": desc, "qty": qty, "unit_cost": unit_cost, "total": total, "payment": payment})
-        if payment != "Redstone Card":
+        if payment in ("Own card/cash", "Own Van Stock"):
             reimburse_total += total
 
     materials_total = sum(m["total"] for m in materials)
