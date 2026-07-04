@@ -882,6 +882,7 @@ function addMaterial(prefill) {
   const qty      = prefill ? (prefill.qty || 1)          : 1;
   const unitCost = prefill ? (prefill.unit_cost || 0)    : 0;
   const payment  = prefill ? (prefill.payment || 'Redstone Card') : 'Redstone Card';
+  const supplier = prefill ? (prefill.supplier || '')    : '';
   const total    = prefill ? (prefill.total || 0)        : 0;
   const n = matCount;
   const isVanStock = payment === 'Redstone Van Stock' || payment === 'Own Van Stock';
@@ -890,6 +891,8 @@ function addMaterial(prefill) {
     <button type="button" class="remove-mat" onclick="removeMat(${n})">×</button>
     <div class="field"><label>Description</label>
       <input type="text" name="mat_desc_${n}" value="${desc}" placeholder="e.g. Paint, Fixings, Altro..."></div>
+    <div class="field"><label>Supplier / Merchant</label>
+      <input type="text" name="mat_supplier_${n}" value="${supplier}" placeholder="e.g. Screwfix, Travis Perkins..."></div>
     <div class="field"><label>Payment / Source</label>
       <select name="mat_payment_${n}" id="mat_payment_sel_${n}" onchange="onPaymentChange(${n})">
         <option value="Redstone Card"      ${payment === 'Redstone Card'      ? 'selected' : ''}>🏢 Redstone Card (new purchase)</option>
