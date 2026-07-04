@@ -201,6 +201,13 @@
 
   </div>
 
+  <!-- Planner note banner (populated by /api/my_note) -->
+  <div id="planner-note-banner" style="display:none;margin-bottom:20px;
+background:#fff8ef;border:1.5px solid #ffd89b;border-radius:12px;padding:16px 20px;">
+    <div style="font-size:12px;font-weight:700;color:#c77a10;margin-bottom:6px;">📋 Notes from Redstone this week</div>
+    <div id="planner-note-text" style="font-size:13px;color:#5c3d00;line-height:1.6;white-space:pre-wrap"></div>
+  </div>
+
   <!-- This week section -->
   <div id="section-this-week" class="section-card">
     <div class="section-title">
@@ -309,6 +316,9 @@
     const badge = document.getElementById('reminder-badge');
     const content = document.getElementById('reminder-content');
     if (data.note) {
+      const banner = document.getElementById('planner-note-banner');
+      const bannerText = document.getElementById('planner-note-text');
+      if (banner && bannerText) { bannerText.textContent = data.note; banner.style.display = 'block'; }
       badge.textContent = '📌 You have a note';
       badge.className = 'mt-badge badge-red';
       content.innerHTML = `<div style="background:#fff8ef;border:1px solid #ffd89b;border-radius:10px;padding:18px 20px;font-size:14px;line-height:1.7;color:#5c3d00;white-space:pre-wrap">${data.note}</div>`;
