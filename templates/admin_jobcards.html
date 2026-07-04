@@ -164,22 +164,52 @@
   .admin-mat-section {
     background: #1a2332; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
   }
-  .admin-mat-title { font-size: 11px; font-weight: 700; color: #c0392b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
-  .admin-mat-subtitle { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 12px; line-height: 1.5; }
-  .admin-mat-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 8px; align-items: center; }
-  .admin-mat-row input { padding: 7px 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; font-size: 12px; background: rgba(255,255,255,0.08); color: white; font-family: inherit; }
-  .admin-mat-row input::placeholder { color: rgba(255,255,255,0.3); }
-  .admin-mat-row input:focus { outline: none; border-color: #c0392b; }
-  .admin-mat-total { font-size: 12px; color: #c0392b; font-weight: 700; text-align: right; white-space: nowrap; }
-  .admin-mat-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
-  .admin-mat-header span { font-size: 10px; color: rgba(255,255,255,0.4); font-weight: 600; text-transform: uppercase; }
-  .btn-add-admin-mat { background: rgba(192,57,43,0.2); color: #e74c3c; border: 1px dashed #c0392b; border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 8px; }
-  .btn-add-admin-mat:hover { background: rgba(192,57,43,0.35); }
-  .btn-save-admin-mat { background: #c0392b; color: white; border: none; border-radius: 6px; padding: 8px 18px; font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 10px; }
-  .btn-remove-admin-mat { background: none; border: none; color: rgba(255,255,255,0.4); font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1; }
+  .admin-mat-title { font-size: 11px; font-weight: 700; color: #c0392b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .admin-mat-subtitle { font-size: 11px; color: rgba(255,255,255,0.45); margin-bottom: 12px; line-height: 1.5; }
+  /* Each line is a card */
+  .admin-mat-card {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; position: relative;
+  }
+  .admin-mat-card-top { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+  .admin-mat-card-bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center; }
+  .admin-mat-label { font-size: 10px; color: rgba(255,255,255,0.35); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+  .admin-mat-input {
+    width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px; font-size: 12px; background: rgba(255,255,255,0.07);
+    color: white; font-family: inherit;
+  }
+  .admin-mat-input::placeholder { color: rgba(255,255,255,0.25); }
+  .admin-mat-input:focus { outline: none; border-color: #c0392b; background: rgba(255,255,255,0.12); }
+  .admin-mat-line-total {
+    font-size: 13px; font-weight: 700; color: #e74c3c; text-align: right;
+    padding-top: 14px;
+  }
+  .btn-remove-admin-mat {
+    position: absolute; top: 8px; right: 10px;
+    background: none; border: none; color: rgba(255,255,255,0.3);
+    font-size: 18px; cursor: pointer; line-height: 1; padding: 0;
+  }
   .btn-remove-admin-mat:hover { color: #e74c3c; }
-  .admin-mat-summary { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; }
-  .admin-mat-summary strong { color: white; }
+  .btn-add-admin-mat {
+    background: rgba(192,57,43,0.15); color: #e74c3c;
+    border: 1px dashed rgba(192,57,43,0.5); border-radius: 6px;
+    padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+    width: 100%; margin-top: 4px; text-align: center;
+  }
+  .btn-add-admin-mat:hover { background: rgba(192,57,43,0.28); }
+  .btn-save-admin-mat {
+    background: #c0392b; color: white; border: none; border-radius: 6px;
+    padding: 9px 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+    margin-top: 10px; width: 100%;
+  }
+  .btn-save-admin-mat:hover { background: #a93226; }
+  .admin-mat-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 12px; color: rgba(255,255,255,0.5);
+  }
+  .admin-mat-footer strong { color: white; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -762,30 +792,45 @@ let adminMatCount = 0;
 function buildAdminMatSection(card) {
   const existing = parseJson(card.admin_materials_json);
   const total = existing.reduce((s, m) => s + parseFloat(m.total||0), 0);
-  let rows = '';
+  let cards = '';
   existing.forEach((m, i) => {
-    rows += `<div class="admin-mat-row" id="admin_mat_row_${i}">
-      <input type="text" placeholder="Description" value="${m.description||''}" id="adm_desc_${i}" oninput="calcAdminMatTotal(${i})">
-      <input type="text" placeholder="Supplier" value="${m.supplier||''}" id="adm_sup_${i}">
-      <input type="number" placeholder="Qty" value="${m.qty||1}" min="0.001" step="0.001" id="adm_qty_${i}" oninput="calcAdminMatTotal(${i})">
-      <input type="number" placeholder="Unit £" value="${m.unit_cost||0}" min="0" step="0.01" id="adm_cost_${i}" oninput="calcAdminMatTotal(${i})">
-      <span class="admin-mat-total" id="adm_total_${i}">£${parseFloat(m.total||0).toFixed(2)}</span>
-      <button class="btn-remove-admin-mat" onclick="removeAdminMat(${i})">×</button>
-    </div>`;
+    cards += buildAdminMatCard(i, m.description||'', m.supplier||'', m.qty||1, m.unit_cost||0, m.total||0);
   });
   adminMatCount = existing.length;
   return `<div class="admin-mat-section">
     <div class="admin-mat-title">🔒 Admin Materials — Hidden from Engineer</div>
-    <div class="admin-mat-subtitle">Bulk deliveries, pre-ordered stock, or items you've added. These are invisible to the engineer on their invoice, PDF, and dashboard.</div>
-    <div class="admin-mat-header">
-      <span>Description</span><span>Supplier</span><span>Qty</span><span>Unit £</span><span>Total</span>
-    </div>
-    <div id="admin_mat_container">${rows}</div>
+    <div class="admin-mat-subtitle">Bulk deliveries, pre-ordered stock, or items you've added. Invisible to engineer on invoice, PDF, and dashboard.</div>
+    <div id="admin_mat_container">${cards}</div>
     <button class="btn-add-admin-mat" onclick="addAdminMat()">+ Add Admin Material Line</button>
-    <div>
-      <button class="btn-save-admin-mat" onclick="saveAdminMaterials()">💾 Save Admin Materials</button>
+    <button class="btn-save-admin-mat" onclick="saveAdminMaterials()">💾 Save Admin Materials</button>
+    ${existing.length > 0 ? `<div class="admin-mat-footer"><span>${existing.length} line(s) saved</span><strong>Total: £${total.toFixed(2)}</strong></div>` : ''}
+  </div>`;
+}
+
+function buildAdminMatCard(i, desc, supplier, qty, unit_cost, total) {
+  return `<div class="admin-mat-card" id="admin_mat_row_${i}">
+    <button class="btn-remove-admin-mat" onclick="removeAdminMat(${i})">×</button>
+    <div class="admin-mat-card-top">
+      <div>
+        <div class="admin-mat-label">Description</div>
+        <input class="admin-mat-input" type="text" placeholder="e.g. Altro flooring" value="${desc}" id="adm_desc_${i}">
+      </div>
+      <div>
+        <div class="admin-mat-label">Supplier</div>
+        <input class="admin-mat-input" type="text" placeholder="e.g. Mercado" value="${supplier}" id="adm_sup_${i}">
+      </div>
     </div>
-    ${existing.length > 0 ? `<div class="admin-mat-summary"><span>${existing.length} line(s)</span><strong>Admin Total: £${total.toFixed(2)}</strong></div>` : ''}
+    <div class="admin-mat-card-bottom">
+      <div>
+        <div class="admin-mat-label">Qty</div>
+        <input class="admin-mat-input" type="number" placeholder="1" value="${qty}" min="0.001" step="0.001" id="adm_qty_${i}" oninput="calcAdminMatTotal(${i})">
+      </div>
+      <div>
+        <div class="admin-mat-label">Unit Cost (£)</div>
+        <input class="admin-mat-input" type="number" placeholder="0.00" value="${unit_cost}" min="0" step="0.01" id="adm_cost_${i}" oninput="calcAdminMatTotal(${i})">
+      </div>
+      <div class="admin-mat-line-total" id="adm_total_${i}">£${parseFloat(total).toFixed(2)}</div>
+    </div>
   </div>`;
 }
 
@@ -793,16 +838,8 @@ function addAdminMat() {
   const i = adminMatCount++;
   const container = document.getElementById('admin_mat_container');
   const div = document.createElement('div');
-  div.className = 'admin-mat-row';
-  div.id = `admin_mat_row_${i}`;
-  div.innerHTML = `
-    <input type="text" placeholder="Description" id="adm_desc_${i}" oninput="calcAdminMatTotal(${i})">
-    <input type="text" placeholder="Supplier" id="adm_sup_${i}">
-    <input type="number" placeholder="Qty" value="1" min="0.001" step="0.001" id="adm_qty_${i}" oninput="calcAdminMatTotal(${i})">
-    <input type="number" placeholder="Unit £" value="0" min="0" step="0.01" id="adm_cost_${i}" oninput="calcAdminMatTotal(${i})">
-    <span class="admin-mat-total" id="adm_total_${i}">£0.00</span>
-    <button class="btn-remove-admin-mat" onclick="removeAdminMat(${i})">×</button>`;
-  container.appendChild(div);
+  div.innerHTML = buildAdminMatCard(i, '', '', 1, 0, 0);
+  container.appendChild(div.firstElementChild);
 }
 
 function removeAdminMat(i) {
