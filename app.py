@@ -688,7 +688,7 @@ def build_invoice_pdf(card, contractor):
         "sub", fontSize=12, textColor=REDSTONE_GREY, fontName="Helvetica", spaceBefore=4, spaceAfter=8)))
     story.append(HRFlowable(width="100%", thickness=2, color=REDSTONE_RED, spaceBefore=4, spaceAfter=12))
 
-eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
+    eng_style = ParagraphStyle("eng", fontSize=9, textColor=REDSTONE_DARK,
                                fontName="Helvetica", leading=16, spaceAfter=0)
     eng_label = ParagraphStyle("engl", fontSize=8, textColor=REDSTONE_GREY,
                                fontName="Helvetica-Bold", leading=14, spaceAfter=0)
