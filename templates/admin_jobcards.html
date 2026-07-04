@@ -948,11 +948,45 @@ async function saveAdminMaterials() {
   const data = await res.json();
 
   if (data.ok) {
-    // Reload the drawer fresh from server — guaranteed correct values, no DOM arithmetic
-    const cardRes = await fetch(`/card/${currentCardId}/detail`);
-    const updatedCard = await cardRes.json();
-    fineDecisions[currentCardId] = fineDecisions[currentCardId] || {};
-    renderDrawer(updatedCard);
+    // Update admin mat footer
+    updateAdminMatFooter();
+
+    // Update admin materials line in summary
+    const adminTotal = parseFloat(data.total) || 0;
+    let adminLineEl = document.getElementById('summary-admin-mat-line');
+    if (adminTotal > 0) {
+      if (adminLineEl) {
+        adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
+      } else {
+        const totalRow = document.getElementById('summary-total-cost-row');
+        if (totalRow) {
+          const newRow = document.createElement('div');
+          newRow.className = 'd-total-row company';
+          newRow.id = 'summary-admin-mat-line';
+          newRow.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
+          totalRow.parentNode.insertBefore(newRow, totalRow);
+        }
+      }
+    } else if (adminLineEl) {
+      adminLineEl.remove();
+    }
+
+    // Update total cost to business using server-calculated value — no client arithmetic
+    const totalCostRow = document.getElementById('summary-total-cost-row');
+    if (totalCostRow && data.total_cost_to_business !== undefined) {
+      totalCostRow.querySelector('span:last-child').textContent = `£${parseFloat(data.total_cost_to_business).toFixed(2)}`;
+    }
+
+    // Flash save button
+    if (saveBtn) {
+      saveBtn.textContent = '✓ Saved';
+      saveBtn.style.background = '#1a7a4a';
+      saveBtn.disabled = false;
+      setTimeout(() => {
+        saveBtn.textContent = '💾 Save Admin Materials';
+        saveBtn.style.background = '#c0392b';
+      }, 2000);
+    }
   } else {
     alert('Save failed — please try again');
     if (saveBtn) { saveBtn.textContent = '💾 Save Admin Materials'; saveBtn.disabled = false; }
