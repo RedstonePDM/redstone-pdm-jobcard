@@ -1126,7 +1126,7 @@ def submit_job_card(job_id, card_date):
         cost = float(request.form.get(f"park_cost_{i}", 0) or 0)
         payment = request.form.get(f"park_payment_{i}", "Redstone Card")
         is_fine = request.form.get(f"park_is_fine_{i}") == "yes"
-       if cost > 0:
+        if cost > 0:
             parking_items.append({"description": desc, "cost": cost, "payment": payment, "is_fine": is_fine})
             parking += cost
             if is_fine:
