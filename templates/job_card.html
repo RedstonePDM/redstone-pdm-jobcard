@@ -631,11 +631,16 @@ const IS_EDIT     = {{ 'true' if edit_card else 'false' }};
 
 // ── Prefill data from queried card ─────────────────────────
 (function() {
-  // psycopg2 may return JSONB as a Python object (array) or string — handle both
+  function safeJson(raw) {
+    if (!raw || raw === 'null' || raw === 'None') return [];
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch(e) { return []; } }
+    if (Array.isArray(raw)) return raw;
+    return [];
+  }
   let _mRaw = {{ (edit_card.materials_json | tojson) if edit_card and edit_card.materials_json else '[]' }};
   let _pRaw = {{ (edit_card.parking_items_json | tojson) if edit_card and edit_card.parking_items_json else '[]' }};
-  window.PREFILL_MATERIALS = (typeof _mRaw === 'string') ? JSON.parse(_mRaw) : (_mRaw || []);
-  window.PREFILL_PARKING   = (typeof _pRaw === 'string') ? JSON.parse(_pRaw) : (_pRaw || []);
+  window.PREFILL_MATERIALS = safeJson(_mRaw);
+  window.PREFILL_PARKING   = safeJson(_pRaw);
 })();
 
 // ── Confirmation Modal ─────────────────────────────────────
