@@ -1600,24 +1600,112 @@ def admin_jobcards():
 @app.route("/admin/approve/<int:card_id>", methods=["POST"])
 @admin_required
 def approve_card(card_id):
+    data = request.get_json() or {}
+    approved_fines = data.get("approved_fines", [])  # list of fine indices approved by admin
+
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT submitted_at, card_date FROM job_cards WHERE id=%s", (card_id,))
-    row = cur.fetchone()
-    expected_pay = None
-    if row and row["card_date"]:
-        card_dt = row["card_date"]
-        days_to_friday = (4 - card_dt.weekday()) % 7
-        week_friday = card_dt + timedelta(days=days_to_friday)
-        expected_pay = week_friday + timedelta(days=30)
+    cur.execute("SELECT * FROM job_cards WHERE id=%s", (card_id,))
+    card = cur.fetchone()
+    if not card:
+        cur.close(); conn.close()
+        return jsonify({"ok": False, "error": "Not found"}), 404
+
+    # Expected payment date
+    card_dt = card["card_date"]
+    days_to_friday = (4 - card_dt.weekday()) % 7
+    week_friday = card_dt + timedelta(days=days_to_friday)
+    expected_pay = week_friday + timedelta(days=30)
+
+    # Process parking fines — stamp each with admin decision
+    parking_items = card.get("parking_items_json") or []
+    if isinstance(parking_items, str):
+        try:
+            parking_items = json.loads(parking_items)
+        except Exception:
+            parking_items = []
+
+    fine_addition = 0.0
+    for i, p in enumerate(parking_items):
+        if p.get("is_fine"):
+            if i in approved_fines:
+                p["fine_approved"] = True
+                fine_addition += float(p.get("cost", 0))
+            else:
+                p["fine_approved"] = False
+
+    # Recalculate invoice total if fines were approved
+    new_reimburse_parking = float(card["reimburse_parking"] or 0) + fine_addition
+    new_invoice_total     = float(card["invoice_total"] or 0) + fine_addition
+    contractor = get_contractor(card["contractor_key"]) or CONTRACTORS.get(card["contractor_key"], {})
+    cis_rate      = float(contractor.get("cis_rate", 0))
+    labour_cost   = float(card["labour_cost"] or 0)
+    cis_deduction = round(labour_cost * cis_rate, 2)
+    new_net_payment = round(new_invoice_total - cis_deduction, 2)
+
     cur.execute("""
-        UPDATE job_cards SET status='approved', approved_at=NOW(), approved_by='admin',
-        expected_payment_date=%s WHERE id=%s
-    """, (expected_pay, card_id))
+        UPDATE job_cards SET
+            status='approved',
+            approved_at=NOW(),
+            approved_by='admin',
+            expected_payment_date=%s,
+            parking_items_json=%s,
+            reimburse_parking=%s,
+            invoice_total=%s,
+            cis_deduction=%s,
+            net_payment=%s
+        WHERE id=%s
+    """, (
+        expected_pay,
+        json.dumps(parking_items),
+        new_reimburse_parking,
+        new_invoice_total,
+        cis_deduction,
+        new_net_payment,
+        card_id
+    ))
     conn.commit()
+
+    # Regenerate and resend invoice PDF if fines added to it
+    if fine_addition > 0:
+        updated_card = dict(card)
+        updated_card["parking_items_json"] = parking_items
+        updated_card["reimburse_parking"]  = new_reimburse_parking
+        updated_card["invoice_total"]      = new_invoice_total
+        updated_card["cis_deduction"]      = cis_deduction
+        updated_card["net_payment"]        = new_net_payment
+        try:
+            invoice_pdf = build_invoice_pdf(updated_card, contractor)
+            filename_base = f"{contractor['name'].replace(' ','_')}_{card['job_id']}_{card['card_date']}_approved"
+            send_email(
+                to_addresses=[ACCOUNTS_EMAIL, contractor.get("email", "")],
+                subject=f"Redstone PDM -- Approved Invoice (parking fine included): {contractor['name']} | {card['job_id']}",
+                body_html=f"""
+                    <p>Job card approved. Parking fine(s) have been approved and added to the invoice.</p>
+                    <ul>
+                        <li><b>Engineer:</b> {contractor['name']}</li>
+                        <li><b>Job:</b> {card['job_id']} &mdash; {card.get('site_name', '')}</li>
+                        <li><b>Fine addition:</b> &pound;{fine_addition:.2f}</li>
+                        <li><b>Revised Invoice Total:</b> &pound;{new_invoice_total:.2f}</li>
+                        <li><b>CIS Deduction:</b> &pound;{cis_deduction:.2f}</li>
+                        <li><b>Net Payment:</b> &pound;{new_net_payment:.2f}</li>
+                    </ul>
+                """,
+                attachments=[(f"{filename_base}_invoice.pdf", invoice_pdf)]
+            )
+        except Exception as e:
+            print(f"Could not send approval email: {e}")
+
     cur.close()
     conn.close()
-    return jsonify({"ok": True, "expected_payment_date": str(expected_pay) if expected_pay else None})
+    return jsonify({
+        "ok": True,
+        "expected_payment_date": str(expected_pay) if expected_pay else None,
+        "fine_addition": fine_addition,
+        "new_invoice_total": new_invoice_total,
+        "new_net_payment": new_net_payment
+    })
+
 
 
 @app.route("/admin/query/<int:card_id>", methods=["POST"])
