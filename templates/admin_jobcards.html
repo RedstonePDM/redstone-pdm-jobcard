@@ -938,47 +938,42 @@ async function saveAdminMaterials() {
   if (data.ok) {
     const adminTotal = parseFloat(data.total || 0);
 
-    // Update the footer
+    // Update footer
     updateAdminMatFooter();
 
-    // Update the Admin Materials line in the invoice summary
-    const adminLineEl = document.getElementById('summary-admin-mat-line');
+    // Update or insert the Admin Materials line in invoice summary
+    let adminLineEl = document.getElementById('summary-admin-mat-line');
+    const totalCostRow = document.getElementById('summary-total-cost-row');
     if (adminTotal > 0) {
       if (adminLineEl) {
         adminLineEl.querySelector('span:last-child').textContent = `£${adminTotal.toFixed(2)}`;
-      } else {
-        // Insert the line before total cost row if it doesn't exist yet
-        const totalRow = document.getElementById('summary-total-cost-row');
-        if (totalRow) {
-          const newRow = document.createElement('div');
-          newRow.className = 'd-total-row company';
-          newRow.id = 'summary-admin-mat-line';
-          newRow.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
-          totalRow.parentNode.insertBefore(newRow, totalRow);
-        }
+      } else if (totalCostRow) {
+        adminLineEl = document.createElement('div');
+        adminLineEl.className = 'd-total-row company';
+        adminLineEl.id = 'summary-admin-mat-line';
+        adminLineEl.innerHTML = `<span>Admin Materials (Redstone ordered)</span><span>£${adminTotal.toFixed(2)}</span>`;
+        totalCostRow.parentNode.insertBefore(adminLineEl, totalCostRow);
       }
     } else if (adminLineEl) {
       adminLineEl.remove();
     }
 
-    // Recalculate and update Total Cost to Business
-    const totalCostEl = document.getElementById('summary-total-cost-row');
-    if (totalCostEl) {
-      // Read current gross invoice and redstone spend from DOM
-      const grossEl = document.getElementById('drawer-gross');
-      const gross = parseFloat(grossEl?.textContent?.replace('£','') || 0);
+    // Recalculate Total Cost to Business cleanly from drawer-gross + all fixed Redstone cost spans
+    if (totalCostRow) {
+      const grossText = document.getElementById('drawer-gross')?.textContent || '£0';
+      const gross = parseFloat(grossText.replace('£','').trim()) || 0;
 
-      // Sum all redstone cost lines
+      // Sum all .summary-redstone-cost spans (Redstone Card, Parking)
       let redstoneCosts = 0;
-      document.querySelectorAll('.summary-redstone-cost').forEach(el => {
-        redstoneCosts += parseFloat(el.textContent.replace('£','') || 0);
+      document.querySelectorAll('.summary-redstone-cost span:last-child').forEach(el => {
+        redstoneCosts += parseFloat(el.textContent.replace('£','').trim()) || 0;
       });
 
       const newTotal = gross + redstoneCosts + adminTotal;
-      totalCostEl.querySelector('span:last-child').textContent = `£${newTotal.toFixed(2)}`;
+      totalCostRow.querySelector('span:last-child').textContent = `£${newTotal.toFixed(2)}`;
     }
 
-    // Visual confirmation — flash the save button green
+    // Flash save button green
     const saveBtn = document.querySelector('.btn-save-admin-mat');
     if (saveBtn) {
       saveBtn.textContent = '✓ Saved';
