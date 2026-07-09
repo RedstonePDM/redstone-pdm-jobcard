@@ -324,6 +324,7 @@ def init_db():
       "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
+        "CREATE TABLE IF NOT EXISTS survey_forms (id SERIAL PRIMARY KEY, job_id TEXT NOT NULL, contractor TEXT, contractor_key TEXT, visit_date DATE, time_arrived TEXT, time_departed TEXT, manager_on_duty TEXT, scope_of_works TEXT, measurements TEXT, condition_notes TEXT, recommended_approach TEXT, access_notes TEXT, parking_notes TEXT, materials_spec_json JSONB DEFAULT '[]', photo_paths JSONB DEFAULT '[]', survey_mileage NUMERIC(6,2) DEFAULT 0, status TEXT DEFAULT 'surveyed', query_note TEXT, quote_labour_json JSONB DEFAULT '[]', quote_materials_json JSONB DEFAULT '[]', quote_plant_json JSONB DEFAULT '[]', quote_prelim_json JSONB DEFAULT '[]', quote_subtotal NUMERIC(10,2) DEFAULT 0, quote_total NUMERIC(10,2) DEFAULT 0, outcome TEXT, outcome_reason TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), pub_name TEXT, postcode TEXT, trade_type TEXT)",
     ]:
         try:
             cur.execute(col_sql)
@@ -2708,3 +2709,437 @@ def inject_globals():
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=False)
+
+
+# ── Survey Routes ─────────────────────────────────────────────────────────────
+
+@app.route("/survey/<job_id>/<day_date>")
+@login_required
+def survey_form(job_id, day_date):
+    """Engineer survey form for a 5000-series quote request job."""
+    key = session["contractor_key"]
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
+    job = cur.fetchone()
+    if not job:
+        cur.close(); conn.close()
+        return "Job not found", 404
+
+    cur.execute("""
+        SELECT sf.*, c.name as contractor
+        FROM survey_forms sf
+        JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+        WHERE sf.job_id = %s AND sf.contractor_key = %s
+        ORDER BY sf.submitted_at DESC LIMIT 1
+    """, (job_id, key))
+    existing = cur.fetchone()
+
+    cur.execute("SELECT name FROM contractors_db WHERE contractor_key = %s", (key,))
+    contractor = cur.fetchone()
+    cur.close(); conn.close()
+
+    return render_template("survey_form.html",
+        job=job,
+        existing=existing,
+        contractor=contractor,
+        today=date.today().isoformat(),
+        day_date=day_date,
+    )
+
+
+@app.route("/survey/submit", methods=["POST"])
+@login_required
+def submit_survey():
+    """Submit or resubmit an engineer's survey form."""
+    key = session["contractor_key"]
+    job_id = request.form.get("job_id")
+    survey_id = request.form.get("survey_id")
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        # Save uploaded photos
+        import uuid as _uuid
+        photo_paths = []
+        i = 0
+        while True:
+            photo = request.files.get(f"photo_{i}")
+            if not photo:
+                break
+            ext = photo.filename.rsplit('.', 1)[-1].lower() if '.' in photo.filename else 'jpg'
+            fname = f"survey_{job_id}_{key}_{_uuid.uuid4().hex[:8]}.{ext}"
+            save_path = os.path.join(app.config.get("UPLOAD_FOLDER", "uploads"), fname)
+            photo.save(save_path)
+            captions = json.loads(request.form.get("captions", "[]"))
+            photo_paths.append({"path": fname, "caption": captions[i] if i < len(captions) else ""})
+            i += 1
+
+        mats = json.loads(request.form.get("materials_spec_json", "[]"))
+
+        # Get job info for denormalisation
+        cur.execute("SELECT pub_name, postcode, trade_type FROM jobs WHERE job_id = %s", (job_id,))
+        job_row = cur.fetchone()
+        pub_name = job_row["pub_name"] if job_row else ""
+        postcode = job_row["postcode"] if job_row else ""
+        trade_type = job_row["trade_type"] if job_row else ""
+
+        # Get contractor name
+        cur.execute("SELECT name FROM contractors_db WHERE contractor_key = %s", (key,))
+        c_row = cur.fetchone()
+        contractor_name = c_row["name"] if c_row else key
+
+        new_status = "resubmitted" if survey_id else "surveyed"
+
+        if survey_id:
+            # Update existing — append new photos to existing ones
+            cur.execute("SELECT photo_paths FROM survey_forms WHERE id = %s", (survey_id,))
+            old = cur.fetchone()
+            existing_photos = list(old["photo_paths"] or []) if old else []
+            all_photos = existing_photos + photo_paths
+
+            cur.execute("""
+                UPDATE survey_forms SET
+                    visit_date=%s, time_arrived=%s, time_departed=%s,
+                    manager_on_duty=%s, scope_of_works=%s, measurements=%s,
+                    condition_notes=%s, recommended_approach=%s,
+                    access_notes=%s, parking_notes=%s,
+                    survey_mileage=%s, materials_spec_json=%s,
+                    photo_paths=%s, status=%s, updated_at=NOW()
+                WHERE id=%s AND contractor_key=%s
+            """, (
+                request.form.get("visit_date"), request.form.get("time_arrived"),
+                request.form.get("time_departed"), request.form.get("manager_on_duty"),
+                request.form.get("scope_of_works"), request.form.get("measurements"),
+                request.form.get("condition_notes"), request.form.get("recommended_approach"),
+                request.form.get("access_notes"), request.form.get("parking_notes"),
+                request.form.get("survey_mileage", 0),
+                psycopg2.extras.Json(mats),
+                psycopg2.extras.Json(all_photos),
+                new_status, survey_id, key
+            ))
+        else:
+            cur.execute("""
+                INSERT INTO survey_forms (
+                    job_id, contractor_key, contractor, visit_date, time_arrived, time_departed,
+                    manager_on_duty, scope_of_works, measurements, condition_notes,
+                    recommended_approach, access_notes, parking_notes,
+                    survey_mileage, materials_spec_json, photo_paths,
+                    status, pub_name, postcode, trade_type
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                job_id, key, contractor_name,
+                request.form.get("visit_date"), request.form.get("time_arrived"),
+                request.form.get("time_departed"), request.form.get("manager_on_duty"),
+                request.form.get("scope_of_works"), request.form.get("measurements"),
+                request.form.get("condition_notes"), request.form.get("recommended_approach"),
+                request.form.get("access_notes"), request.form.get("parking_notes"),
+                request.form.get("survey_mileage", 0),
+                psycopg2.extras.Json(mats),
+                psycopg2.extras.Json(photo_paths),
+                "surveyed", pub_name, postcode, trade_type
+            ))
+
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ── Admin Survey Routes ───────────────────────────────────────────────────────
+
+@app.route("/admin/surveys")
+@admin_required
+def admin_surveys():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT sf.*, c.name as contractor
+        FROM survey_forms sf
+        LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+        ORDER BY sf.submitted_at DESC
+    """)
+    surveys = cur.fetchall()
+    cur.close(); conn.close()
+    return render_template("admin_surveys.html", surveys=surveys)
+
+
+@app.route("/admin/survey/<int:survey_id>")
+@admin_required
+def admin_survey_detail(survey_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT sf.*, c.name as contractor
+        FROM survey_forms sf
+        LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+        WHERE sf.id = %s
+    """, (survey_id,))
+    s = cur.fetchone()
+    cur.close(); conn.close()
+    if not s:
+        return jsonify({"error": "Not found"}), 404
+    row = dict(s)
+    # Serialise dates
+    for k in ["visit_date", "submitted_at", "updated_at"]:
+        if row.get(k):
+            row[k] = str(row[k])
+    return jsonify(row)
+
+
+@app.route("/admin/survey/<int:survey_id>/query", methods=["POST"])
+@admin_required
+def admin_survey_query(survey_id):
+    data = request.json or {}
+    note = data.get("query_note", "")
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE survey_forms SET status='queried', query_note=%s, updated_at=NOW()
+            WHERE id=%s
+        """, (note, survey_id))
+        conn.commit()
+
+        # Notify engineer
+        cur.execute("SELECT contractor_key, job_id, pub_name FROM survey_forms WHERE id=%s", (survey_id,))
+        sf = cur.fetchone()
+        if sf:
+            cur.execute("SELECT email, name FROM contractors_db WHERE contractor_key=%s", (sf["contractor_key"],))
+            eng = cur.fetchone()
+            if eng and eng["email"]:
+                body = f"""<div style="font-family:Segoe UI,sans-serif;max-width:600px;margin:0 auto">
+                  <div style="background:#1a2332;padding:16px 20px;border-radius:8px 8px 0 0">
+                    <span style="color:white;font-size:18px;font-weight:700">Redstone <span style="color:#c0392b">PDM</span></span>
+                  </div>
+                  <div style="background:white;padding:20px;border:1px solid #e0e0e0;border-radius:0 0 8px 8px">
+                    <p style="font-size:15px;color:#1a2332">Hi {eng['name'].split()[0]},</p>
+                    <p style="color:#555;font-size:13px;margin:12px 0">Your survey for <strong>{sf['pub_name']}</strong> ({sf['job_id']}) has been queried by the office:</p>
+                    <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:14px;font-size:13px;color:#5c3d00;margin:12px 0">{note}</div>
+                    <p style="font-size:13px;color:#555">Please log in to Redstone PDM, open the survey and resubmit with the corrections.</p>
+                  </div>
+                </div>"""
+                send_email(eng["email"], f"Redstone PDM — Survey Query: {sf['pub_name']}", body)
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route("/admin/survey/<int:survey_id>/quote", methods=["POST"])
+@admin_required
+def admin_save_quote(survey_id):
+    data = request.json or {}
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE survey_forms SET
+                status=%s,
+                quote_labour_json=%s, quote_materials_json=%s,
+                quote_plant_json=%s, quote_prelim_json=%s,
+                quote_subtotal=%s, quote_total=%s,
+                updated_at=NOW()
+            WHERE id=%s
+        """, (
+            data.get("status", "quote-draft"),
+            psycopg2.extras.Json(data.get("quote_labour_json", [])),
+            psycopg2.extras.Json(data.get("quote_materials_json", [])),
+            psycopg2.extras.Json(data.get("quote_plant_json", [])),
+            psycopg2.extras.Json(data.get("quote_prelim_json", [])),
+            data.get("quote_subtotal", 0),
+            data.get("quote_total", 0),
+            survey_id
+        ))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route("/admin/survey/<int:survey_id>/outcome", methods=["POST"])
+@admin_required
+def admin_survey_outcome(survey_id):
+    data = request.json or {}
+    outcome = data.get("outcome")
+    reason = data.get("reason", "")
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE survey_forms SET
+                status=%s, outcome=%s, outcome_reason=%s, updated_at=NOW()
+            WHERE id=%s
+        """, (outcome, outcome, reason, survey_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route("/admin/survey/<int:survey_id>/pdf")
+@admin_required
+def admin_survey_pdf(survey_id):
+    """Generate a branded Redstone quote PDF."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM survey_forms WHERE id=%s", (survey_id,))
+    s = cur.fetchone()
+    cur.close(); conn.close()
+    if not s:
+        return "Not found", 404
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+
+    RED    = colors.HexColor('#c0392b')
+    DARK   = colors.HexColor('#1a2332')
+    GREY   = colors.HexColor('#888888')
+    LGREY  = colors.HexColor('#f5f6f8')
+    styles = getSampleStyleSheet()
+    MARKUP = 0.20
+
+    def sty(name, **kw):
+        return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+    h1   = sty('h1', fontSize=20, fontName='Helvetica-Bold', textColor=DARK)
+    h2   = sty('h2', fontSize=11, fontName='Helvetica-Bold', textColor=DARK)
+    sub  = sty('sub', fontSize=9, textColor=GREY)
+    body = sty('body', fontSize=9, textColor=DARK, leading=14)
+    red_label = sty('rl', fontSize=8, fontName='Helvetica-Bold', textColor=RED, spaceAfter=2)
+    right_bold = sty('rb', fontSize=11, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT)
+
+    elems = []
+
+    # Header
+    header_data = [[
+        Paragraph('<font color="#c0392b"><b>Redstone</b></font><b> PDM Ltd</b>', sty('hb', fontSize=16, fontName='Helvetica-Bold', textColor=DARK)),
+        Paragraph(f'<b>QUOTE</b><br/><font size="9" color="#888888">{s["job_id"]}</font>', sty('qt', fontSize=14, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT))
+    ]]
+    header_tbl = Table(header_data, colWidths=[90*mm, 80*mm])
+    header_tbl.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LINEBELOW', (0,0), (-1,0), 1.5, RED),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+    ]))
+    elems.append(header_tbl)
+    elems.append(Spacer(1, 8*mm))
+
+    # Site info
+    info_data = [
+        [Paragraph('<b>Site</b>', red_label), Paragraph(s["pub_name"] or "—", body),
+         Paragraph('<b>Postcode</b>', red_label), Paragraph(s["postcode"] or "—", body)],
+        [Paragraph('<b>Trade</b>', red_label), Paragraph(s["trade_type"] or "—", body),
+         Paragraph('<b>Date</b>', red_label), Paragraph(str(s["visit_date"] or "—"), body)],
+    ]
+    info_tbl = Table(info_data, colWidths=[25*mm, 65*mm, 25*mm, 55*mm])
+    info_tbl.setStyle(TableStyle([
+        ('VALIGN', (0,0),(-1,-1),'TOP'),
+        ('BACKGROUND', (0,0),(-1,-1), LGREY),
+        ('ROWBACKGROUNDS', (0,0),(-1,-1), [LGREY, colors.white]),
+        ('TOPPADDING', (0,0),(-1,-1), 5),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+        ('LEFTPADDING', (0,0),(-1,-1), 6),
+    ]))
+    elems.append(info_tbl)
+    elems.append(Spacer(1, 6*mm))
+
+    # Scope
+    if s["scope_of_works"]:
+        elems.append(Paragraph("Description of Works", h2))
+        elems.append(Spacer(1,2*mm))
+        elems.append(Paragraph(s["scope_of_works"].replace('\n','<br/>'), body))
+        elems.append(Spacer(1,5*mm))
+
+    # Line items
+    sections = [
+        ("Labour", s["quote_labour_json"] or []),
+        ("Materials", s["quote_materials_json"] or []),
+        ("Plant & Equipment", s["quote_plant_json"] or []),
+        ("Prelim / Mobilisation", s["quote_prelim_json"] or []),
+    ]
+
+    subtotal = 0
+    line_rows = [["Description", "Qty", "Unit Cost", "Total"]]
+    current_section = None
+
+    for section_name, lines in sections:
+        if not lines:
+            continue
+        line_rows.append([Paragraph(f"<b>{section_name}</b>", sty('sh', fontSize=9, fontName='Helvetica-Bold', textColor=RED)), "", "", ""])
+        for line in lines:
+            qty = float(line.get("qty", 0) or 0)
+            uc  = float(line.get("unit_cost", 0) or 0)
+            tot = qty * uc
+            subtotal += tot
+            line_rows.append([
+                Paragraph(line.get("description", ""), body),
+                f"{qty:g}",
+                f"£{uc:.2f}",
+                f"£{tot:.2f}",
+            ])
+
+    markup = subtotal * MARKUP
+    total  = subtotal + markup
+
+    line_rows.append(["", "", Paragraph("<b>Subtotal</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{subtotal:.2f}"])
+    line_rows.append(["", "", Paragraph(f"<b>Markup (20%)</b>", sty('mk', fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a4fa0'))), f"£{markup:.2f}"])
+    line_rows.append(["", "", Paragraph("<b>TOTAL</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
+
+    tbl = Table(line_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,0), DARK),
+        ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+        ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0),(-1,0), 9),
+        ('ROWBACKGROUNDS', (0,1),(-1,-4), [colors.white, LGREY]),
+        ('LINEABOVE', (0,-3),(-1,-3), 1, GREY),
+        ('LINEABOVE', (0,-1),(-1,-1), 2, DARK),
+        ('ALIGN', (1,0),(-1,-1), 'RIGHT'),
+        ('VALIGN', (0,0),(-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0),(-1,-1), 5),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+        ('LEFTPADDING', (0,0),(-1,-1), 6),
+        ('RIGHTPADDING', (0,0),(-1,-1), 6),
+    ]))
+    elems.append(tbl)
+    elems.append(Spacer(1, 6*mm))
+
+    # Footer note
+    elems.append(Paragraph(
+        "This quote is prepared by Redstone PDM Ltd in accordance with the JD Wetherspoon Contractor SLA. "
+        "All prices are exclusive of VAT unless otherwise stated. Markup applied at the contracted rate of 20%.",
+        sty('footer', fontSize=8, textColor=GREY, leading=12)
+    ))
+
+    doc.build(elems)
+    buf.seek(0)
+
+    from flask import send_file
+    return send_file(buf, mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f"Redstone_Quote_{s['job_id']}.pdf")
