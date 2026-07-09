@@ -41,6 +41,15 @@
   .read-only-field { background: #f8f9fa; border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 13px 14px; font-size: 15px; color: #555; }
 
   .time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .time-picker-wrap { display: flex; align-items: center; gap: 6px; }
+  .time-select {
+    flex: 1; padding: 13px 10px; border: 1.5px solid #e8e8e8;
+    border-radius: 10px; font-size: 18px; font-weight: 600;
+    color: #1a2332; background: white; -webkit-appearance: none;
+    text-align: center; outline: none; cursor: pointer;
+  }
+  .time-select:focus { border-color: #2980b9; }
+  .time-colon { font-size: 22px; font-weight: 700; color: #1a2332; line-height: 1; }
 
   /* Materials spec rows */
   .mat-spec-row { border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 12px; margin-bottom: 10px; position: relative; background: #fafafa; }
@@ -145,11 +154,31 @@
         <div class="time-row">
           <div class="field">
             <label>Time Arrived <span class="required">*</span></label>
-            <input type="time" name="time_arrived" id="time_arrived" required value="{{ existing.time_arrived if existing else '' }}">
+            <div class="time-picker-wrap">
+              <select class="time-select" id="time_arrived_h" name="time_arrived_h" required>
+                <option value="">--</option>
+                <option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option>
+              </select>
+              <span class="time-colon">:</span>
+              <select class="time-select" id="time_arrived_m" name="time_arrived_m" required>
+                <option value="">--</option>
+                <option value="00">00</option><option value="05">05</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="25">25</option><option value="30">30</option><option value="35">35</option><option value="40">40</option><option value="45">45</option><option value="50">50</option><option value="55">55</option>
+              </select>
+            </div>
           </div>
           <div class="field">
             <label>Time Departed <span class="required">*</span></label>
-            <input type="time" name="time_departed" id="time_departed" required value="{{ existing.time_departed if existing else '' }}">
+            <div class="time-picker-wrap">
+              <select class="time-select" id="time_departed_h" name="time_departed_h" required>
+                <option value="">--</option>
+                <option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option>
+              </select>
+              <span class="time-colon">:</span>
+              <select class="time-select" id="time_departed_m" name="time_departed_m" required>
+                <option value="">--</option>
+                <option value="00">00</option><option value="05">05</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="25">25</option><option value="30">30</option><option value="35">35</option><option value="40">40</option><option value="45">45</option><option value="50">50</option><option value="55">55</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -386,7 +415,7 @@ function removePhoto(i) {
 
 // ── Validation & Submit ───────────────────────────────────────────────────────
 function showConfirm() {
-  const required = ['visit_date','time_arrived','time_departed','manager_on_duty'];
+  const required = ['visit_date','time_arrived_h','time_arrived_m','time_departed_h','time_departed_m','manager_on_duty'];
   let missing = false;
   required.forEach(id => {
     const el = document.getElementById(id);
@@ -420,8 +449,12 @@ async function submitSurvey() {
   fd.append('job_id', JOB_ID);
   if (EXISTING_ID) fd.append('survey_id', EXISTING_ID);
   fd.append('visit_date', document.getElementById('visit_date').value);
-  fd.append('time_arrived', document.getElementById('time_arrived').value);
-  fd.append('time_departed', document.getElementById('time_departed').value);
+  const taH = document.getElementById('time_arrived_h').value;
+  const taM = document.getElementById('time_arrived_m').value;
+  const tdH = document.getElementById('time_departed_h').value;
+  const tdM = document.getElementById('time_departed_m').value;
+  fd.append('time_arrived', taH && taM ? taH + ':' + taM : '');
+  fd.append('time_departed', tdH && tdM ? tdH + ':' + tdM : '');
   fd.append('manager_on_duty', document.querySelector('[name=manager_on_duty]').value);
   fd.append('scope_of_works', document.querySelector('[name=scope_of_works]').value);
   fd.append('measurements', document.querySelector('[name=measurements]').value);
