@@ -322,6 +322,8 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS reimburse_parking NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS parking_items_json JSONB DEFAULT '[]'",
       "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
+        "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
     ]:
         try:
             cur.execute(col_sql)
@@ -2657,6 +2659,45 @@ def api_my_planner_note():
     conn.close()
     return jsonify({"note": row["note"] if row else None,
                     "week_commencing": str(week_start)})
+
+
+@app.route("/card/<int:card_id>/admin_materials", methods=["POST"])
+@admin_required
+def save_admin_materials(card_id):
+    data = request.json or {}
+    mats = data.get("admin_materials", [])
+    admin_total = sum(float(m.get("total", 0) or 0) for m in mats)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE job_cards SET admin_materials_json=%s, admin_materials_total=%s WHERE id=%s",
+            (psycopg2.extras.Json(mats), admin_total, card_id)
+        )
+        conn.commit()
+        cur.execute(
+            "SELECT invoice_total, materials_total, reimburse_total, parking_cost, reimburse_parking, admin_materials_total FROM job_cards WHERE id=%s",
+            (card_id,)
+        )
+        row = cur.fetchone()
+        if row:
+            gross_invoice   = float(row["invoice_total"] or 0)
+            total_mats      = float(row["materials_total"] or 0)
+            reimburse_total = float(row["reimburse_total"] or 0)
+            total_parking   = float(row["parking_cost"] or 0)
+            reimburse_park  = float(row["reimburse_parking"] or 0)
+            admin_mat_total = float(row["admin_materials_total"] or 0)
+            redstone_spend  = (total_mats - reimburse_total) + (total_parking - reimburse_park) + admin_mat_total
+            total_cost      = gross_invoice + redstone_spend
+        else:
+            total_cost = 0.0
+        return jsonify({"ok": True, "total": round(admin_total, 2), "total_cost_to_business": round(total_cost, 2)})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.context_processor
