@@ -1073,6 +1073,7 @@ def dashboard():
                 AND jc.contractor_key = %s AND jc.card_date = a.day_date
             WHERE a.contractor = %s
             AND a.day_date BETWEEN %s AND %s
+            AND j.tab NOT IN ('QUOTEREQUEST', 'QUOTE')
             ORDER BY a.day_date, a.id
         """, (key, contractor["name"], week_start, week_end))
         jobs = cur.fetchall()
@@ -1087,11 +1088,12 @@ def dashboard():
 
     try:
         cur.execute("""
-            SELECT a.job_id, a.day_date, j.pub_name, j.postcode, j.description, j.trade_type
+            SELECT a.job_id, a.day_date, j.pub_name, j.postcode, j.description,
+                   j.trade_type, j.tab, j.display_id
             FROM allocations a
             JOIN jobs j ON j.job_id = a.job_id
             WHERE a.contractor = %s
-            AND (j.job_id LIKE '5000%%' OR j.tab = 'QUOTE' OR j.tab = 'QUOTEREQUEST')
+            AND j.tab IN ('QUOTEREQUEST', 'QUOTE')
             ORDER BY a.day_date DESC LIMIT 20
         """, (contractor["name"],))
         survey_jobs = cur.fetchall()
@@ -2717,7 +2719,7 @@ def survey_form(job_id, day_date):
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
+    cur.execute("SELECT * FROM jobs WHERE job_id = %s OR display_id = %s", (job_id, job_id))
     job = cur.fetchone()
     if not job:
         cur.close(); conn.close()
