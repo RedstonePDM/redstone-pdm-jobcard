@@ -1991,14 +1991,10 @@ def admin_surveys():
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT DISTINCT a.job_id, a.contractor, a.day_date,
-                   j.pub_name, j.postcode, j.description, j.trade_type,
-                   j.tab, j.tab_label, j.location_code
-            FROM allocations a
-            JOIN jobs j ON j.job_id = a.job_id
-            WHERE (j.job_id LIKE '5000%%' OR j.tab IN ('QUOTE','QUOTEREQUEST'))
-            ORDER BY a.day_date DESC
-            LIMIT 100
+            SELECT sf.*, c.name as contractor
+            FROM survey_forms sf
+            LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+            ORDER BY sf.submitted_at DESC
         """)
         surveys = cur.fetchall()
     except Exception as e:
@@ -2854,20 +2850,7 @@ def submit_survey():
 
 # ── Admin Survey Routes ───────────────────────────────────────────────────────
 
-@app.route("/admin/surveys")
-@admin_required
-def admin_surveys():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT sf.*, c.name as contractor
-        FROM survey_forms sf
-        LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
-        ORDER BY sf.submitted_at DESC
-    """)
-    surveys = cur.fetchall()
-    cur.close(); conn.close()
-    return render_template("admin_surveys.html", surveys=surveys)
+# admin_surveys route defined above
 
 
 @app.route("/admin/survey/<int:survey_id>")
