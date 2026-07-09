@@ -286,11 +286,11 @@ background:#fff8ef;border:1.5px solid #ffd89b;border-radius:10px;padding:14px 18
     </div>
     {% if survey_jobs %}
     {% for job in survey_jobs %}
-    <a href="/survey/{{ job.job_id }}/{{ job.day_date }}" class="job-row" style="border-color:#1a4fa0;text-decoration:none;color:inherit">
+    <a href="/survey/{{ job.display_id or job.job_id }}/{{ job.day_date }}" class="job-row" style="border-color:#1a4fa0;text-decoration:none;color:inherit">
       <div class="job-icon">📐</div>
       <div class="job-info">
         <div class="job-name">{{ job.pub_name or job.job_id }}</div>
-        <div class="job-meta">{{ job.job_id }} · {{ job.postcode }} · {{ job.day_date.strftime('%d %b %Y') if job.day_date else '' }}</div>
+        <div class="job-meta">{{ job.display_id or job.job_id }} · {{ job.postcode }} · {{ job.day_date.strftime('%d %b %Y') if job.day_date else '' }}</div>
         {% if job.description %}<div class="job-desc">{{ job.description }}</div>{% endif %}
       </div>
       <span class="status-pill" style="background:#eff4ff;color:#1a4fa0">Complete Survey</span>
