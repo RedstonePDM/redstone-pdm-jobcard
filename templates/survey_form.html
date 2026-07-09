@@ -309,14 +309,33 @@
     <div class="confirm-title">Submit Site Survey?</div>
     <div class="confirm-subtitle">Once submitted this will be sent to the Redstone office to build the quote. Make sure everything is complete.</div>
     <ul class="checklist">
-      <li><span class="check-icon">📅</span> Date, arrival and departure time filled in</li>
-      <li><span class="check-icon">📋</span> Full scope of works described</li>
-      <li><span class="check-icon">📏</span> Measurements and dimensions noted</li>
-      <li><span class="check-icon">🧱</span> Materials list added where possible</li>
-      <li><span class="check-icon">📷</span> Photos taken of all relevant areas</li>
+      <li>
+        <input type="checkbox" id="chk1" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Date, arrival and departure time filled in</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk2" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Full scope of works described in detail</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk3" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Measurements and dimensions recorded</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk4" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Materials list added where applicable</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk5" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Photos taken of all relevant areas and defects</span>
+      </li>
+      <li>
+        <input type="checkbox" id="chk6" style="width:20px;height:20px;accent-color:#1a4fa0;flex-shrink:0;cursor:pointer" onchange="checkReady()">
+        <span>Access, parking and any restrictions noted</span>
+      </li>
     </ul>
-    <button class="confirm-btn" id="confirm-submit-btn" onclick="submitSurvey()">✓ Submit Survey</button>
-    <button class="cancel-btn" onclick="document.getElementById('confirm-overlay').classList.remove('show')">Go Back & Check</button>
+    <button class="confirm-btn" id="confirm-submit-btn" onclick="submitSurvey()" disabled style="opacity:0.5">✓ Submit Survey</button>
+    <button class="cancel-btn" onclick="closeConfirmSheet()">Go Back & Check</button>
   </div>
 </div>
 
@@ -414,6 +433,16 @@ function removePhoto(i) {
 }
 
 // ── Validation & Submit ───────────────────────────────────────────────────────
+function closeConfirmSheet() {
+  document.getElementById('confirm-overlay').classList.remove('show');
+}
+
+function checkReady() {
+  const allChecked = ['chk1','chk2','chk3','chk4','chk5','chk6'].every(id => document.getElementById(id)?.checked);
+  const btn = document.getElementById('confirm-submit-btn');
+  if (btn) { btn.disabled = !allChecked; btn.style.opacity = allChecked ? '1' : '0.5'; }
+}
+
 function showConfirm() {
   const required = ['visit_date','time_arrived_h','time_arrived_m','time_departed_h','time_departed_m','manager_on_duty'];
   let missing = false;
@@ -437,6 +466,12 @@ function showConfirm() {
     alert('Please fill in all required fields (marked with *) before submitting.');
     return;
   }
+  // Reset checkboxes
+  ['chk1','chk2','chk3','chk4','chk5','chk6'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+  checkReady();
   document.getElementById('confirm-overlay').classList.add('show');
 }
 
