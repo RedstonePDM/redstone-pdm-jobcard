@@ -5,65 +5,174 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Surveys — Redstone PDM</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
-  .topbar { background: #1a2332; height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-  .topbar-brand { font-weight: 700; font-size: 18px; color: white; cursor: pointer; }
-  .topbar-brand span { color: #c0392b; }
-  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
-  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
-  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
-  h2 { font-size: 22px; color: #1a2332; font-weight: 700; margin-bottom: 8px; }
-  .sub { font-size: 13px; color: #888; margin-bottom: 24px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
 
-  /* Trade type icons */
-  .trade-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; font-size: 18px; flex-shrink: 0; }
-  .trade-Flooring        { background: #fff8ef; }
-  .trade-Painting        { background: #fdf0ef; }
-  .trade-BuildingWorks   { background: #eff4ff; }
-  .trade-Tiling          { background: #f4efff; }
-  .trade-Plumbing        { background: #effbff; }
-  .trade-Electrical      { background: #fffbef; }
-  .trade-Cleaning        { background: #effdf4; }
-  .trade-General         { background: #f0f2f5; }
+.topbar { background: #1a2332; height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.topbar-brand { font-weight: 700; font-size: 18px; color: white; cursor: pointer; }
+.topbar-brand span { color: #c0392b; }
+.topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+.topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
-  .survey-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.page { max-width: 1200px; margin: 0 auto; padding: 28px 20px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.page-header h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+.page-header .sub { font-size: 13px; color: #888; margin-top: 3px; }
 
-  .survey-card {
-    background: white; border-radius: 12px; padding: 18px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    border-left: 4px solid #e0e0e0;
-    transition: transform 0.15s, box-shadow 0.15s;
-  }
-  .survey-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+/* Status tabs */
+.status-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+.stab { padding: 7px 16px; border-radius: 20px; border: 1.5px solid #e0e0e0; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #666; transition: all 0.15s; }
+.stab.active { background: #1a2332; color: white; border-color: #1a2332; }
+.stab .count { display: inline-block; background: rgba(0,0,0,0.12); border-radius: 8px; padding: 0 6px; margin-left: 4px; font-size: 11px; }
+.stab.active .count { background: rgba(255,255,255,0.2); }
 
-  .sc-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-  .sc-info { flex: 1; min-width: 0; }
-  .sc-pub { font-size: 15px; font-weight: 700; color: #1a2332; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sc-location { font-size: 12px; color: #888; margin-top: 2px; }
+/* Search */
+.toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
+.toolbar input { flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+.toolbar input:focus { border-color: #1a4fa0; }
 
-  .sc-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .sc-meta-item { }
-  .sc-meta-label { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; }
-  .sc-meta-value { font-size: 13px; color: #1a2332; font-weight: 500; margin-top: 2px; }
-  .sc-meta-value.mono { font-family: monospace; }
+/* Survey list */
+.survey-list { display: flex; flex-direction: column; gap: 8px; }
+.survey-row {
+  background: white; border-radius: 10px; padding: 14px 18px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-left: 4px solid #e0e0e0;
+  cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s;
+  display: flex; align-items: center; gap: 16px;
+}
+.survey-row:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); border-left-color: #1a4fa0; }
+.survey-row.active { border-left-color: #1a4fa0; background: #f5f8ff; }
+.survey-row.status-queried { border-left-color: #e6a817; }
+.survey-row.status-quote-draft { border-left-color: #8e44ad; }
+.survey-row.status-quote-submitted { border-left-color: #1a7a4a; }
+.survey-row.status-won { border-left-color: #27ae60; }
+.survey-row.status-lost { border-left-color: #c0392b; }
 
-  .sc-desc { font-size: 12px; color: #666; line-height: 1.5; border-top: 1px solid #f5f5f5; padding-top: 10px; }
+.sr-trade { font-size: 22px; flex-shrink: 0; }
+.sr-main { flex: 1; min-width: 0; }
+.sr-pub { font-size: 14px; font-weight: 700; color: #1a2332; }
+.sr-meta { font-size: 12px; color: #888; margin-top: 2px; }
+.sr-desc { font-size: 12px; color: #666; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.sr-date { font-size: 11px; color: #aaa; }
 
-  .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
-  .search-bar input { flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; }
-  .search-bar input:focus { outline: none; border-color: #c0392b; }
-  .trade-filter { padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; background: white; }
+.status-pill { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.sp-surveyed        { background: #eff4ff; color: #1a4fa0; }
+.sp-queried         { background: #fff8e1; color: #e6a817; }
+.sp-resubmitted     { background: #e8f5e9; color: #388e3c; }
+.sp-quote-draft     { background: #f3e5f5; color: #6a1b9a; }
+.sp-quote-submitted { background: #e8f5e9; color: #1b5e20; }
+.sp-won             { background: #e8f5e9; color: #1b5e20; }
+.sp-lost            { background: #fdf0ef; color: #c0392b; }
 
-  .empty { text-align: center; padding: 60px; color: #aaa; font-size: 14px; }
+.empty-state { text-align: center; padding: 60px; color: #aaa; font-size: 14px; }
 
-  .survey-form-notice {
-    background: #eff4ff; border: 1px solid #c5d8ff; border-radius: 10px;
-    padding: 14px 18px; font-size: 13px; color: #1a4fa0; margin-bottom: 24px;
-  }
+/* ── Side Drawer ── */
+.drawer-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 200; }
+.drawer-overlay.active { display: block; }
+.drawer {
+  position: fixed; top: 0; right: -700px; width: 680px; max-width: 95vw;
+  height: 100vh; background: white; z-index: 201;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column;
+  transition: right 0.25s ease;
+  overflow: hidden;
+}
+.drawer.open { right: 0; }
+.drawer-header { background: #1a2332; color: white; padding: 18px 20px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+.drawer-header-left h3 { font-size: 16px; font-weight: 700; }
+.drawer-header-left p { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 3px; }
+.drawer-close { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 22px; cursor: pointer; padding: 0 4px; }
+.drawer-close:hover { color: white; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* Survey data read-only */
+.survey-data-section { margin-bottom: 20px; }
+.sds-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #aaa; margin-bottom: 8px; }
+.sds-field { margin-bottom: 12px; }
+.sds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #aaa; margin-bottom: 3px; }
+.sds-value { font-size: 13px; color: #1a2332; line-height: 1.6; }
+.sds-value.mono { font-family: monospace; font-size: 12px; }
+.sds-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sds-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+/* Materials spec table */
+.mat-spec-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.mat-spec-table th { background: #f5f6f8; padding: 6px 10px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; }
+.mat-spec-table td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0; color: #1a2332; }
+
+/* Photos */
+.photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.photo-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 2px solid #e0e0e0; transition: border-color 0.15s; }
+.photo-thumb:hover { border-color: #1a4fa0; }
+.photo-caption { font-size: 10px; color: #888; text-align: center; margin-top: 3px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Drawer divider */
+.drawer-divider { border: none; border-top: 2px solid #f0f2f5; margin: 20px 0; }
+
+/* ── Quote Builder ── */
+.quote-builder { background: #f8f9fb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.qb-title { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.qb-section { margin-bottom: 16px; }
+.qb-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 0.4px; }
+
+.quote-line { display: grid; grid-template-columns: 2fr 1fr 80px 80px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.quote-line input, .quote-line select { padding: 7px 10px; border: 1.5px solid #e0e0e0; border-radius: 6px; font-size: 12px; background: white; outline: none; width: 100%; }
+.quote-line input:focus, .quote-line select:focus { border-color: #1a4fa0; }
+.quote-line-total { font-size: 12px; font-weight: 700; color: #1a2332; text-align: right; }
+.btn-remove-line { background: none; border: none; color: #ccc; cursor: pointer; font-size: 16px; padding: 0; }
+.btn-remove-line:hover { color: #c0392b; }
+
+.add-line-btn { background: none; border: 1.5px dashed #d0d0d0; border-radius: 6px; padding: 7px 14px; font-size: 12px; color: #888; cursor: pointer; margin-top: 4px; transition: all 0.15s; }
+.add-line-btn:hover { border-color: #1a4fa0; color: #1a4fa0; }
+
+/* Quote totals */
+.quote-totals { background: white; border-radius: 8px; padding: 14px; border: 1.5px solid #e0e0e0; }
+.qt-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 13px; color: #555; }
+.qt-row.subtotal { border-top: 1px solid #f0f0f0; padding-top: 8px; margin-top: 4px; }
+.qt-row.markup { color: #1a4fa0; font-weight: 600; }
+.qt-row.total { border-top: 2px solid #1a2332; padding-top: 10px; margin-top: 6px; font-size: 15px; font-weight: 800; color: #1a2332; }
+.markup-badge { background: #eff4ff; color: #1a4fa0; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+
+/* Drawer actions */
+.drawer-actions { flex-shrink: 0; padding: 14px 20px; border-top: 1px solid #e0e0e0; background: white; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-action { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; transition: all 0.15s; }
+.btn-save-quote { background: #1a2332; color: white; }
+.btn-save-quote:hover { background: #0f1825; }
+.btn-submit-quote { background: #1a7a4a; color: white; }
+.btn-submit-quote:hover { background: #155c38; }
+.btn-query { background: #fff8e1; color: #856404; border: 1.5px solid #ffc107; }
+.btn-query:hover { background: #fff3cd; }
+.btn-pdf { background: #f0f2f5; color: #333; }
+.btn-pdf:hover { background: #e0e2e5; }
+.btn-mark-won { background: #27ae60; color: white; }
+.btn-mark-lost { background: #fdf0ef; color: #c0392b; border: 1.5px solid #f5c6c6; }
+
+/* Query modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 12px; padding: 24px; width: 440px; max-width: 95vw; }
+.modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+.modal textarea { width: 100%; padding: 10px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 13px; min-height: 100px; resize: vertical; outline: none; font-family: inherit; }
+.modal textarea:focus { border-color: #1a4fa0; }
+.modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+.btn-modal-primary { padding: 9px 18px; background: #c0392b; color: white; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-modal-cancel { padding: 9px 18px; background: #f0f0f0; color: #444; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* Outcome modal */
+.outcome-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.outcome-btn { padding: 10px; border-radius: 8px; border: 1.5px solid #e0e0e0; background: white; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.15s; }
+.outcome-btn:hover { border-color: #1a2332; }
+.outcome-btn.selected { background: #1a2332; color: white; border-color: #1a2332; }
+
+/* Photo lightbox */
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 400; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 6px; }
+.lightbox-close { position: absolute; top: 20px; right: 24px; color: white; font-size: 28px; cursor: pointer; background: none; border: none; }
 </style>
 </head>
 <body>
+
 <div class="topbar">
   <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
   <div class="topbar-right">
@@ -75,82 +184,523 @@
 </div>
 
 <div class="page">
-  <h2>📐 Surveys</h2>
-  <p class="sub">Quote jobs (5000 series) allocated to engineers. Use these as the basis for Wetherspoons quotes.</p>
-
-  <div class="survey-form-notice">
-    ℹ️ Survey forms coming soon — engineers will complete a detailed site survey form on each 5000 job. Those survey records will appear here with photos, measurements and notes for quoting.
-  </div>
-
-  <div class="search-bar">
-    <input type="text" id="search" placeholder="Search by pub, postcode, job number..." oninput="filterSurveys()">
-    <select class="trade-filter" id="trade-filter" onchange="filterSurveys()">
-      <option value="">All trades</option>
-      {% set trades = surveys | map(attribute='trade_type') | select | unique | list %}
-      {% for t in trades %}
-      <option value="{{ t }}">{{ t }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  {% if surveys %}
-  <div class="survey-grid" id="survey-grid">
-    {% for s in surveys %}
-    {% set trade = (s.trade_type or 'General').replace(' ','') %}
-    {% set trade_emoji = {
-      'Flooring': '🪵', 'Painting': '🎨', 'BuildingWorks': '🏗️',
-      'Tiling': '🔲', 'Plumbing': '🔧', 'Electrical': '⚡',
-      'Cleaning': '🧹', 'ExteriorCleaning': '🧹',
-      'General': '🔨', 'RMM': '🔧', 'Repair': '🔧'
-    }.get(trade, '🔨') %}
-    <div class="survey-card" data-trade="{{ s.trade_type }}" data-text="{{ (s.pub_name or '') ~ ' ' ~ (s.postcode or '') ~ ' ' ~ (s.job_id or '') | lower }}">
-      <div class="sc-header">
-        <div class="trade-icon trade-{{ trade }}">{{ trade_emoji }}</div>
-        <div class="sc-info">
-          <div class="sc-pub">{{ s.pub_name or '—' }}</div>
-          <div class="sc-location">{{ s.postcode or '—' }}{% if s.location_code %} · {{ s.location_code }}{% endif %}</div>
-        </div>
-      </div>
-      <div class="sc-meta">
-        <div class="sc-meta-item">
-          <div class="sc-meta-label">Quote Ref</div>
-          <div class="sc-meta-value mono">{{ s.job_id }}</div>
-        </div>
-        <div class="sc-meta-item">
-          <div class="sc-meta-label">Trade</div>
-          <div class="sc-meta-value">{{ s.trade_type or '—' }}</div>
-        </div>
-        <div class="sc-meta-item">
-          <div class="sc-meta-label">Engineer</div>
-          <div class="sc-meta-value">{{ s.contractor }}</div>
-        </div>
-        <div class="sc-meta-item">
-          <div class="sc-meta-label">Date</div>
-          <div class="sc-meta-value">{{ s.day_date.strftime('%d %b %Y') if s.day_date else '—' }}</div>
-        </div>
-      </div>
-      {% if s.description %}
-      <div class="sc-desc">{{ (s.description or '')[:200] }}{% if (s.description or '')|length > 200 %}...{% endif %}</div>
-      {% endif %}
+  <div class="page-header">
+    <div>
+      <h2>📐 Surveys & Quotes</h2>
+      <div class="sub">Quote requests surveyed by engineers — build and track quotes from here</div>
     </div>
-    {% endfor %}
   </div>
-  {% else %}
-  <div class="empty">No survey jobs found. 5000-series jobs allocated to engineers will appear here.</div>
-  {% endif %}
+
+  <!-- Status filter tabs -->
+  <div class="status-tabs">
+    <button class="stab active" onclick="filterStatus('')" id="stab-all">All <span class="count" id="count-all">{{ surveys|length }}</span></button>
+    <button class="stab" onclick="filterStatus('surveyed')" id="stab-surveyed">Surveyed <span class="count" id="count-surveyed">0</span></button>
+    <button class="stab" onclick="filterStatus('queried')" id="stab-queried">Queried <span class="count" id="count-queried">0</span></button>
+    <button class="stab" onclick="filterStatus('quote-draft')" id="stab-quote-draft">Quote Draft <span class="count" id="count-quote-draft">0</span></button>
+    <button class="stab" onclick="filterStatus('quote-submitted')" id="stab-quote-submitted">Submitted <span class="count" id="count-quote-submitted">0</span></button>
+    <button class="stab" onclick="filterStatus('won')" id="stab-won">Won <span class="count" id="count-won">0</span></button>
+    <button class="stab" onclick="filterStatus('lost')" id="stab-lost">Lost <span class="count" id="count-lost">0</span></button>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search by pub, postcode, job number, engineer..." oninput="filterSurveys()">
+  </div>
+
+  <div class="survey-list" id="survey-list">
+    {% if surveys %}
+      {% for s in surveys %}
+      {% set trade_emoji = {
+        'Flooring': '🪵', 'Painting/Decorating': '🎨', 'Building Works': '🏗️',
+        'Tiling': '🔲', 'Plumbing': '🔧', 'Electrical': '⚡',
+        'Cleaning': '🧹', 'General': '🔨'
+      }.get(s.trade_type, '🔨') %}
+      <div class="survey-row status-{{ s.status or 'surveyed' }}"
+           data-id="{{ s.id }}"
+           data-status="{{ s.status or 'surveyed' }}"
+           data-search="{{ ((s.pub_name or '') ~ ' ' ~ (s.postcode or '') ~ ' ' ~ (s.job_id or '') ~ ' ' ~ (s.contractor or ''))|lower }}"
+           onclick="openDrawer({{ s.id }})">
+        <div class="sr-trade">{{ trade_emoji }}</div>
+        <div class="sr-main">
+          <div class="sr-pub">{{ s.pub_name or '—' }}</div>
+          <div class="sr-meta">{{ s.job_id }} · {{ s.postcode or '—' }} · {{ s.trade_type or '—' }} · {{ s.contractor or '—' }}</div>
+          {% if s.scope_of_works %}
+          <div class="sr-desc">{{ (s.scope_of_works or '')[:100] }}...</div>
+          {% endif %}
+        </div>
+        <div class="sr-right">
+          <div class="sr-date">{{ s.visit_date.strftime('%d %b %Y') if s.visit_date else '—' }}</div>
+          <span class="status-pill sp-{{ s.status or 'surveyed' }}">
+            {{ {'surveyed':'Surveyed','queried':'Queried','resubmitted':'Resubmitted',
+                'quote-draft':'Quote Draft','quote-submitted':'Submitted',
+                'won':'Won','lost':'Lost'}.get(s.status, s.status or 'Surveyed') }}
+          </span>
+          {% if s.quote_total %}
+          <span style="font-size:12px;font-weight:700;color:#1a2332">£{{ '%.2f'|format(s.quote_total) }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No surveys yet. 5000-series jobs surveyed by engineers will appear here.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Drawer Overlay -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+
+<!-- Side Drawer -->
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-header-left">
+      <h3 id="drawer-title">Survey Details</h3>
+      <p id="drawer-sub"></p>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <div style="text-align:center;padding:40px;color:#aaa">Loading...</div>
+  </div>
+  <div class="drawer-actions" id="drawer-actions"></div>
+</div>
+
+<!-- Query Modal -->
+<div class="modal-overlay" id="query-modal">
+  <div class="modal">
+    <h3>⚠ Query Survey</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">Describe what needs to be corrected or added. The engineer will see this message.</p>
+    <textarea id="query-note" placeholder="e.g. Please re-measure the flooring in the main bar area and add photos of the subfloor condition..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="document.getElementById('query-modal').classList.remove('active')">Cancel</button>
+      <button class="btn-modal-primary" onclick="submitQuery()">Send Query</button>
+    </div>
+  </div>
+</div>
+
+<!-- Outcome Modal -->
+<div class="modal-overlay" id="outcome-modal">
+  <div class="modal">
+    <h3 id="outcome-title">Record Outcome</h3>
+    <div class="outcome-options" id="outcome-options"></div>
+    <label style="font-size:12px;font-weight:700;color:#666;display:block;margin-bottom:6px">Reason / Notes</label>
+    <textarea id="outcome-reason" placeholder="Add any notes about the outcome..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="document.getElementById('outcome-modal').classList.remove('active')">Cancel</button>
+      <button class="btn-modal-primary" id="outcome-confirm-btn" onclick="submitOutcome()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">×</button>
+  <img id="lightbox-img" src="">
 </div>
 
 <script>
+let currentSurveyId = null;
+let currentStatus = null;
+let quoteLines = { labour: [], materials: [], plant: [], prelim: [] };
+let outcomeType = null;
+
+const MARKUP = 0.20;
+
+// ── Filter & Search ───────────────────────────────────────────────────────────
+let activeStatus = '';
+
+function filterStatus(status) {
+  activeStatus = status;
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  document.getElementById('stab-' + (status || 'all')).classList.add('active');
+  filterSurveys();
+}
+
 function filterSurveys() {
   const q = document.getElementById('search').value.toLowerCase();
-  const trade = document.getElementById('trade-filter').value.toLowerCase();
-  document.querySelectorAll('.survey-card').forEach(card => {
-    const text = card.dataset.text || '';
-    const cardTrade = (card.dataset.trade || '').toLowerCase();
+  let counts = { 'surveyed':0,'queried':0,'resubmitted':0,'quote-draft':0,'quote-submitted':0,'won':0,'lost':0 };
+  let total = 0;
+  document.querySelectorAll('.survey-row').forEach(row => {
+    const status = row.dataset.status || '';
+    const text = row.dataset.search || '';
+    const matchStatus = !activeStatus || status === activeStatus;
     const matchText = !q || text.includes(q);
-    const matchTrade = !trade || cardTrade.includes(trade);
-    card.style.display = matchText && matchTrade ? '' : 'none';
+    const show = matchStatus && matchText;
+    row.style.display = show ? '' : 'none';
+    if (matchText) { counts[status] = (counts[status]||0)+1; total++; }
   });
+  document.getElementById('count-all').textContent = total;
+  Object.keys(counts).forEach(k => {
+    const el = document.getElementById('count-' + k);
+    if (el) el.textContent = counts[k];
+  });
+}
+
+// Init counts
+filterSurveys();
+
+// ── Drawer ────────────────────────────────────────────────────────────────────
+async function openDrawer(surveyId) {
+  currentSurveyId = surveyId;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-overlay').classList.add('active');
+  document.getElementById('drawer-body').innerHTML = '<div style="text-align:center;padding:40px;color:#aaa">Loading...</div>';
+
+  const res = await fetch(`/admin/survey/${surveyId}`);
+  const s = await res.json();
+  currentStatus = s.status;
+  quoteLines = {
+    labour:   s.quote_labour_json   || [],
+    materials: s.quote_materials_json || [],
+    plant:    s.quote_plant_json    || [],
+    prelim:   s.quote_prelim_json   || [],
+  };
+
+  document.getElementById('drawer-title').textContent = s.pub_name || s.job_id;
+  document.getElementById('drawer-sub').textContent = `${s.job_id} · ${s.postcode||''} · ${s.trade_type||''}`;
+
+  renderDrawer(s);
+  renderDrawerActions(s);
+  document.querySelectorAll('.survey-row').forEach(r => r.classList.toggle('active', parseInt(r.dataset.id) === surveyId));
+}
+
+function renderDrawer(s) {
+  const photos = s.photo_paths || [];
+  const mats = s.materials_spec_json || [];
+
+  let photoHtml = '';
+  if (photos.length) {
+    photoHtml = `<div class="photo-grid">${photos.map((p,i) => `
+      <div>
+        <img src="/uploads/${p.path}" class="photo-thumb" onclick="openLightbox('/uploads/${p.path}')">
+        ${p.caption ? `<div class="photo-caption">${p.caption}</div>` : ''}
+      </div>`).join('')}</div>`;
+  } else {
+    photoHtml = '<div style="color:#aaa;font-size:13px">No photos submitted</div>';
+  }
+
+  let matsHtml = '';
+  if (mats.length) {
+    matsHtml = `<table class="mat-spec-table">
+      <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th></tr></thead>
+      <tbody>${mats.map((m,i) => `<tr><td>${i+1}</td><td>${m.description}</td><td>${m.qty}</td><td>${m.unit}</td></tr>`).join('')}</tbody>
+    </table>`;
+  } else {
+    matsHtml = '<div style="color:#aaa;font-size:13px">No materials specified</div>';
+  }
+
+  document.getElementById('drawer-body').innerHTML = `
+
+    <!-- Survey Info -->
+    <div class="survey-data-section">
+      <div class="sds-title">📋 Survey Details</div>
+      <div class="sds-grid">
+        <div class="sds-field"><div class="sds-label">Engineer</div><div class="sds-value">${s.contractor||'—'}</div></div>
+        <div class="sds-field"><div class="sds-label">Visit Date</div><div class="sds-value">${s.visit_date||'—'}</div></div>
+        <div class="sds-field"><div class="sds-label">Arrived</div><div class="sds-value">${s.time_arrived||'—'}</div></div>
+        <div class="sds-field"><div class="sds-label">Departed</div><div class="sds-value">${s.time_departed||'—'}</div></div>
+        <div class="sds-field"><div class="sds-label">Manager on Duty</div><div class="sds-value">${s.manager_on_duty||'—'}</div></div>
+        <div class="sds-field"><div class="sds-label">Survey Mileage</div><div class="sds-value">${s.survey_mileage ? s.survey_mileage + ' miles' : '—'}</div></div>
+      </div>
+    </div>
+
+    <hr class="drawer-divider">
+
+    <div class="survey-data-section">
+      <div class="sds-title">📝 Scope of Works</div>
+      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.scope_of_works||'—'}</div></div>
+    </div>
+
+    ${s.measurements ? `<div class="survey-data-section">
+      <div class="sds-title">📏 Measurements & Dimensions</div>
+      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.measurements}</div></div>
+    </div>` : ''}
+
+    ${s.condition_notes ? `<div class="survey-data-section">
+      <div class="sds-title">⚠️ Condition & Risk Notes</div>
+      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.condition_notes}</div></div>
+    </div>` : ''}
+
+    ${s.recommended_approach ? `<div class="survey-data-section">
+      <div class="sds-title">💡 Recommended Approach</div>
+      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.recommended_approach}</div></div>
+    </div>` : ''}
+
+    ${s.access_notes || s.parking_notes ? `<div class="survey-data-section">
+      <div class="sds-title">🅿️ Access & Parking</div>
+      ${s.access_notes ? `<div class="sds-field"><div class="sds-label">Access Notes</div><div class="sds-value" style="white-space:pre-wrap">${s.access_notes}</div></div>` : ''}
+      ${s.parking_notes ? `<div class="sds-field"><div class="sds-label">Parking</div><div class="sds-value" style="white-space:pre-wrap">${s.parking_notes}</div></div>` : ''}
+    </div>` : ''}
+
+    <div class="survey-data-section">
+      <div class="sds-title">🧱 Materials Specified on Site</div>
+      ${matsHtml}
+    </div>
+
+    <div class="survey-data-section">
+      <div class="sds-title">📷 Site Photos</div>
+      ${photoHtml}
+    </div>
+
+    <hr class="drawer-divider">
+
+    <!-- Quote Builder -->
+    <div class="quote-builder">
+      <div class="qb-title">💷 Quote Builder <span style="font-size:11px;font-weight:400;color:#888;margin-left:4px">20% markup locked — SLA rate</span></div>
+
+      <!-- Labour -->
+      <div class="qb-section">
+        <div class="qb-section-label">Labour</div>
+        <div id="qb-labour-lines"></div>
+        <button class="add-line-btn" onclick="addLine('labour')">+ Add Labour Line</button>
+      </div>
+
+      <!-- Materials -->
+      <div class="qb-section">
+        <div class="qb-section-label">Materials</div>
+        <div id="qb-materials-lines"></div>
+        <button class="add-line-btn" onclick="addLine('materials')">+ Add Material Line</button>
+      </div>
+
+      <!-- Plant & Equipment -->
+      <div class="qb-section">
+        <div class="qb-section-label">Plant & Equipment</div>
+        <div id="qb-plant-lines"></div>
+        <button class="add-line-btn" onclick="addLine('plant')">+ Add Plant Line</button>
+      </div>
+
+      <!-- Prelim / Mobilisation -->
+      <div class="qb-section">
+        <div class="qb-section-label">Prelim / Mobilisation</div>
+        <div id="qb-prelim-lines"></div>
+        <button class="add-line-btn" onclick="addLine('prelim')">+ Add Prelim Line</button>
+      </div>
+
+      <!-- Totals -->
+      <div class="quote-totals" id="quote-totals">
+        <div class="qt-row subtotal"><span>Subtotal</span><span id="qt-subtotal">£0.00</span></div>
+        <div class="qt-row markup"><span>Markup (20%) <span class="markup-badge">LOCKED — JDW SLA</span></span><span id="qt-markup">£0.00</span></div>
+        <div class="qt-row total"><span>Quote Total</span><span id="qt-total">£0.00</span></div>
+      </div>
+    </div>
+
+    ${s.outcome_reason ? `<div style="background:#f8f9fb;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#aaa;margin-bottom:4px">Outcome Notes</div>
+      <div style="font-size:13px;color:#1a2332">${s.outcome_reason}</div>
+    </div>` : ''}
+  `;
+
+  renderQuoteLines();
+}
+
+// ── Quote Line Management ─────────────────────────────────────────────────────
+const LINE_PLACEHOLDERS = {
+  labour:    ['Description (e.g. Skilled Decorator)', 'Days', 'Rate/day (£)'],
+  materials: ['Description (e.g. Dulux Trade Matt 10L)', 'Qty', 'Unit cost (£)'],
+  plant:     ['Description (e.g. Scaffold tower hire)', 'Days', 'Rate/day (£)'],
+  prelim:    ['Description (e.g. Mobilisation / Site setup)', 'Qty', 'Cost (£)'],
+};
+
+function addLine(section) {
+  quoteLines[section].push({ description: '', qty: 1, unit_cost: 0, total: 0 });
+  renderQuoteLines();
+}
+
+function removeLine(section, idx) {
+  quoteLines[section].splice(idx, 1);
+  renderQuoteLines();
+}
+
+function renderQuoteLines() {
+  ['labour','materials','plant','prelim'].forEach(section => {
+    const container = document.getElementById(`qb-${section}-lines`);
+    if (!container) return;
+    const ph = LINE_PLACEHOLDERS[section];
+    container.innerHTML = quoteLines[section].map((line, i) => `
+      <div class="quote-line">
+        <input type="text" value="${line.description}" placeholder="${ph[0]}"
+          oninput="quoteLines['${section}'][${i}].description=this.value">
+        <input type="number" step="0.5" min="0" value="${line.qty||1}" placeholder="${ph[1]}"
+          oninput="quoteLines['${section}'][${i}].qty=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
+        <input type="number" step="0.01" min="0" value="${line.unit_cost||0}" placeholder="${ph[2]}"
+          oninput="quoteLines['${section}'][${i}].unit_cost=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
+        <div class="quote-line-total" id="lt-${section}-${i}">£${((line.qty||0)*(line.unit_cost||0)).toFixed(2)}</div>
+        <button class="btn-remove-line" onclick="removeLine('${section}',${i})">×</button>
+      </div>`).join('');
+  });
+  updateTotals();
+}
+
+function updateLineTotal(section, idx) {
+  const line = quoteLines[section][idx];
+  line.total = parseFloat(((line.qty||0)*(line.unit_cost||0)).toFixed(2));
+  const el = document.getElementById(`lt-${section}-${idx}`);
+  if (el) el.textContent = `£${line.total.toFixed(2)}`;
+  updateTotals();
+}
+
+function updateTotals() {
+  let subtotal = 0;
+  ['labour','materials','plant','prelim'].forEach(s => {
+    quoteLines[s].forEach(l => subtotal += parseFloat(l.total||0));
+  });
+  const markup = subtotal * MARKUP;
+  const total = subtotal + markup;
+  const el = id => document.getElementById(id);
+  if (el('qt-subtotal')) el('qt-subtotal').textContent = `£${subtotal.toFixed(2)}`;
+  if (el('qt-markup')) el('qt-markup').textContent = `£${markup.toFixed(2)}`;
+  if (el('qt-total')) el('qt-total').textContent = `£${total.toFixed(2)}`;
+}
+
+// ── Drawer Actions ────────────────────────────────────────────────────────────
+function renderDrawerActions(s) {
+  const status = s.status || 'surveyed';
+  let btns = '';
+
+  if (['surveyed','resubmitted','quote-draft'].includes(status)) {
+    btns += `<button class="btn-action btn-query" onclick="openQueryModal()">⚠ Query</button>`;
+  }
+  if (['surveyed','resubmitted','quote-draft'].includes(status)) {
+    btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')">💾 Save Draft</button>`;
+  }
+  if (['quote-draft','resubmitted'].includes(status)) {
+    btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')">📤 Mark Submitted to JDW</button>`;
+  }
+  if (status === 'quote-submitted') {
+    btns += `<button class="btn-action btn-mark-won" onclick="openOutcomeModal('won')">✓ Won</button>`;
+    btns += `<button class="btn-action btn-mark-lost" onclick="openOutcomeModal('lost')">✗ Lost</button>`;
+  }
+  btns += `<button class="btn-action btn-pdf" onclick="downloadPdf()">📄 PDF Quote</button>`;
+
+  document.getElementById('drawer-actions').innerHTML = btns;
+}
+
+async function saveQuote(newStatus) {
+  const subtotal = parseFloat(document.getElementById('qt-subtotal')?.textContent?.replace('£','')) || 0;
+  const total = parseFloat(document.getElementById('qt-total')?.textContent?.replace('£','')) || 0;
+
+  const res = await fetch(`/admin/survey/${currentSurveyId}/quote`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      status: newStatus,
+      quote_labour_json: quoteLines.labour,
+      quote_materials_json: quoteLines.materials,
+      quote_plant_json: quoteLines.plant,
+      quote_prelim_json: quoteLines.prelim,
+      quote_subtotal: subtotal,
+      quote_total: total,
+    })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    currentStatus = newStatus;
+    updateRowStatus(currentSurveyId, newStatus, total);
+    showToast(newStatus === 'quote-submitted' ? '✓ Marked as submitted to JDW' : '✓ Quote draft saved');
+    // Refresh actions
+    renderDrawerActions({ status: newStatus });
+  } else {
+    alert('Save failed: ' + (data.error||'please try again'));
+  }
+}
+
+// ── Query ─────────────────────────────────────────────────────────────────────
+function openQueryModal() {
+  document.getElementById('query-note').value = '';
+  document.getElementById('query-modal').classList.add('active');
+}
+
+async function submitQuery() {
+  const note = document.getElementById('query-note').value.trim();
+  if (!note) { alert('Please enter a query note'); return; }
+  const res = await fetch(`/admin/survey/${currentSurveyId}/query`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ query_note: note })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById('query-modal').classList.remove('active');
+    updateRowStatus(currentSurveyId, 'queried');
+    showToast('⚠ Query sent to engineer');
+  }
+}
+
+// ── Outcome ───────────────────────────────────────────────────────────────────
+const WON_REASONS = [];
+const LOST_REASONS = ['Other contractor preferred','No longer required','Too expensive','We declined to quote','Client cancelled project'];
+
+function openOutcomeModal(type) {
+  outcomeType = type;
+  document.getElementById('outcome-title').textContent = type === 'won' ? '✓ Mark as Won' : '✗ Record Lost Reason';
+  document.getElementById('outcome-reason').value = '';
+  const opts = type === 'lost' ? LOST_REASONS : [];
+  document.getElementById('outcome-options').innerHTML = opts.map(r =>
+    `<button class="outcome-btn" onclick="selectOutcomeReason(this,'${r}')">${r}</button>`
+  ).join('');
+  document.getElementById('outcome-modal').classList.add('active');
+}
+
+function selectOutcomeReason(btn, reason) {
+  document.querySelectorAll('.outcome-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('outcome-reason').value = reason;
+}
+
+async function submitOutcome() {
+  const reason = document.getElementById('outcome-reason').value.trim();
+  if (outcomeType === 'lost' && !reason) { alert('Please select or enter a lost reason'); return; }
+  const res = await fetch(`/admin/survey/${currentSurveyId}/outcome`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ outcome: outcomeType, reason })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById('outcome-modal').classList.remove('active');
+    updateRowStatus(currentSurveyId, outcomeType);
+    showToast(outcomeType === 'won' ? '✓ Marked as Won' : '✗ Recorded as Lost');
+    renderDrawerActions({ status: outcomeType });
+  }
+}
+
+function downloadPdf() {
+  window.open(`/admin/survey/${currentSurveyId}/pdf`, '_blank');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function updateRowStatus(surveyId, status, total) {
+  const row = document.querySelector(`.survey-row[data-id="${surveyId}"]`);
+  if (!row) return;
+  row.className = `survey-row status-${status}`;
+  row.dataset.status = status;
+  const pill = row.querySelector('.status-pill');
+  if (pill) {
+    const labels = {surveyed:'Surveyed',queried:'Queried',resubmitted:'Resubmitted','quote-draft':'Quote Draft','quote-submitted':'Submitted',won:'Won',lost:'Lost'};
+    pill.className = `status-pill sp-${status}`;
+    pill.textContent = labels[status] || status;
+  }
+  filterSurveys();
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('active');
+  document.querySelectorAll('.survey-row').forEach(r => r.classList.remove('active'));
+  currentSurveyId = null;
+}
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a2332;color:white;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;z-index:500;box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:opacity 0.3s';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 3000);
 }
 </script>
 </body>
