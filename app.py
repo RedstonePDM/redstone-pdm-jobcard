@@ -1092,10 +1092,14 @@ def dashboard():
                    j.trade_type, j.tab, j.display_id
             FROM allocations a
             JOIN jobs j ON j.job_id = a.job_id
+            LEFT JOIN survey_forms sf ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+                AND sf.contractor_key = %s
+                AND sf.status NOT IN ('queried')
             WHERE a.contractor = %s
             AND j.tab IN ('QUOTEREQUEST', 'QUOTE')
+            AND sf.id IS NULL
             ORDER BY a.day_date DESC LIMIT 20
-        """, (contractor["name"],))
+        """, (key, contractor["name"],))
         survey_jobs = cur.fetchall()
     except Exception:
         conn.rollback()
@@ -3091,9 +3095,8 @@ def admin_survey_pdf(survey_id):
     markup = subtotal * MARKUP
     total  = subtotal + markup
 
-    line_rows.append(["", "", Paragraph("<b>Subtotal</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{subtotal:.2f}"])
-    line_rows.append(["", "", Paragraph(f"<b>Markup (20%)</b>", sty('mk', fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a4fa0'))), f"£{markup:.2f}"])
-    line_rows.append(["", "", Paragraph("<b>TOTAL</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
+    line_rows.append(["", "", Paragraph("<b>Subtotal (ex VAT)</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{subtotal:.2f}"])
+    line_rows.append(["", "", Paragraph("<b>TOTAL (ex VAT)</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
 
     tbl = Table(line_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
     tbl.setStyle(TableStyle([
@@ -3117,7 +3120,7 @@ def admin_survey_pdf(survey_id):
     # Footer note
     elems.append(Paragraph(
         "This quote is prepared by Redstone PDM Ltd in accordance with the JD Wetherspoon Contractor SLA. "
-        "All prices are exclusive of VAT unless otherwise stated. Markup applied at the contracted rate of 20%.",
+        "All prices are exclusive of VAT. VAT will be applied at the prevailing rate at the time of invoice.",
         sty('footer', fontSize=8, textColor=GREY, leading=12)
     ))
 
