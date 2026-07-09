@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Survey Form — {{ job.job_id }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; padding-bottom: 80px; }
+
+  .topbar { background: #1a2332; padding: 16px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+  .back { color: #bdc3c7; font-size: 22px; text-decoration: none; line-height: 1; }
+  .topbar-title { color: white; font-size: 16px; font-weight: 700; }
+  .topbar-sub { color: #3498db; font-size: 11px; margin-top: 1px; }
+
+  .job-header { background: linear-gradient(135deg, #1a4fa0, #2980b9); color: white; padding: 16px 20px; }
+  .job-header h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .job-header p { font-size: 13px; opacity: 0.85; }
+  .survey-badge { display: inline-block; background: rgba(255,255,255,0.2); color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.5px; }
+
+  .content { padding: 16px; }
+  .section { background: white; border-radius: 12px; margin-bottom: 14px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .section-head { background: #1a2332; color: white; padding: 10px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+  .section-head .head-icon { font-size: 14px; }
+  .section-body { padding: 16px; }
+
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #7f8c8d; margin-bottom: 6px; }
+  label .required { color: #c0392b; margin-left: 2px; }
+
+  input[type=text], input[type=date], input[type=time], input[type=number], textarea, select {
+    width: 100%; padding: 13px 14px; border: 1.5px solid #e8e8e8; border-radius: 10px;
+    font-size: 15px; color: #1a2332; background: white; -webkit-appearance: none; outline: none; transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: #2980b9; }
+  textarea { resize: vertical; line-height: 1.6; }
+  textarea.large { min-height: 120px; }
+  textarea.xlarge { min-height: 160px; }
+
+  .read-only-field { background: #f8f9fa; border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 13px 14px; font-size: 15px; color: #555; }
+
+  .time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Materials spec rows */
+  .mat-spec-row { border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 12px; margin-bottom: 10px; position: relative; background: #fafafa; }
+  .mat-spec-number { font-size: 11px; font-weight: 700; color: #2980b9; margin-bottom: 8px; text-transform: uppercase; }
+  .mat-spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .mat-spec-row input, .mat-spec-row select { padding: 10px 12px; font-size: 14px; background: white; }
+  .remove-mat-spec { position: absolute; top: 10px; right: 10px; background: none; border: none; color: #e74c3c; font-size: 18px; cursor: pointer; padding: 2px 6px; line-height: 1; }
+  .add-mat-spec-btn { width: 100%; padding: 13px; background: #f0f2f5; border: 2px dashed #bdc3c7; border-radius: 10px; color: #7f8c8d; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px; text-align: center; }
+  .add-mat-spec-btn:active { background: #e8f4fd; border-color: #2980b9; color: #2980b9; }
+
+  /* Photo upload */
+  .photo-upload { border: 2px dashed #e0e0e0; border-radius: 10px; padding: 24px 20px; text-align: center; background: #fafafa; cursor: pointer; position: relative; margin-bottom: 10px; }
+  .photo-upload input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .photo-icon { font-size: 36px; margin-bottom: 8px; }
+  .photo-label { font-size: 13px; color: #7f8c8d; }
+  .photo-label small { display: block; margin-top: 4px; font-size: 11px; color: #bdc3c7; }
+  .photo-previews { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .photo-preview-wrap { position: relative; }
+  .photo-preview { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }
+  .photo-remove { position: absolute; top: -6px; right: -6px; background: #c0392b; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .photo-caption-input { width: 80px; font-size: 10px; padding: 3px 4px; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 3px; text-align: center; color: #555; }
+
+  /* Cost tracking note */
+  .internal-note { background: #fff8ef; border: 1px solid #ffd89b; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #856404; margin-bottom: 12px; line-height: 1.5; }
+  .internal-note strong { display: block; margin-bottom: 2px; font-size: 12px; }
+
+  /* Submit */
+  .submit-btn { width: 100%; padding: 17px; background: #1a4fa0; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; letter-spacing: 0.3px; }
+  .submit-btn:active { background: #163d80; }
+
+  .confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500; align-items: flex-end; justify-content: center; }
+  .confirm-overlay.show { display: flex; }
+  .confirm-sheet { background: white; border-radius: 20px 20px 0 0; padding: 28px 20px 40px; width: 100%; max-width: 540px; animation: slideUp 0.25s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .confirm-title { font-size: 18px; font-weight: 800; color: #1a2332; margin-bottom: 6px; }
+  .confirm-subtitle { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+  .checklist { list-style: none; margin-bottom: 20px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px; color: #444; }
+  .checklist li:last-child { border-bottom: none; }
+  .check-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .confirm-btn { width: 100%; padding: 16px; background: #1a4fa0; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+  .cancel-btn { width: 100%; padding: 14px; background: #f0f2f5; color: #555; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+  .already-submitted { background: #eaf4fb; border: 1.5px solid #2980b9; border-radius: 12px; padding: 24px; text-align: center; color: #1a4fa0; font-weight: 600; font-size: 15px; }
+  .already-submitted .big-icon { font-size: 40px; margin-bottom: 10px; }
+
+  {% if existing and existing.status == 'queried' %}
+  .query-banner { background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .query-banner strong { display: block; font-size: 14px; color: #856404; margin-bottom: 4px; }
+  .query-banner p { font-size: 13px; color: #6d5300; line-height: 1.5; }
+  {% endif %}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/dashboard" class="back">‹</a>
+  <div>
+    <div class="topbar-title">Site Survey</div>
+    <div class="topbar-sub">{{ job.job_id }} — Quote Request</div>
+  </div>
+</div>
+
+<div class="job-header">
+  <div class="survey-badge">📐 QUOTE REQUEST</div>
+  <h2>{{ job.pub_name or '—' }}</h2>
+  <p>{{ job.postcode or '' }}{% if job.trade_type %} · {{ job.trade_type }}{% endif %}</p>
+</div>
+
+<div class="content">
+
+  {% if existing and existing.status not in ['queried', 'draft'] %}
+  <div class="already-submitted">
+    <div class="big-icon">✅</div>
+    Survey submitted successfully.<br>
+    <span style="font-size:13px;color:#555;font-weight:400;margin-top:8px;display:block">Your survey is with the Redstone office. You'll be notified if any changes are needed.</span>
+  </div>
+
+  {% else %}
+
+  {% if existing and existing.status == 'queried' %}
+  <div class="query-banner">
+    <strong>⚠ Query from Redstone Office</strong>
+    <p>{{ existing.query_note or 'Please review and correct your survey before resubmitting.' }}</p>
+  </div>
+  {% endif %}
+
+  <form id="survey-form" enctype="multipart/form-data">
+
+    <!-- SITE VISIT DETAILS -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">📅</span> Site Visit Details</div>
+      <div class="section-body">
+        <div class="field">
+          <label>Job Reference</label>
+          <div class="read-only-field">{{ job.job_id }} — {{ job.pub_name }}</div>
+        </div>
+        <div class="field">
+          <label>Date of Visit <span class="required">*</span></label>
+          <input type="date" name="visit_date" id="visit_date" required value="{{ existing.visit_date if existing else today }}">
+        </div>
+        <div class="time-row">
+          <div class="field">
+            <label>Time Arrived <span class="required">*</span></label>
+            <input type="time" name="time_arrived" id="time_arrived" required value="{{ existing.time_arrived if existing else '' }}">
+          </div>
+          <div class="field">
+            <label>Time Departed <span class="required">*</span></label>
+            <input type="time" name="time_departed" id="time_departed" required value="{{ existing.time_departed if existing else '' }}">
+          </div>
+        </div>
+        <div class="field">
+          <label>Manager on Duty <span class="required">*</span></label>
+          <input type="text" name="manager_on_duty" placeholder="Name of manager you met on site" required value="{{ existing.manager_on_duty if existing else '' }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- SCOPE OF WORKS -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">📋</span> Scope of Works</div>
+      <div class="section-body">
+        <div class="field">
+          <label>Full Description of Works Required <span class="required">*</span></label>
+          <textarea name="scope_of_works" class="xlarge" required placeholder="Describe everything you observed that needs doing. Be as detailed as possible — this forms the basis of the quote.">{{ existing.scope_of_works if existing else job.description or '' }}</textarea>
+        </div>
+        <div class="field">
+          <label>Measurements & Dimensions</label>
+          <textarea name="measurements" class="large" placeholder="Room by room, area by area — lengths, widths, heights, quantities as applicable. Note the units used.">{{ existing.measurements if existing else '' }}</textarea>
+        </div>
+        <div class="field">
+          <label>Existing Condition & Risk Notes</label>
+          <textarea name="condition_notes" class="large" placeholder="Note current condition of surfaces, any damage, substrate issues, asbestos risk, structural concerns, anything unusual that affects the job.">{{ existing.condition_notes if existing else '' }}</textarea>
+        </div>
+        <div class="field">
+          <label>Recommended Approach</label>
+          <textarea name="recommended_approach" class="large" placeholder="How would you do this job? Sequencing, preparation required, number of coats, specialist equipment, subcontractors needed etc.">{{ existing.recommended_approach if existing else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCESS & PARKING -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">🅿️</span> Access & Parking</div>
+      <div class="section-body">
+        <div class="field">
+          <label>Access Notes & Restrictions</label>
+          <textarea name="access_notes" class="large" placeholder="Key holder required? Restricted hours? Out of hours working needed? Noise restrictions? Which entrance to use?">{{ existing.access_notes if existing else '' }}</textarea>
+        </div>
+        <div class="field">
+          <label>Parking Situation</label>
+          <textarea name="parking_notes" placeholder="Describe available parking, restrictions, permit requirements, costs, loading bay access etc.">{{ existing.parking_notes if existing else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- MATERIALS REQUIRED -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">🧱</span> Materials Required</div>
+      <div class="section-body">
+        <p style="font-size:13px;color:#888;margin-bottom:14px;line-height:1.5">List the materials you'd specify for this job. Add each item as you mentally work through the job on site. Quantities only — Redstone will add costs when building the quote.</p>
+        <div id="mat-spec-container">
+          {% if existing and existing.materials_spec_json %}
+            {% for m in existing.materials_spec_json %}
+            <div class="mat-spec-row" id="mat-spec-row-{{ loop.index }}">
+              <div class="mat-spec-number">Material {{ loop.index }}</div>
+              <button type="button" class="remove-mat-spec" onclick="removeMatSpec({{ loop.index }})">×</button>
+              <div class="field" style="margin-bottom:8px">
+                <label>Description</label>
+                <input type="text" value="{{ m.description }}" placeholder="e.g. Dulux Trade Vinyl Matt — Magnolia" id="ms_desc_{{ loop.index }}">
+              </div>
+              <div class="mat-spec-grid">
+                <div>
+                  <label>Quantity</label>
+                  <input type="number" step="0.01" min="0" value="{{ m.qty }}" placeholder="0" id="ms_qty_{{ loop.index }}">
+                </div>
+                <div>
+                  <label>Unit</label>
+                  <select id="ms_unit_{{ loop.index }}">
+                    {% for u in ['nr','m²','m','ltr','kg','bag','box','sheet','roll','pair','set','item'] %}
+                    <option value="{{ u }}" {{ 'selected' if m.unit == u else '' }}>{{ u }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+        <button type="button" class="add-mat-spec-btn" onclick="addMatSpec()">+ Add Material</button>
+      </div>
+    </div>
+
+    <!-- PHOTOS -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">📷</span> Site Photos</div>
+      <div class="section-body">
+        <p style="font-size:13px;color:#888;margin-bottom:14px;line-height:1.5">Take or upload photos of every area, defect, measurement reference and anything relevant. More is always better — these support the quote.</p>
+        <div class="photo-upload" id="photo-drop">
+          <input type="file" id="photo-input" accept="image/*" multiple capture="environment" onchange="handlePhotos(this)">
+          <div class="photo-icon">📷</div>
+          <div class="photo-label">
+            Tap to take photos or choose from library
+            <small>Multiple photos allowed — add captions to label each one</small>
+          </div>
+        </div>
+        <div class="photo-previews" id="photo-previews"></div>
+        <input type="hidden" name="photo_count" id="photo_count" value="0">
+      </div>
+    </div>
+
+    <!-- INTERNAL COST TRACKING (hidden label, shown to engineer for info only) -->
+    <div class="section">
+      <div class="section-head"><span class="head-icon">⏱</span> Visit Time & Travel</div>
+      <div class="section-body">
+        <div class="internal-note">
+          <strong>ℹ️ For Redstone records only</strong>
+          This information is used internally to track the cost of survey visits. It does not affect your pay.
+        </div>
+        <div class="field">
+          <label>Mileage to Site (miles)</label>
+          <input type="number" name="survey_mileage" step="0.1" min="0" placeholder="0.0" value="{{ existing.survey_mileage if existing else '' }}">
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="submit-btn" onclick="showConfirm()">Submit Survey →</button>
+
+  </form>
+  {% endif %}
+
+</div>
+
+<!-- Confirm sheet -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-sheet">
+    <div class="confirm-title">Submit Site Survey?</div>
+    <div class="confirm-subtitle">Once submitted this will be sent to the Redstone office to build the quote. Make sure everything is complete.</div>
+    <ul class="checklist">
+      <li><span class="check-icon">📅</span> Date, arrival and departure time filled in</li>
+      <li><span class="check-icon">📋</span> Full scope of works described</li>
+      <li><span class="check-icon">📏</span> Measurements and dimensions noted</li>
+      <li><span class="check-icon">🧱</span> Materials list added where possible</li>
+      <li><span class="check-icon">📷</span> Photos taken of all relevant areas</li>
+    </ul>
+    <button class="confirm-btn" id="confirm-submit-btn" onclick="submitSurvey()">✓ Submit Survey</button>
+    <button class="cancel-btn" onclick="document.getElementById('confirm-overlay').classList.remove('show')">Go Back & Check</button>
+  </div>
+</div>
+
+<script>
+const JOB_ID = "{{ job.job_id }}";
+const EXISTING_ID = {{ existing.id if existing else 'null' }};
+let matSpecCount = {{ existing.materials_spec_json | length if existing and existing.materials_spec_json else 0 }};
+let photoFiles = [];
+let photoCaptions = [];
+
+// ── Materials Spec ────────────────────────────────────────────────────────────
+function addMatSpec() {
+  matSpecCount++;
+  const container = document.getElementById('mat-spec-container');
+  const div = document.createElement('div');
+  div.className = 'mat-spec-row';
+  div.id = `mat-spec-row-${matSpecCount}`;
+  div.innerHTML = `
+    <div class="mat-spec-number">Material ${matSpecCount}</div>
+    <button type="button" class="remove-mat-spec" onclick="removeMatSpec(${matSpecCount})">×</button>
+    <div class="field" style="margin-bottom:8px">
+      <label>Description</label>
+      <input type="text" id="ms_desc_${matSpecCount}" placeholder="e.g. Dulux Trade Vinyl Matt — Magnolia">
+    </div>
+    <div class="mat-spec-grid">
+      <div>
+        <label>Quantity</label>
+        <input type="number" step="0.01" min="0" id="ms_qty_${matSpecCount}" placeholder="0">
+      </div>
+      <div>
+        <label>Unit</label>
+        <select id="ms_unit_${matSpecCount}">
+          ${['nr','m²','m','ltr','kg','bag','box','sheet','roll','pair','set','item'].map(u => `<option value="${u}">${u}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  div.querySelector('input[type=text]').focus();
+}
+
+function removeMatSpec(idx) {
+  const el = document.getElementById(`mat-spec-row-${idx}`);
+  if (el) el.remove();
+}
+
+function collectMaterials() {
+  const rows = document.querySelectorAll('[id^="mat-spec-row-"]');
+  const mats = [];
+  rows.forEach(row => {
+    const idx = row.id.replace('mat-spec-row-', '');
+    const desc = document.getElementById(`ms_desc_${idx}`)?.value?.trim();
+    if (!desc) return;
+    mats.push({
+      description: desc,
+      qty: parseFloat(document.getElementById(`ms_qty_${idx}`)?.value || 0),
+      unit: document.getElementById(`ms_unit_${idx}`)?.value || 'nr'
+    });
+  });
+  return mats;
+}
+
+// ── Photos ────────────────────────────────────────────────────────────────────
+function handlePhotos(input) {
+  Array.from(input.files).forEach(file => {
+    photoFiles.push(file);
+    photoCaptions.push('');
+    renderPhotoPreviews();
+  });
+  input.value = '';
+}
+
+function renderPhotoPreviews() {
+  const container = document.getElementById('photo-previews');
+  container.innerHTML = '';
+  document.getElementById('photo_count').value = photoFiles.length;
+  photoFiles.forEach((file, i) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wrap = document.createElement('div');
+      wrap.className = 'photo-preview-wrap';
+      wrap.innerHTML = `
+        <img src="${e.target.result}" class="photo-preview">
+        <button type="button" class="photo-remove" onclick="removePhoto(${i})">×</button>
+        <input class="photo-caption-input" type="text" placeholder="Caption" value="${photoCaptions[i]}" oninput="photoCaptions[${i}]=this.value">`;
+      container.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removePhoto(i) {
+  photoFiles.splice(i, 1);
+  photoCaptions.splice(i, 1);
+  renderPhotoPreviews();
+}
+
+// ── Validation & Submit ───────────────────────────────────────────────────────
+function showConfirm() {
+  const required = ['visit_date','time_arrived','time_departed','manager_on_duty'];
+  let missing = false;
+  required.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.value.trim()) {
+      el.style.borderColor = '#c0392b';
+      missing = true;
+    } else if (el) {
+      el.style.borderColor = '';
+    }
+  });
+  const scope = document.querySelector('[name=scope_of_works]');
+  if (scope && !scope.value.trim()) {
+    scope.style.borderColor = '#c0392b';
+    missing = true;
+  } else if (scope) {
+    scope.style.borderColor = '';
+  }
+  if (missing) {
+    alert('Please fill in all required fields (marked with *) before submitting.');
+    return;
+  }
+  document.getElementById('confirm-overlay').classList.add('show');
+}
+
+async function submitSurvey() {
+  const btn = document.getElementById('confirm-submit-btn');
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('job_id', JOB_ID);
+  if (EXISTING_ID) fd.append('survey_id', EXISTING_ID);
+  fd.append('visit_date', document.getElementById('visit_date').value);
+  fd.append('time_arrived', document.getElementById('time_arrived').value);
+  fd.append('time_departed', document.getElementById('time_departed').value);
+  fd.append('manager_on_duty', document.querySelector('[name=manager_on_duty]').value);
+  fd.append('scope_of_works', document.querySelector('[name=scope_of_works]').value);
+  fd.append('measurements', document.querySelector('[name=measurements]').value);
+  fd.append('condition_notes', document.querySelector('[name=condition_notes]').value);
+  fd.append('recommended_approach', document.querySelector('[name=recommended_approach]').value);
+  fd.append('access_notes', document.querySelector('[name=access_notes]').value);
+  fd.append('parking_notes', document.querySelector('[name=parking_notes]').value);
+  fd.append('survey_mileage', document.querySelector('[name=survey_mileage]').value || 0);
+  fd.append('materials_spec_json', JSON.stringify(collectMaterials()));
+  fd.append('captions', JSON.stringify(photoCaptions));
+
+  photoFiles.forEach((f, i) => fd.append(`photo_${i}`, f, f.name));
+
+  try {
+    const res = await fetch('/survey/submit', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('confirm-overlay').classList.remove('show');
+      document.getElementById('survey-form').innerHTML = `
+        <div class="already-submitted">
+          <div class="big-icon">✅</div>
+          Survey submitted successfully.<br>
+          <span style="font-size:13px;color:#555;font-weight:400;margin-top:8px;display:block">
+            Your survey is with the Redstone office. You'll be notified if any changes are needed.
+          </span>
+        </div>`;
+    } else {
+      alert('Submission failed: ' + (data.error || 'Please try again'));
+      btn.textContent = '✓ Submit Survey';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error — please check your connection and try again');
+    btn.textContent = '✓ Submit Survey';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
