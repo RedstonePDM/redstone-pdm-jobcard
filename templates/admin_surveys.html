@@ -115,10 +115,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 .qb-section { margin-bottom: 16px; }
 .qb-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 0.4px; }
 
-.quote-line { display: grid; grid-template-columns: 2fr 1fr 80px 80px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.quote-line { display: grid; grid-template-columns: 2fr 1fr 80px 70px 70px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .quote-line input, .quote-line select { padding: 7px 10px; border: 1.5px solid #e0e0e0; border-radius: 6px; font-size: 12px; background: white; outline: none; width: 100%; }
 .quote-line input:focus, .quote-line select:focus { border-color: #1a4fa0; }
 .quote-line-total { font-size: 12px; font-weight: 700; color: #1a2332; text-align: right; }
+.quote-line-marked { font-size: 11px; font-weight: 700; color: #1a4fa0; text-align: right; background: #eff4ff; border-radius: 5px; padding: 4px 6px; }
 .btn-remove-line { background: none; border: none; color: #ccc; cursor: pointer; font-size: 16px; padding: 0; }
 .btn-remove-line:hover { color: #c0392b; }
 
@@ -447,6 +448,16 @@ function renderDrawer(s) {
     <div class="quote-builder">
       <div class="qb-title">💷 Quote Builder <span style="font-size:11px;font-weight:400;color:#888;margin-left:4px">20% markup locked — SLA rate</span></div>
 
+      <!-- Quote line column headers -->
+      <div style="display:grid;grid-template-columns:2fr 1fr 80px 70px 70px 24px;gap:6px;margin-bottom:4px;padding:0 2px">
+        <span style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase">Description</span>
+        <span style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase">Qty</span>
+        <span style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase">Cost (£)</span>
+        <span style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase;text-align:right">Cost</span>
+        <span style="font-size:9px;font-weight:700;color:#1a4fa0;text-transform:uppercase;text-align:right">+20%</span>
+        <span></span>
+      </div>
+
       <!-- Labour -->
       <div class="qb-section">
         <div class="qb-section-label">Labour</div>
@@ -515,17 +526,21 @@ function renderQuoteLines() {
     const container = document.getElementById(`qb-${section}-lines`);
     if (!container) return;
     const ph = LINE_PLACEHOLDERS[section];
-    container.innerHTML = quoteLines[section].map((line, i) => `
-      <div class="quote-line">
+    container.innerHTML = quoteLines[section].map((line, i) => {
+      const cost = (line.qty||0)*(line.unit_cost||0);
+      const marked = cost * 1.20;
+      return `<div class="quote-line">
         <input type="text" value="${line.description}" placeholder="${ph[0]}"
           oninput="quoteLines['${section}'][${i}].description=this.value">
         <input type="number" step="0.5" min="0" value="${line.qty||1}" placeholder="${ph[1]}"
           oninput="quoteLines['${section}'][${i}].qty=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
         <input type="number" step="0.01" min="0" value="${line.unit_cost||0}" placeholder="${ph[2]}"
           oninput="quoteLines['${section}'][${i}].unit_cost=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
-        <div class="quote-line-total" id="lt-${section}-${i}">£${((line.qty||0)*(line.unit_cost||0)).toFixed(2)}</div>
+        <div class="quote-line-total" id="lt-${section}-${i}">£${cost.toFixed(2)}</div>
+        <div class="quote-line-marked" id="lm-${section}-${i}" title="+20% markup">£${marked.toFixed(2)}</div>
         <button class="btn-remove-line" onclick="removeLine('${section}',${i})">×</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   });
   updateTotals();
 }
@@ -535,6 +550,8 @@ function updateLineTotal(section, idx) {
   line.total = parseFloat(((line.qty||0)*(line.unit_cost||0)).toFixed(2));
   const el = document.getElementById(`lt-${section}-${idx}`);
   if (el) el.textContent = `£${line.total.toFixed(2)}`;
+  const em = document.getElementById(`lm-${section}-${idx}`);
+  if (em) em.textContent = `£${(line.total * 1.20).toFixed(2)}`;
   updateTotals();
 }
 
@@ -566,6 +583,9 @@ function renderDrawerActions(s) {
     btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')">📤 Mark Submitted to JDW</button>`;
   }
   if (status === 'quote-submitted') {
+    btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')" style="background:#8e44ad">✏ Edit Quote</button>`;
+  }
+  if (['quote-submitted','won','lost'].includes(status)) {
     btns += `<button class="btn-action btn-mark-won" onclick="openOutcomeModal('won')">✓ Won</button>`;
     btns += `<button class="btn-action btn-mark-lost" onclick="openOutcomeModal('lost')">✗ Lost</button>`;
   }
