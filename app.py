@@ -3015,7 +3015,7 @@ def admin_survey_pdf(survey_id):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, PageBreak
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_RIGHT, TA_CENTER
     import io
@@ -3124,8 +3124,7 @@ def admin_survey_pdf(survey_id):
     if labour_total:
         line_rows.append(["", "", Paragraph("<b>Labour</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{labour_total:.2f}"])
     if materials_total:
-        line_rows.append(["", "", Paragraph("<b>Materials (cost)</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{materials_total:.2f}"])
-        line_rows.append(["", "", Paragraph("<b>Materials markup</b>", sty('mk', fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a4fa0'))), f"£{materials_markup:.2f}"])
+        line_rows.append(["", "", Paragraph("<b>Materials</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{(materials_total + materials_markup):.2f}"])
     if plant_total:
         line_rows.append(["", "", Paragraph("<b>Plant & Equipment</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{plant_total:.2f}"])
     if prelim_total:
@@ -3174,10 +3173,9 @@ def admin_survey_pdf(survey_id):
     elems.append(Spacer(1, 8*mm))
 
     # Terms & Conditions
-    elems.append(HRFlowable(width="100%", thickness=0.5, color=GREY))
+    elems.append(PageBreak())
+    elems.append(Paragraph("<b>Terms & Conditions</b>", sty('tch', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)))
     elems.append(Spacer(1, 4*mm))
-    elems.append(Paragraph("<b>Terms & Conditions</b>", sty('tch', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)))
-    elems.append(Spacer(1, 3*mm))
 
     tcs = [
         ("1. Payment Terms", "Payment is due within 30 days from the invoice date unless otherwise agreed in writing."),
