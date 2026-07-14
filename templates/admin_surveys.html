@@ -92,6 +92,18 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 .sds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #aaa; margin-bottom: 3px; }
 .sds-value { font-size: 13px; color: #1a2332; line-height: 1.6; }
 .sds-value.mono { font-family: monospace; font-size: 12px; }
+.scope-edit-hint { font-size: 11px; color: #2980b9; margin-bottom: 6px; }
+.scope-edit-wrap textarea {
+  width: 100%; padding: 10px 12px; border: 1.5px solid #d0d0d0; border-radius: 8px;
+  font-size: 13px; font-family: inherit; color: #1a2332; resize: vertical;
+  min-height: 130px; outline: none; line-height: 1.6; background: white;
+  transition: border-color 0.15s; display: block;
+}
+.scope-edit-wrap textarea:focus { border-color: #1a4fa0; box-shadow: 0 0 0 3px rgba(26,79,160,0.08); }
+.scope-save-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.scope-save-btn { padding: 7px 16px; background: #1a2332; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.scope-save-btn:hover { background: #c0392b; }
+.scope-saved-msg { font-size: 12px; color: #1a7a4a; font-weight: 600; display: none; }
 .sds-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .sds-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
@@ -223,7 +235,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
         <div class="sr-trade">{{ trade_emoji }}</div>
         <div class="sr-main">
           <div class="sr-pub">{{ s.pub_name or '—' }}</div>
-          <div class="sr-meta">{{ s.job_id }} · {{ s.postcode or '—' }} · {{ s.trade_type or '—' }} · {{ s.contractor or '—' }}</div>
+          <div class="sr-meta">{{ s.display_id or s.job_id }} · {{ s.postcode or '—' }} · {{ s.trade_type or '—' }} · {{ s.contractor or '—' }}</div>
           {% if s.scope_of_works %}
           <div class="sr-desc">{{ (s.scope_of_works or '')[:100] }}...</div>
           {% endif %}
@@ -357,7 +369,7 @@ async function openDrawer(surveyId) {
   };
 
   document.getElementById('drawer-title').textContent = s.pub_name || s.job_id;
-  document.getElementById('drawer-sub').textContent = `${s.job_id} · ${s.postcode||''} · ${s.trade_type||''}`;
+  document.getElementById('drawer-sub').textContent = `${s.display_id||s.job_id} · ${s.postcode||''} · ${s.trade_type||''}`;
 
   renderDrawer(s);
   renderDrawerActions(s);
@@ -409,10 +421,12 @@ function renderDrawer(s) {
     <div class="survey-data-section">
       <div class="sds-title">📝 Scope of Works</div>
       <div class="sds-field">
-        <div style="font-size:11px;color:#2980b9;margin-bottom:6px">ℹ️ Edit freely before building the quote</div>
-        <textarea class="sds-editable" id="drawer-scope">${(s.scope_of_works||'').replace(/`/g,"'")}</textarea>
-        <button class="btn-save-scope" onclick="saveScope()">Save Changes</button>
-        <span class="scope-saved" id="scope-saved-msg">✓ Saved</span>
+        <div class="scope-edit-hint">✏️ Edit to refine before building the quote</div>
+        <div class="scope-edit-wrap"><textarea id="drawer-scope">${(s.scope_of_works||'').replace(/`/g, "'")}</textarea></div>
+        <div class="scope-save-row">
+          <button class="scope-save-btn" onclick="saveScope()">Save Changes</button>
+          <span class="scope-saved-msg" id="scope-saved-msg">✓ Saved</span>
+        </div>
       </div>
     </div>
 
