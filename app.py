@@ -475,7 +475,6 @@ REDSTONE_GREY  = colors.HexColor("#7f8c8d")
 
 def build_job_card_pdf(card, contractor):
     buf = io.BytesIO()
-    VAT_RATE = 0.20
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
     story = []
@@ -2960,6 +2959,24 @@ def admin_save_quote(survey_id):
         cur.close(); conn.close()
 
 
+@app.route("/admin/survey/<int:survey_id>/scope", methods=["POST"])
+@admin_required
+def admin_save_scope(survey_id):
+    data = request.json or {}
+    scope = data.get("scope_of_works", "")
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE survey_forms SET scope_of_works=%s, updated_at=NOW() WHERE id=%s", (scope, survey_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close(); conn.close()
+
+
 @app.route("/admin/survey/<int:survey_id>/outcome", methods=["POST"])
 @admin_required
 def admin_survey_outcome(survey_id):
@@ -3013,6 +3030,7 @@ def admin_survey_pdf(survey_id):
     LGREY  = colors.HexColor('#f5f6f8')
     styles = getSampleStyleSheet()
     MARKUP = 0.20
+    VAT_RATE = 0.20
 
     def sty(name, **kw):
         return ParagraphStyle(name, parent=styles['Normal'], **kw)
