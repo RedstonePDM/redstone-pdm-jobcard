@@ -475,6 +475,7 @@ REDSTONE_GREY  = colors.HexColor("#7f8c8d")
 
 def build_job_card_pdf(card, contractor):
     buf = io.BytesIO()
+    VAT_RATE = 0.20
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm,
                             leftMargin=15*mm, rightMargin=15*mm)
     story = []
@@ -2729,13 +2730,14 @@ def survey_form(job_id, day_date):
         cur.close(); conn.close()
         return "Job not found", 404
 
+    actual_job_id = job["job_id"] if job else job_id
     cur.execute("""
         SELECT sf.*, c.name as contractor
         FROM survey_forms sf
         JOIN contractors_db c ON c.contractor_key = sf.contractor_key
-        WHERE sf.job_id = %s AND sf.contractor_key = %s
+        WHERE (sf.job_id = %s OR sf.job_id = %s) AND sf.contractor_key = %s
         ORDER BY sf.submitted_at DESC LIMIT 1
-    """, (job_id, key))
+    """, (job_id, actual_job_id, key))
     existing = cur.fetchone()
 
     cur.execute("SELECT name FROM contractors_db WHERE contractor_key = %s", (key,))
@@ -3072,9 +3074,8 @@ def admin_survey_pdf(survey_id):
         ("Prelim / Mobilisation", s["quote_prelim_json"] or []),
     ]
 
-    subtotal = 0
+    labour_total = materials_total = plant_total = prelim_total = 0
     line_rows = [["Description", "Qty", "Unit Cost", "Total"]]
-    current_section = None
 
     for section_name, lines in sections:
         if not lines:
@@ -3084,7 +3085,14 @@ def admin_survey_pdf(survey_id):
             qty = float(line.get("qty", 0) or 0)
             uc  = float(line.get("unit_cost", 0) or 0)
             tot = qty * uc
-            subtotal += tot
+            if section_name == "Labour":
+                labour_total += tot
+            elif section_name == "Materials":
+                materials_total += tot
+            elif section_name == "Plant & Equipment":
+                plant_total += tot
+            else:
+                prelim_total += tot
             line_rows.append([
                 Paragraph(line.get("description", ""), body),
                 f"{qty:g}",
@@ -3092,10 +3100,18 @@ def admin_survey_pdf(survey_id):
                 f"£{tot:.2f}",
             ])
 
-    markup = subtotal * MARKUP
-    total  = subtotal + markup
+    materials_markup = materials_total * MARKUP
+    total = labour_total + materials_total + materials_markup + plant_total + prelim_total
 
-    line_rows.append(["", "", Paragraph("<b>Subtotal (ex VAT)</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{subtotal:.2f}"])
+    if labour_total:
+        line_rows.append(["", "", Paragraph("<b>Labour</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{labour_total:.2f}"])
+    if materials_total:
+        line_rows.append(["", "", Paragraph("<b>Materials (cost)</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{materials_total:.2f}"])
+        line_rows.append(["", "", Paragraph("<b>Materials markup</b>", sty('mk', fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a4fa0'))), f"£{materials_markup:.2f}"])
+    if plant_total:
+        line_rows.append(["", "", Paragraph("<b>Plant & Equipment</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{plant_total:.2f}"])
+    if prelim_total:
+        line_rows.append(["", "", Paragraph("<b>Prelim / Mobilisation</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{prelim_total:.2f}"])
     line_rows.append(["", "", Paragraph("<b>TOTAL (ex VAT)</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
 
     tbl = Table(line_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
@@ -3118,11 +3134,61 @@ def admin_survey_pdf(survey_id):
     elems.append(Spacer(1, 6*mm))
 
     # Footer note
-    elems.append(Paragraph(
-        "This quote is prepared by Redstone PDM Ltd in accordance with the JD Wetherspoon Contractor SLA. "
-        "All prices are exclusive of VAT. VAT will be applied at the prevailing rate at the time of invoice.",
-        sty('footer', fontSize=8, textColor=GREY, leading=12)
-    ))
+
+
+    # Inc VAT total
+    vat_amount = total * VAT_RATE
+    total_inc_vat = total + vat_amount
+    elems.append(Spacer(1, 3*mm))
+    vat_data = [
+        ["", Paragraph("Total (ex VAT)", sty('vl', fontSize=10, textColor=GREY, alignment=TA_RIGHT)), Paragraph(f"£{total:.2f}", sty('vv', fontSize=10, textColor=DARK, alignment=TA_RIGHT))],
+        ["", Paragraph(f"VAT (20%)", sty('vl', fontSize=10, textColor=GREY, alignment=TA_RIGHT)), Paragraph(f"£{vat_amount:.2f}", sty('vv', fontSize=10, textColor=DARK, alignment=TA_RIGHT))],
+        ["", Paragraph("<b>Total (inc VAT)</b>", sty('vl2', fontSize=11, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT)), Paragraph(f"<b>£{total_inc_vat:.2f}</b>", sty('vv2', fontSize=11, fontName='Helvetica-Bold', textColor=RED, alignment=TA_RIGHT))],
+    ]
+    vat_tbl = Table(vat_data, colWidths=[95*mm, 50*mm, 25*mm])
+    vat_tbl.setStyle(TableStyle([
+        ('LINEABOVE', (1,2),(-1,2), 1.5, DARK),
+        ('TOPPADDING', (0,0),(-1,-1), 4),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 4),
+        ('VALIGN', (0,0),(-1,-1), 'MIDDLE'),
+    ]))
+    elems.append(vat_tbl)
+    elems.append(Spacer(1, 8*mm))
+
+    # Terms & Conditions
+    elems.append(HRFlowable(width="100%", thickness=0.5, color=GREY))
+    elems.append(Spacer(1, 4*mm))
+    elems.append(Paragraph("<b>Terms & Conditions</b>", sty('tch', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)))
+    elems.append(Spacer(1, 3*mm))
+
+    tcs = [
+        ("1. Payment Terms", "Payment is due within 30 days from the invoice date unless otherwise agreed in writing."),
+        ("2. Late Payment", "We reserve the right to charge interest on overdue accounts at 8% above the Bank of England base rate, in accordance with the Late Payment of Commercial Debts (Interest) Act 1998. Reasonable recovery costs may also be applied."),
+        ("3. Suspension of Works", "We reserve the right to suspend ongoing or future works where invoices remain unpaid beyond agreed terms, without liability for delays caused."),
+        ("4. Retention of Title", "All materials, goods and installed items remain the property of Redstone until full payment has been received."),
+        ("5. Variations & Additional Works", "Any additional works requested outside the original scope may be charged separately and invoiced accordingly."),
+        ("6. Materials & Procurement", "Materials supplied are charged as per invoice and may include handling, procurement and logistics costs."),
+        ("7. Access & Delays", "Where works are delayed due to lack of access, client-side issues or third-party delays, additional costs may be incurred."),
+        ("8. Snagging / Defects", "Any defects must be reported within a reasonable period following completion. We will rectify workmanship issues in line with the agreed scope."),
+        ("9. Liability", "Our liability is limited to the value of the works carried out under this invoice. We are not liable for indirect or consequential losses."),
+        ("10. Acceptance of Terms", "Payment of this invoice constitutes acceptance of these terms and conditions."),
+        ("11. Purchase Orders", "A valid Purchase Order (PO) must be provided prior to commencement of works where applicable."),
+        ("12. Out of Hours Works", "Out-of-hours / night works are charged at agreed premium rates."),
+        ("13. Waste Disposal", "Waste removal and disposal will be charged unless explicitly included."),
+    ]
+
+    tc_style = sty('tc', fontSize=7.5, textColor=colors.HexColor('#444444'), leading=11)
+    tc_bold  = sty('tcb', fontSize=7.5, fontName='Helvetica-Bold', textColor=DARK, leading=11)
+
+    for title, text in tcs:
+        tc_row = [[Paragraph(title, tc_bold), Paragraph(text, tc_style)]]
+        tc_tbl = Table(tc_row, colWidths=[38*mm, 132*mm])
+        tc_tbl.setStyle(TableStyle([
+            ('VALIGN', (0,0),(-1,-1), 'TOP'),
+            ('TOPPADDING', (0,0),(-1,-1), 2),
+            ('BOTTOMPADDING', (0,0),(-1,-1), 2),
+        ]))
+        elems.append(tc_tbl)
 
     doc.build(elems)
     buf.seek(0)
