@@ -3010,7 +3010,13 @@ def admin_survey_pdf(survey_id):
     """Generate a branded Redstone quote PDF."""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM survey_forms WHERE id=%s", (survey_id,))
+    cur.execute("""
+        SELECT sf.*,
+               COALESCE(j.display_id, sf.job_id) as display_id
+        FROM survey_forms sf
+        LEFT JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
+        WHERE sf.id = %s
+    """, (survey_id,))
     s = cur.fetchone()
     cur.close(); conn.close()
     if not s:
@@ -3067,7 +3073,7 @@ def admin_survey_pdf(survey_id):
         [Paragraph('<b>Site</b>', red_label), Paragraph(s["pub_name"] or "—", body),
          Paragraph('<b>Postcode</b>', red_label), Paragraph(s["postcode"] or "—", body)],
         [Paragraph('<b>Trade</b>', red_label), Paragraph(s["trade_type"] or "—", body),
-         Paragraph('<b>Date</b>', red_label), Paragraph(s["visit_date"].strftime('%d/%m/%Y') if s["visit_date"] else '—', body)],
+         Paragraph('<b>Date</b>', red_label), Paragraph(s["visit_date"].strftime('%d/%m/%Y') if hasattr(s["visit_date"], 'strftime') else str(s["visit_date"] or '—'), body)],
     ]
     info_tbl = Table(info_data, colWidths=[25*mm, 65*mm, 25*mm, 55*mm])
     info_tbl.setStyle(TableStyle([
