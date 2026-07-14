@@ -1997,9 +1997,11 @@ def admin_surveys():
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT sf.*, c.name as contractor
+            SELECT sf.*, c.name as contractor,
+                   COALESCE(j.display_id, sf.job_id) as display_id
             FROM survey_forms sf
             LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+            LEFT JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
             ORDER BY sf.submitted_at DESC
         """)
         surveys = cur.fetchall()
@@ -2866,9 +2868,11 @@ def admin_survey_detail(survey_id):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT sf.*, c.name as contractor
+        SELECT sf.*, c.name as contractor,
+               COALESCE(j.display_id, sf.job_id) as display_id
         FROM survey_forms sf
         LEFT JOIN contractors_db c ON c.contractor_key = sf.contractor_key
+        LEFT JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
         WHERE sf.id = %s
     """, (survey_id,))
     s = cur.fetchone()
@@ -3047,7 +3051,7 @@ def admin_survey_pdf(survey_id):
     # Header
     header_data = [[
         Paragraph('<font color="#c0392b"><b>Redstone</b></font><b> PDM Ltd</b>', sty('hb', fontSize=16, fontName='Helvetica-Bold', textColor=DARK)),
-        Paragraph(f'<b>QUOTE</b><br/><font size="9" color="#888888">{s["job_id"]}</font>', sty('qt', fontSize=14, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT))
+        Paragraph(f'<b>QUOTE</b><br/><font size="9" color="#888888">{s["display_id"] or s["job_id"]}</font>', sty('qt', fontSize=14, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT))
     ]]
     header_tbl = Table(header_data, colWidths=[90*mm, 80*mm])
     header_tbl.setStyle(TableStyle([
@@ -3063,7 +3067,7 @@ def admin_survey_pdf(survey_id):
         [Paragraph('<b>Site</b>', red_label), Paragraph(s["pub_name"] or "—", body),
          Paragraph('<b>Postcode</b>', red_label), Paragraph(s["postcode"] or "—", body)],
         [Paragraph('<b>Trade</b>', red_label), Paragraph(s["trade_type"] or "—", body),
-         Paragraph('<b>Date</b>', red_label), Paragraph(str(s["visit_date"] or "—"), body)],
+         Paragraph('<b>Date</b>', red_label), Paragraph(s["visit_date"].strftime('%d/%m/%Y') if s["visit_date"] else '—', body)],
     ]
     info_tbl = Table(info_data, colWidths=[25*mm, 65*mm, 25*mm, 55*mm])
     info_tbl.setStyle(TableStyle([
@@ -3212,4 +3216,4 @@ def admin_survey_pdf(survey_id):
     from flask import send_file
     return send_file(buf, mimetype='application/pdf',
         as_attachment=True,
-        download_name=f"Redstone_Quote_{s['job_id']}.pdf")
+        download_name=f"Redstone_Quote_{s['display_id'] or s['job_id']}.pdf")
