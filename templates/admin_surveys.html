@@ -446,7 +446,7 @@ function renderDrawer(s) {
 
     <!-- Quote Builder -->
     <div class="quote-builder">
-      <div class="qb-title">💷 Quote Builder <span style="font-size:11px;font-weight:400;color:#888;margin-left:4px">20% markup locked — SLA rate</span></div>
+      <div class="qb-title">💷 Quote Builder</div>
 
       <!-- Quote line column headers -->
       <div style="display:grid;grid-template-columns:2fr 1fr 80px 70px 70px 24px;gap:6px;margin-bottom:4px;padding:0 2px">
@@ -488,9 +488,12 @@ function renderDrawer(s) {
 
       <!-- Totals -->
       <div class="quote-totals" id="quote-totals">
-        <div class="qt-row subtotal"><span>Subtotal</span><span id="qt-subtotal">£0.00</span></div>
-        <div class="qt-row markup"><span>Markup (20%) <span class="markup-badge">LOCKED — JDW SLA</span></span><span id="qt-markup">£0.00</span></div>
-        <div class="qt-row total"><span>Quote Total</span><span id="qt-total">£0.00</span></div>
+        <div class="qt-row"><span>Labour</span><span id="qt-labour">£0.00</span></div>
+        <div class="qt-row"><span>Materials (cost)</span><span id="qt-materials-cost">£0.00</span></div>
+        <div class="qt-row markup"><span>Markup (20%) Total</span><span id="qt-markup">£0.00</span></div>
+        <div class="qt-row"><span>Plant & Equipment</span><span id="qt-plant">£0.00</span></div>
+        <div class="qt-row"><span>Prelim / Mobilisation</span><span id="qt-prelim">£0.00</span></div>
+        <div class="qt-row total"><span>Quote Total (ex VAT)</span><span id="qt-total">£0.00</span></div>
       </div>
     </div>
 
@@ -556,15 +559,19 @@ function updateLineTotal(section, idx) {
 }
 
 function updateTotals() {
-  let subtotal = 0;
-  ['labour','materials','plant','prelim'].forEach(s => {
-    quoteLines[s].forEach(l => subtotal += parseFloat(l.total||0));
-  });
-  const markup = subtotal * MARKUP;
-  const total = subtotal + markup;
+  let labourTotal = 0, materialsTotal = 0, plantTotal = 0, prelimTotal = 0;
+  quoteLines['labour'].forEach(l => labourTotal += parseFloat(l.total||0));
+  quoteLines['materials'].forEach(l => materialsTotal += parseFloat(l.total||0));
+  quoteLines['plant'].forEach(l => plantTotal += parseFloat(l.total||0));
+  quoteLines['prelim'].forEach(l => prelimTotal += parseFloat(l.total||0));
+  const materialsMarkup = materialsTotal * MARKUP;
+  const total = labourTotal + materialsTotal + materialsMarkup + plantTotal + prelimTotal;
   const el = id => document.getElementById(id);
-  if (el('qt-subtotal')) el('qt-subtotal').textContent = `£${subtotal.toFixed(2)}`;
-  if (el('qt-markup')) el('qt-markup').textContent = `£${markup.toFixed(2)}`;
+  if (el('qt-labour')) el('qt-labour').textContent = `£${labourTotal.toFixed(2)}`;
+  if (el('qt-materials-cost')) el('qt-materials-cost').textContent = `£${materialsTotal.toFixed(2)}`;
+  if (el('qt-markup')) el('qt-markup').textContent = `£${materialsMarkup.toFixed(2)}`;
+  if (el('qt-plant')) el('qt-plant').textContent = `£${plantTotal.toFixed(2)}`;
+  if (el('qt-prelim')) el('qt-prelim').textContent = `£${prelimTotal.toFixed(2)}`;
   if (el('qt-total')) el('qt-total').textContent = `£${total.toFixed(2)}`;
 }
 
