@@ -408,7 +408,12 @@ function renderDrawer(s) {
 
     <div class="survey-data-section">
       <div class="sds-title">📝 Scope of Works</div>
-      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.scope_of_works||'—'}</div></div>
+      <div class="sds-field">
+        <div style="font-size:11px;color:#2980b9;margin-bottom:6px">ℹ️ Edit freely before building the quote</div>
+        <textarea class="sds-editable" id="drawer-scope">${(s.scope_of_works||'').replace(/`/g,"'")}</textarea>
+        <button class="btn-save-scope" onclick="saveScope()">Save Changes</button>
+        <span class="scope-saved" id="scope-saved-msg">✓ Saved</span>
+      </div>
     </div>
 
     ${s.measurements ? `<div class="survey-data-section">
