@@ -353,6 +353,8 @@ filterSurveys();
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
 async function openDrawer(surveyId) {
+  // If same drawer already open, don't re-fetch and overwrite edits
+  if (currentSurveyId === surveyId && document.getElementById('drawer').classList.contains('open')) return;
   currentSurveyId = surveyId;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawer-overlay').classList.add('active');
@@ -423,7 +425,7 @@ function renderDrawer(s) {
       <div class="sds-title">📝 Scope of Works</div>
       <div class="sds-field">
         <div class="scope-edit-hint">✏️ Edit to refine before building the quote</div>
-        <div class="scope-edit-wrap"><textarea id="drawer-scope">${(s.scope_of_works||'').replace(/`/g, "'")}</textarea></div>
+        <div class="scope-edit-wrap"><textarea id="drawer-scope" onblur="saveScope()">${(s.scope_of_works||'').replace(/`/g, "'")}</textarea></div>
         <div class="scope-save-row">
           <button class="scope-save-btn" onclick="saveScope()">Save Changes</button>
           <span class="scope-saved-msg" id="scope-saved-msg">✓ Saved</span>
@@ -435,7 +437,7 @@ function renderDrawer(s) {
       <div class="sds-title">📏 Measurements & Dimensions</div>
       <div class="sds-field">
         <div class="scope-edit-hint">✏️ Edit to refine before building the quote</div>
-        <div class="scope-edit-wrap"><textarea id="drawer-measurements">${(s.measurements||'').replace(/`/g, "'")}</textarea></div>
+        <div class="scope-edit-wrap"><textarea id="drawer-measurements" onblur="saveMeasurements()">${(s.measurements||'').replace(/`/g, "'")}</textarea></div>
         <div class="scope-save-row">
           <button class="scope-save-btn" onclick="saveMeasurements()">Save Changes</button>
           <span class="scope-saved-msg" id="meas-saved-msg">✓ Saved</span>
@@ -644,8 +646,15 @@ function renderDrawerActions(s) {
 }
 
 async function saveQuote(newStatus) {
-  const subtotal = parseFloat(document.getElementById('qt-subtotal')?.textContent?.replace('£','')) || 0;
-  const total = parseFloat(document.getElementById('qt-total')?.textContent?.replace('£','')) || 0;
+  // Compute totals directly from quoteLines rather than reading DOM text
+  let labourT = 0, subconT = 0, matsT = 0, plantT = 0, prelimT = 0;
+  (quoteLines.labour||[]).forEach(l => labourT += (l.qty||0)*(l.unit_cost||0));
+  (quoteLines.subcontractor||[]).forEach(l => subconT += (l.qty||0)*(l.unit_cost||0));
+  (quoteLines.materials||[]).forEach(l => matsT += (l.qty||0)*(l.unit_cost||0));
+  (quoteLines.plant||[]).forEach(l => plantT += (l.qty||0)*(l.unit_cost||0));
+  (quoteLines.prelim||[]).forEach(l => prelimT += (l.qty||0)*(l.unit_cost||0));
+  const subtotal = labourT + subconT + matsT + plantT + prelimT;
+  const total = subtotal + (subconT * MARKUP) + (matsT * MARKUP);
 
   const res = await fetch(`/admin/survey/${currentSurveyId}/quote`, {
     method: 'POST',
