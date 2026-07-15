@@ -715,7 +715,7 @@
       btn.disabled = false; btn.textContent = '🔄 Refresh All MOT & Tax';
       if (data.ok) {
         if (data.failed > 0) {
-          alert(`${data.updated} vehicle(s) updated. ${data.failed} lookup(s) failed and were left unchanged.`);
+          alert(`${data.updated} vehicle(s) updated. ${data.failed} lookup(s) failed and were left unchanged.\n\nError: ${data.first_error || 'unknown'}`);
         }
         location.reload();
       }
