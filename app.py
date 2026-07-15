@@ -465,7 +465,8 @@ def admin_required(f):
 
 def lookup_mot(reg):
     if not DVLA_API_KEY:
-        return {"status": "unknown", "expiry": None, "error": "No API key"}
+        print("MOT LOOKUP: DVLA_API_KEY is not set in environment")
+        return {"status": "unknown", "expiry": None, "error": "DVLA_API_KEY is not set in Railway's environment variables"}
     try:
         reg_clean = reg.replace(" ", "").upper()
         url = "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles"
@@ -496,9 +497,15 @@ def lookup_mot(reg):
                 "tax_due_date": data.get("taxDueDate"),
             }
         else:
-            return {"status": "error", "expiry": None, "error": f"DVLA returned {r.status_code}"}
+            body_snippet = (r.text or "")[:300]
+            print(f"MOT LOOKUP FAILED for {reg}: HTTP {r.status_code} — {body_snippet}")
+            return {"status": "error", "expiry": None,
+                    "error": f"DVLA returned HTTP {r.status_code}: {body_snippet}"}
     except Exception as e:
-        return {"status": "error", "expiry": None, "error": str(e)}
+        print(f"MOT LOOKUP EXCEPTION for {reg}: {type(e).__name__}: {e}")
+        return {"status": "error", "expiry": None, "error": f"{type(e).__name__}: {e}"}
+
+
 
 
 # ── ULEZ / Congestion Charge Zone Detection ───────────────────────────────────
@@ -2362,11 +2369,14 @@ def refresh_all_mot():
     vehicles = cur.fetchall()
     updated = 0
     failed = 0
+    first_error = None
     for v in vehicles:
         result = lookup_mot(v["van_reg"])
         if result.get("status") in ("error", "unknown"):
             cur.execute("UPDATE vehicles SET mot_checked_at=NOW() WHERE id=%s", (v["id"],))
             failed += 1
+            if not first_error:
+                first_error = result.get("error", "Unknown failure")
             continue
         cur.execute("""UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW(),
             tax_status=%s, tax_due_date=%s WHERE id=%s""",
@@ -2376,7 +2386,7 @@ def refresh_all_mot():
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"ok": True, "updated": updated, "failed": failed})
+    return jsonify({"ok": True, "updated": updated, "failed": failed, "first_error": first_error})
 
 
 @app.route("/admin/vehicles/<int:vid>/update", methods=["POST"])
