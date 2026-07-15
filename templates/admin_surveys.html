@@ -574,7 +574,7 @@ function renderQuoteLines() {
       const marked = cost * 1.20;
       return `<div class="quote-line">
         <input type="text" value="${line.description}" placeholder="${ph[0]}"
-          oninput="quoteLines['${section}'][${i}].description=this.value">
+          oninput="quoteLines['${section}'][${i}].description=this.value;clearTimeout(autoSaveTimer);autoSaveTimer=setTimeout(()=>saveQuote(currentStatus||'quote-draft'),1500)">
         <input type="number" step="0.5" min="0" value="${line.qty||1}" placeholder="${ph[1]}"
           oninput="quoteLines['${section}'][${i}].qty=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
         <input type="number" step="0.01" min="0" value="${line.unit_cost||0}" placeholder="${ph[2]}"
@@ -588,6 +588,7 @@ function renderQuoteLines() {
   updateTotals();
 }
 
+let autoSaveTimer = null;
 function updateLineTotal(section, idx) {
   const line = quoteLines[section][idx];
   line.total = parseFloat(((line.qty||0)*(line.unit_cost||0)).toFixed(2));
@@ -596,6 +597,9 @@ function updateLineTotal(section, idx) {
   const em = document.getElementById(`lm-${section}-${idx}`);
   if (em) em.textContent = `£${(line.total * 1.20).toFixed(2)}`;
   updateTotals();
+  // Auto-save after 1.5s of inactivity
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => saveQuote(currentStatus || 'quote-draft'), 1500);
 }
 
 function updateTotals() {
