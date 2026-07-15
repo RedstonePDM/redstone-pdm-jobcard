@@ -496,7 +496,7 @@ function renderDrawer(s) {
 
       <!-- Subcontractor -->
       <div class="qb-section">
-        <div class="qb-section-label" style="color:#8e44ad">Subcontractor Cost <span style="font-size:9px;background:#f3e5f5;color:#6a1b9a;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:4px">+20% APPLIED</span></div>
+        <div class="qb-section-label" style="color:#8e44ad">External Labour Costs <span style="font-size:9px;background:#f3e5f5;color:#6a1b9a;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:4px">+20% APPLIED</span></div>
         <div id="qb-subcontractor-lines"></div>
         <button class="add-line-btn" onclick="addLine('subcontractor')" style="border-color:#ce93d8;color:#8e44ad">+ Add Subcontractor Line</button>
       </div>
@@ -529,7 +529,8 @@ function renderDrawer(s) {
         <div class="qt-row markup"><span>Subcontractor markup (20%)</span><span id="qt-subcon-markup">£0.00</span></div>
         <div class="qt-row"><span>Materials (cost)</span><span id="qt-materials-cost">£0.00</span></div>
         <div class="qt-row markup"><span>Materials markup (20%)</span><span id="qt-markup">£0.00</span></div>
-        <div class="qt-row"><span>Plant & Equipment</span><span id="qt-plant">£0.00</span></div>
+        <div class="qt-row"><span>Plant & Equipment (cost)</span><span id="qt-plant">£0.00</span></div>
+        <div class="qt-row markup"><span>Plant markup (20%)</span><span id="qt-plant-markup">£0.00</span></div>
         <div class="qt-row"><span>Prelim / Mobilisation</span><span id="qt-prelim">£0.00</span></div>
         <div class="qt-row total"><span>Quote Total (ex VAT)</span><span id="qt-total">£0.00</span></div>
       </div>
@@ -568,7 +569,7 @@ function renderQuoteLines() {
     const container = document.getElementById(`qb-${section}-lines`);
     if (!container) return;
     const ph = LINE_PLACEHOLDERS[section];
-    const showMarkup = section === 'materials' || section === 'subcontractor';
+    const showMarkup = section === 'materials' || section === 'subcontractor' || section === 'plant';
     container.innerHTML = quoteLines[section].map((line, i) => {
       const cost = (line.qty||0)*(line.unit_cost||0);
       const marked = cost * 1.20;
@@ -611,7 +612,8 @@ function updateTotals() {
   quoteLines['prelim'].forEach(l => prelimTotal += parseFloat(l.total||0));
   const subconMarkup = subconTotal * MARKUP;
   const materialsMarkup = materialsTotal * MARKUP;
-  const total = labourTotal + subconTotal + subconMarkup + materialsTotal + materialsMarkup + plantTotal + prelimTotal;
+  const plantMarkup = plantTotal * MARKUP;
+  const total = labourTotal + subconTotal + subconMarkup + materialsTotal + materialsMarkup + plantTotal + plantMarkup + prelimTotal;
   const el = id => document.getElementById(id);
   if (el('qt-labour')) el('qt-labour').textContent = `£${labourTotal.toFixed(2)}`;
   if (el('qt-subcon')) el('qt-subcon').textContent = `£${subconTotal.toFixed(2)}`;
@@ -619,6 +621,7 @@ function updateTotals() {
   if (el('qt-materials-cost')) el('qt-materials-cost').textContent = `£${materialsTotal.toFixed(2)}`;
   if (el('qt-markup')) el('qt-markup').textContent = `£${materialsMarkup.toFixed(2)}`;
   if (el('qt-plant')) el('qt-plant').textContent = `£${plantTotal.toFixed(2)}`;
+  if (el('qt-plant-markup')) el('qt-plant-markup').textContent = `£${plantMarkup.toFixed(2)}`;
   if (el('qt-prelim')) el('qt-prelim').textContent = `£${prelimTotal.toFixed(2)}`;
   if (el('qt-total')) el('qt-total').textContent = `£${total.toFixed(2)}`;
 }
@@ -653,8 +656,8 @@ async function saveQuote(newStatus) {
   (quoteLines.materials||[]).forEach(l => matsT += (l.qty||0)*(l.unit_cost||0));
   (quoteLines.plant||[]).forEach(l => plantT += (l.qty||0)*(l.unit_cost||0));
   (quoteLines.prelim||[]).forEach(l => prelimT += (l.qty||0)*(l.unit_cost||0));
-  const subtotal = labourT + subconT + matsT + plantT + prelimT;
-  const total = subtotal + (subconT * MARKUP) + (matsT * MARKUP);
+  const total = labourT + subconT + (subconT * MARKUP) + matsT + (matsT * MARKUP) + plantT + (plantT * MARKUP) + prelimT;
+  const subtotal = total;
 
   const res = await fetch(`/admin/survey/${currentSurveyId}/quote`, {
     method: 'POST',
