@@ -38,8 +38,8 @@
   .hero-week { font-size: 13px; color: rgba(255,255,255,0.8); margin-top: 3px; font-weight: 600; }
 
   /* 5 main tiles */
-  .tile-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
-  @media (max-width: 900px) { .tile-row { grid-template-columns: repeat(3, 1fr); } }
+  .tile-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 28px; }
+  @media (max-width: 1000px) { .tile-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 600px) { .tile-row { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 400px) { .tile-row { grid-template-columns: 1fr; } }
 
@@ -198,6 +198,13 @@
       <div class="mt-desc">Instructions and reminders from the office for this week</div>
       <span class="mt-badge badge-grey" id="reminder-badge">Loading...</span>
     </div>
+
+    <a href="/fuel_receipts" class="main-tile">
+      <div class="mt-icon">⛽</div>
+      <div class="mt-title">Fuel Receipts</div>
+      <div class="mt-desc">Log fuel bought on the company card so it can be approved</div>
+      <span class="mt-badge badge-grey">Add a receipt</span>
+    </a>
 
   </div>
 
