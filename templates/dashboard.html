@@ -149,6 +149,23 @@
     </div>
   </div>
 
+  {% if my_vehicle and my_vehicle.mot_status in ('due_soon', 'expired') %}
+  <div style="background:{{ '#fdf0ef' if my_vehicle.mot_status == 'expired' else '#fff8ef' }};
+    border:1.5px solid {{ '#f3c9c4' if my_vehicle.mot_status == 'expired' else '#ffd89b' }};
+    border-radius:12px;padding:14px 18px;margin-bottom:20px;
+    color:{{ '#c0392b' if my_vehicle.mot_status == 'expired' else '#7a5000' }};
+    font-size:13px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:18px">{{ '🚫' if my_vehicle.mot_status == 'expired' else '⚠️' }}</span>
+    <span>
+      {% if my_vehicle.mot_status == 'expired' %}
+        Your van <strong>{{ my_vehicle.van_reg }}</strong>'s MOT has expired{% if my_vehicle.mot_expiry %} ({{ my_vehicle.mot_expiry.strftime('%d %b %Y') }}){% endif %}. Please contact the office before driving.
+      {% else %}
+        Your van <strong>{{ my_vehicle.van_reg }}</strong>'s MOT is due soon{% if my_vehicle.mot_expiry %} — {{ my_vehicle.mot_expiry.strftime('%d %b %Y') }}{% endif %}.
+      {% endif %}
+    </span>
+  </div>
+  {% endif %}
+
   <!-- 5 tiles -->
   <div class="tile-row">
 
