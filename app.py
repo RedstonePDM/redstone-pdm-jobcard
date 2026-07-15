@@ -3123,21 +3123,27 @@ def admin_survey_pdf(survey_id):
         elems.append(Paragraph("Description of Works", h2))
         elems.append(Spacer(1,2*mm))
         elems.append(Paragraph((s["scope_of_works"] or '').replace('\n','<br/>'), body))
+        elems.append(Spacer(1,3*mm))
+
+    # Measurements
+    if s.get("measurements"):
+        elems.append(Paragraph("Measurements & Dimensions", h2))
+        elems.append(Spacer(1,2*mm))
+        elems.append(Paragraph((s["measurements"] or '').replace('\n','<br/>'), body))
         elems.append(Spacer(1,5*mm))
 
-    # Line items
+    # Line items — apply_markup controls whether section gets 20% added to total
     sections = [
-        ("Labour", s['quote_labour_json'] or [], False),
-        ("Subcontractor", s['quote_subcontractor_json'] or [], True),
-        ("Materials", s['quote_materials_json'] or [], True),
-        ("Plant & Equipment", s['quote_plant_json'] or [], False),
-        ("Prelim / Mobilisation", s['quote_prelim_json'] or [], False),
+        ("Labour",                  s['quote_labour_json']        or [], False),
+        ("External Labour Costs",   s['quote_subcontractor_json'] or [], True),
+        ("Materials",               s['quote_materials_json']     or [], True),
+        ("Plant & Equipment",       s['quote_plant_json']         or [], True),
+        ("Prelim / Mobilisation",   s['quote_prelim_json']        or [], False),
     ]
 
-    labour_total = materials_total = plant_total = prelim_total = 0
+    labour_total = ext_labour_total = materials_total = plant_total = prelim_total = 0
     line_rows = [["Description", "Qty", "Unit Cost", "Total"]]
 
-    subcon_total = 0
     for section_name, lines, apply_markup in sections:
         if not lines:
             continue
@@ -3148,8 +3154,8 @@ def admin_survey_pdf(survey_id):
             tot = qty * uc
             if section_name == "Labour":
                 labour_total += tot
-            elif section_name == "Subcontractor":
-                subcon_total += tot
+            elif section_name == "External Labour Costs":
+                ext_labour_total += tot
             elif section_name == "Materials":
                 materials_total += tot
             elif section_name == "Plant & Equipment":
@@ -3163,31 +3169,42 @@ def admin_survey_pdf(survey_id):
                 f"£{tot:.2f}",
             ])
 
-    subcon_markup = subcon_total * MARKUP
-    materials_markup = materials_total * MARKUP
-    total = labour_total + subcon_total + subcon_markup + materials_total + materials_markup + plant_total + prelim_total
+    ext_labour_markup = ext_labour_total * MARKUP
+    materials_markup  = materials_total  * MARKUP
+    plant_markup      = plant_total      * MARKUP
+    total = (labour_total +
+             ext_labour_total + ext_labour_markup +
+             materials_total  + materials_markup  +
+             plant_total      + plant_markup      +
+             prelim_total)
 
+    # Build summary rows separately so we can style them cleanly
+    summary_rows = []
     if labour_total:
-        line_rows.append(["", "", Paragraph("<b>Labour</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{labour_total:.2f}"])
-    if subcon_total:
-        line_rows.append(["", "", Paragraph("<b>Subcontractor</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{(subcon_total + subcon_markup):.2f}"])
+        summary_rows.append(["", "", Paragraph("Labour", sty('st', fontSize=9, textColor=DARK)), f"£{labour_total:.2f}"])
+    if ext_labour_total:
+        summary_rows.append(["", "", Paragraph("External Labour Costs", sty('st', fontSize=9, textColor=DARK)), f"£{(ext_labour_total + ext_labour_markup):.2f}"])
     if materials_total:
-        line_rows.append(["", "", Paragraph("<b>Materials</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{(materials_total + materials_markup):.2f}"])
+        summary_rows.append(["", "", Paragraph("Materials (inc. markup)", sty('st', fontSize=9, textColor=DARK)), f"£{(materials_total + materials_markup):.2f}"])
     if plant_total:
-        line_rows.append(["", "", Paragraph("<b>Plant & Equipment</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{plant_total:.2f}"])
+        summary_rows.append(["", "", Paragraph("Plant & Equipment (inc. markup)", sty('st', fontSize=9, textColor=DARK)), f"£{(plant_total + plant_markup):.2f}"])
     if prelim_total:
-        line_rows.append(["", "", Paragraph("<b>Prelim / Mobilisation</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{prelim_total:.2f}"])
-    line_rows.append(["", "", Paragraph("<b>TOTAL (ex VAT)</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
+        summary_rows.append(["", "", Paragraph("Prelim / Mobilisation", sty('st', fontSize=9, textColor=DARK)), f"£{prelim_total:.2f}"])
+    summary_rows.append(["", "", Paragraph("<b>TOTAL (ex VAT)</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
 
-    tbl = Table(line_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
+    all_rows = line_rows + summary_rows
+    n_line = len(line_rows)
+    n_all  = len(all_rows)
+
+    tbl = Table(all_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
     tbl.setStyle(TableStyle([
         ('BACKGROUND', (0,0),(-1,0), DARK),
         ('TEXTCOLOR', (0,0),(-1,0), colors.white),
         ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0),(-1,0), 9),
-        ('ROWBACKGROUNDS', (0,1),(-1,-4), [colors.white, LGREY]),
-        ('LINEABOVE', (0,-3),(-1,-3), 1, GREY),
-        ('LINEABOVE', (0,-1),(-1,-1), 2, DARK),
+        ('ROWBACKGROUNDS', (0,1),(- 1, n_line-1), [colors.white, LGREY]),
+        ('LINEABOVE', (0, n_line),(-1, n_line), 1.5, GREY),
+        ('LINEABOVE', (0, n_all-1),(-1, n_all-1), 2, DARK),
         ('ALIGN', (1,0),(-1,-1), 'RIGHT'),
         ('VALIGN', (0,0),(-1,-1), 'MIDDLE'),
         ('TOPPADDING', (0,0),(-1,-1), 5),
