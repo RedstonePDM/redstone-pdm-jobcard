@@ -3079,7 +3079,7 @@ def admin_survey_pdf(survey_id):
     h1   = sty('h1', fontSize=20, fontName='Helvetica-Bold', textColor=DARK)
     h2   = sty('h2', fontSize=11, fontName='Helvetica-Bold', textColor=DARK)
     sub  = sty('sub', fontSize=9, textColor=GREY)
-    body = sty('body', fontSize=9, textColor=DARK, leading=14)
+    body = sty('body', fontSize=8, textColor=DARK, leading=11)
     red_label = sty('rl', fontSize=8, fontName='Helvetica-Bold', textColor=RED, spaceAfter=2)
     right_bold = sty('rb', fontSize=11, fontName='Helvetica-Bold', textColor=DARK, alignment=TA_RIGHT)
 
@@ -3097,7 +3097,7 @@ def admin_survey_pdf(survey_id):
         ('BOTTOMPADDING', (0,0), (-1,0), 8),
     ]))
     elems.append(header_tbl)
-    elems.append(Spacer(1, 8*mm))
+    elems.append(Spacer(1, 4*mm))
 
     # Site info
     info_data = [
@@ -3116,42 +3116,57 @@ def admin_survey_pdf(survey_id):
         ('LEFTPADDING', (0,0),(-1,-1), 6),
     ]))
     elems.append(info_tbl)
-    elems.append(Spacer(1, 6*mm))
+    elems.append(Spacer(1, 3*mm))
 
     # Scope
     if s.get("scope_of_works"):
-        elems.append(Paragraph("Description of Works", h2))
+        elems.append(Paragraph("Description of Works", sty('h2s', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)))
+        elems.append(Spacer(1,1*mm))
+        elems.append(Paragraph((s["scope_of_works"] or '').replace('\n','<br/>'), sty('bods', fontSize=8, textColor=DARK, leading=11)))
         elems.append(Spacer(1,2*mm))
-        elems.append(Paragraph((s["scope_of_works"] or '').replace('\n','<br/>'), body))
-        elems.append(Spacer(1,3*mm))
 
     # Measurements
     if s.get("measurements"):
-        elems.append(Paragraph("Measurements & Dimensions", h2))
-        elems.append(Spacer(1,2*mm))
-        elems.append(Paragraph((s["measurements"] or '').replace('\n','<br/>'), body))
-        elems.append(Spacer(1,5*mm))
+        elems.append(Paragraph("Measurements & Dimensions", sty('h2s', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)))
+        elems.append(Spacer(1,1*mm))
+        elems.append(Paragraph((s["measurements"] or '').replace('\n','<br/>'), sty('bods', fontSize=8, textColor=DARK, leading=11)))
+        elems.append(Spacer(1,3*mm))
 
-    # Line items — apply_markup controls whether section gets 20% added to total
+    # Line items
+    # apply_markup=True: line unit costs are shown at cost price; totals shown inclusive of markup
+    # This keeps margin invisible to the customer — they only see the marked-up total
     sections = [
-        ("Labour",                  s['quote_labour_json']        or [], False),
-        ("External Labour Costs",   s['quote_subcontractor_json'] or [], True),
-        ("Materials",               s['quote_materials_json']     or [], True),
-        ("Plant & Equipment",       s['quote_plant_json']         or [], True),
-        ("Prelim / Mobilisation",   s['quote_prelim_json']        or [], False),
+        ("Labour",                s['quote_labour_json']        or [], False),
+        ("External Labour Costs", s['quote_subcontractor_json'] or [], True),
+        ("Materials",             s['quote_materials_json']     or [], True),
+        ("Plant & Equipment",     s['quote_plant_json']         or [], True),
+        ("Prelim / Mobilisation", s['quote_prelim_json']        or [], False),
     ]
 
     labour_total = ext_labour_total = materials_total = plant_total = prelim_total = 0
-    line_rows = [["Description", "Qty", "Unit Cost", "Total"]]
+    xs = sty('xs', fontSize=8, textColor=DARK, leading=10)
+    xs_sec = sty('xss', fontSize=8, fontName='Helvetica-Bold', textColor=RED, leading=10)
+    xs_sum = sty('xssum', fontSize=8, textColor=DARK, leading=10)
+    xs_tot = sty('xstot', fontSize=9, fontName='Helvetica-Bold', textColor=DARK, leading=11)
+
+    line_rows = [[
+        Paragraph("Description", sty('hd', fontSize=8, fontName='Helvetica-Bold', textColor=colors.white)),
+        Paragraph("Qty",         sty('hd2', fontSize=8, fontName='Helvetica-Bold', textColor=colors.white)),
+        Paragraph("Unit Cost",   sty('hd3', fontSize=8, fontName='Helvetica-Bold', textColor=colors.white)),
+        Paragraph("Total",       sty('hd4', fontSize=8, fontName='Helvetica-Bold', textColor=colors.white)),
+    ]]
 
     for section_name, lines, apply_markup in sections:
         if not lines:
             continue
-        line_rows.append([Paragraph(f"<b>{section_name}</b>", sty('sh', fontSize=9, fontName='Helvetica-Bold', textColor=RED)), "", "", ""])
+        line_rows.append([Paragraph(f"<b>{section_name}</b>", xs_sec), "", "", ""])
         for line in lines:
             qty = float(line.get("qty", 0) or 0)
             uc  = float(line.get("unit_cost", 0) or 0)
             tot = qty * uc
+            # Show marked-up unit cost to customer so individual line totals match
+            display_uc = uc * (1 + MARKUP) if apply_markup else uc
+            display_tot = tot * (1 + MARKUP) if apply_markup else tot
             if section_name == "Labour":
                 labour_total += tot
             elif section_name == "External Labour Costs":
@@ -3163,10 +3178,10 @@ def admin_survey_pdf(survey_id):
             else:
                 prelim_total += tot
             line_rows.append([
-                Paragraph(line.get("description", ""), body),
-                f"{qty:g}",
-                f"£{uc:.2f}",
-                f"£{tot:.2f}",
+                Paragraph(line.get("description", ""), xs),
+                Paragraph(f"{qty:g}", xs),
+                Paragraph(f"£{display_uc:.2f}", xs),
+                Paragraph(f"£{display_tot:.2f}", xs),
             ])
 
     ext_labour_markup = ext_labour_total * MARKUP
@@ -3178,42 +3193,42 @@ def admin_survey_pdf(survey_id):
              plant_total      + plant_markup      +
              prelim_total)
 
-    # Build summary rows separately so we can style them cleanly
+    # Clean single subtotal rows — no markup language
     summary_rows = []
     if labour_total:
-        summary_rows.append(["", "", Paragraph("Labour", sty('st', fontSize=9, textColor=DARK)), f"£{labour_total:.2f}"])
+        summary_rows.append(["", "", Paragraph("Labour", xs_sum), Paragraph(f"£{labour_total:.2f}", xs_sum)])
     if ext_labour_total:
-        summary_rows.append(["", "", Paragraph("External Labour Costs", sty('st', fontSize=9, textColor=DARK)), f"£{(ext_labour_total + ext_labour_markup):.2f}"])
+        summary_rows.append(["", "", Paragraph("External Labour Costs", xs_sum), Paragraph(f"£{(ext_labour_total + ext_labour_markup):.2f}", xs_sum)])
     if materials_total:
-        summary_rows.append(["", "", Paragraph("Materials (inc. markup)", sty('st', fontSize=9, textColor=DARK)), f"£{(materials_total + materials_markup):.2f}"])
+        summary_rows.append(["", "", Paragraph("Materials", xs_sum), Paragraph(f"£{(materials_total + materials_markup):.2f}", xs_sum)])
     if plant_total:
-        summary_rows.append(["", "", Paragraph("Plant & Equipment (inc. markup)", sty('st', fontSize=9, textColor=DARK)), f"£{(plant_total + plant_markup):.2f}"])
+        summary_rows.append(["", "", Paragraph("Plant & Equipment", xs_sum), Paragraph(f"£{(plant_total + plant_markup):.2f}", xs_sum)])
     if prelim_total:
-        summary_rows.append(["", "", Paragraph("Prelim / Mobilisation", sty('st', fontSize=9, textColor=DARK)), f"£{prelim_total:.2f}"])
-    summary_rows.append(["", "", Paragraph("<b>TOTAL (ex VAT)</b>", sty('tot', fontSize=10, fontName='Helvetica-Bold', textColor=DARK)), Paragraph(f"<b>£{total:.2f}</b>", sty('totv', fontSize=10, fontName='Helvetica-Bold', textColor=DARK))])
+        summary_rows.append(["", "", Paragraph("Prelim / Mobilisation", xs_sum), Paragraph(f"£{prelim_total:.2f}", xs_sum)])
+    summary_rows.append(["", "",
+        Paragraph("<b>TOTAL (ex VAT)</b>", xs_tot),
+        Paragraph(f"<b>£{total:.2f}</b>", xs_tot)])
 
     all_rows = line_rows + summary_rows
     n_line = len(line_rows)
     n_all  = len(all_rows)
 
-    tbl = Table(all_rows, colWidths=[95*mm, 20*mm, 30*mm, 25*mm])
+    tbl = Table(all_rows, colWidths=[97*mm, 18*mm, 32*mm, 23*mm])
     tbl.setStyle(TableStyle([
-        ('BACKGROUND', (0,0),(-1,0), DARK),
-        ('TEXTCOLOR', (0,0),(-1,0), colors.white),
-        ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0),(-1,0), 9),
-        ('ROWBACKGROUNDS', (0,1),(- 1, n_line-1), [colors.white, LGREY]),
-        ('LINEABOVE', (0, n_line),(-1, n_line), 1.5, GREY),
-        ('LINEABOVE', (0, n_all-1),(-1, n_all-1), 2, DARK),
-        ('ALIGN', (1,0),(-1,-1), 'RIGHT'),
-        ('VALIGN', (0,0),(-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0),(-1,-1), 5),
-        ('BOTTOMPADDING', (0,0),(-1,-1), 5),
-        ('LEFTPADDING', (0,0),(-1,-1), 6),
-        ('RIGHTPADDING', (0,0),(-1,-1), 6),
+        ('BACKGROUND',   (0,0),(-1,0), DARK),
+        ('ROWBACKGROUNDS',(0,1),(-1, n_line-1), [colors.white, LGREY]),
+        ('BACKGROUND',   (0, n_line),(-1,-1), colors.white),
+        ('LINEABOVE',    (0, n_line),(-1, n_line), 1, GREY),
+        ('LINEABOVE',    (0, n_all-1),(-1, n_all-1), 1.5, DARK),
+        ('ALIGN',        (1,0),(-1,-1), 'RIGHT'),
+        ('VALIGN',       (0,0),(-1,-1), 'MIDDLE'),
+        ('TOPPADDING',   (0,0),(-1,-1), 3),
+        ('BOTTOMPADDING',(0,0),(-1,-1), 3),
+        ('LEFTPADDING',  (0,0),(-1,-1), 5),
+        ('RIGHTPADDING', (0,0),(-1,-1), 5),
     ]))
     elems.append(tbl)
-    elems.append(Spacer(1, 6*mm))
+    elems.append(Spacer(1, 4*mm))
 
     # Footer note
 
@@ -3221,7 +3236,7 @@ def admin_survey_pdf(survey_id):
     # Inc VAT total
     vat_amount = total * VAT_RATE
     total_inc_vat = total + vat_amount
-    elems.append(Spacer(1, 3*mm))
+    elems.append(Spacer(1, 2*mm))
     vat_data = [
         ["", Paragraph("Total (ex VAT)", sty('vl', fontSize=10, textColor=GREY, alignment=TA_RIGHT)), Paragraph(f"£{total:.2f}", sty('vv', fontSize=10, textColor=DARK, alignment=TA_RIGHT))],
         ["", Paragraph(f"VAT (20%)", sty('vl', fontSize=10, textColor=GREY, alignment=TA_RIGHT)), Paragraph(f"£{vat_amount:.2f}", sty('vv', fontSize=10, textColor=DARK, alignment=TA_RIGHT))],
