@@ -3033,7 +3033,8 @@ def admin_survey_pdf(survey_id):
     cur = conn.cursor()
     cur.execute("""
         SELECT sf.*,
-               COALESCE(j.display_id, sf.job_id) as display_id
+               COALESCE(j.display_id, sf.job_id) as display_id,
+               COALESCE(sf.quote_subcontractor_json, '[]'::jsonb) as quote_subcontractor_json
         FROM survey_forms sf
         LEFT JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
         WHERE sf.id = %s
