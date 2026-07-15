@@ -50,6 +50,26 @@
   }
   .edit-banner strong { font-size: 14px; }
 
+  /* Congestion / ULEZ charge banner */
+  .congestion-banner {
+    display: none; background: #eff4ff; border-bottom: 2px solid #1a4fa0;
+    padding: 14px 20px; font-size: 13px; color: #1a2332;
+  }
+  .congestion-banner.show { display: block; }
+  .congestion-banner-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .congestion-banner strong { display: block; margin-bottom: 4px; font-size: 14px; }
+  .congestion-cost-input {
+    width: 80px; padding: 6px 8px; border: 1.5px solid #1a4fa0; border-radius: 6px;
+    font-size: 13px; font-weight: 700; text-align: center;
+  }
+  .congestion-btn {
+    padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    border: none; cursor: pointer;
+  }
+  .congestion-btn.confirm { background: #1a4fa0; color: white; }
+  .congestion-btn.dismiss { background: #f0f2f5; color: #555; }
+  .congestion-banner.logged { background: #effdf4; border-color: #1a7a4a; color: #1a7a4a; }
+
   .content { padding: 16px; }
   .section {
     background: white;
@@ -355,6 +375,20 @@
   {% endif %}
   <h2>{{ job.pub_name }}</h2>
   <p>{{ job.job_id }} &nbsp;·&nbsp; {{ job.postcode }}</p>
+</div>
+
+<div class="congestion-banner" id="congestion-banner">
+  <div class="congestion-banner-row">
+    <span style="font-size:20px">🚦</span>
+    <div style="flex:1;min-width:180px">
+      <strong id="congestion-title">Congestion / ULEZ charge today?</strong>
+      <span id="congestion-desc">This address may be inside a charging zone.</span>
+    </div>
+    <span>£</span>
+    <input type="number" step="0.01" class="congestion-cost-input" id="congestion-cost-input">
+    <button type="button" class="congestion-btn confirm" onclick="logCongestionCharge()">Yes, log it</button>
+    <button type="button" class="congestion-btn dismiss" onclick="dismissCongestionBanner()">No charge</button>
+  </div>
 </div>
 
 <div class="content">
@@ -683,12 +717,56 @@ document.getElementById('confirm-overlay').addEventListener('click', function(e)
 
 // ── Journey Logger ─────────────────────────────────────────
 const JOB_POSTCODE = "{{ job.postcode }}";
+const JOB_ID = "{{ job.job_id }}";
 const HOME_ADDRESS = "{{ contractor.address }}";
 const MILEAGE_RATE = {{ contractor.mileage_rate }};
 let legs = [];
 let legCount = 0;
 let journeyClosed = false;
 let startPoint = HOME_ADDRESS;
+
+// ── Congestion / ULEZ Charge Prompt ──────────────────────────
+// Only ever shown to engineers driving a Redstone-owned van, and only once
+// per day — checked server-side. Purely a prompt-and-confirm, never silent.
+(async function checkCongestionZone() {
+  try {
+    const res = await fetch(`/api/congestion_check?postcode=${encodeURIComponent(JOB_POSTCODE)}`);
+    const data = await res.json();
+    if (!data.prompt) return;
+    const banner = document.getElementById('congestion-banner');
+    const desc = document.getElementById('congestion-desc');
+    const zones = [];
+    if (data.ulez) zones.push('ULEZ (£12.50)');
+    if (data.congestion) zones.push('Congestion Charge (£15.00)');
+    desc.textContent = `This postcode is inside the ${zones.join(' + ')} zone.`;
+    document.getElementById('congestion-cost-input').value = data.cost.toFixed(2);
+    banner.classList.add('show');
+  } catch (err) { /* fail silently — never block the job card over this */ }
+})();
+
+async function logCongestionCharge() {
+  const cost = parseFloat(document.getElementById('congestion-cost-input').value) || 0;
+  const banner = document.getElementById('congestion-banner');
+  try {
+    const res = await fetch('/api/congestion_log', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postcode: JOB_POSTCODE, job_id: JOB_ID, cost: cost })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      banner.classList.add('logged');
+      banner.innerHTML = '<div class="congestion-banner-row"><span style="font-size:18px">✓</span><span>Charge logged for today (£' + cost.toFixed(2) + ').</span></div>';
+    } else {
+      dismissCongestionBanner();
+    }
+  } catch (err) {
+    dismissCongestionBanner();
+  }
+}
+
+function dismissCongestionBanner() {
+  document.getElementById('congestion-banner').classList.remove('show');
+}
 
 async function loadStartPoint() {
   try {
