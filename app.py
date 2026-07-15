@@ -324,6 +324,39 @@ def init_db():
       "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_annual NUMERIC(8,2) DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mot_cost NUMERIC(6,2) DEFAULT 0",
+        """CREATE TABLE IF NOT EXISTS vehicle_servicing (
+            id SERIAL PRIMARY KEY,
+            vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE CASCADE,
+            service_date DATE NOT NULL,
+            mileage INTEGER,
+            cost NUMERIC(8,2) NOT NULL DEFAULT 0,
+            description TEXT,
+            invoice_photo_path TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS fuel_receipts (
+            id SERIAL PRIMARY KEY,
+            contractor_key TEXT NOT NULL,
+            van_reg TEXT,
+            receipt_date DATE NOT NULL,
+            litres NUMERIC(7,2),
+            cost NUMERIC(8,2) NOT NULL,
+            odometer INTEGER,
+            photo_path TEXT,
+            status TEXT DEFAULT 'pending',
+            admin_note TEXT,
+            submitted_at TIMESTAMPTZ DEFAULT NOW(),
+            reviewed_at TIMESTAMPTZ,
+            reviewed_by TEXT
+        )""",
+        """CREATE TABLE IF NOT EXISTS fleet_settings (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            estimated_annual_jobs INTEGER DEFAULT 1200,
+            default_fuel_rate_per_mile NUMERIC(5,3) DEFAULT 0.15,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
         "CREATE TABLE IF NOT EXISTS survey_forms (id SERIAL PRIMARY KEY, job_id TEXT NOT NULL, contractor TEXT, contractor_key TEXT, visit_date DATE, time_arrived TEXT, time_departed TEXT, manager_on_duty TEXT, scope_of_works TEXT, measurements TEXT, condition_notes TEXT, recommended_approach TEXT, access_notes TEXT, parking_notes TEXT, materials_spec_json JSONB DEFAULT '[]', photo_paths JSONB DEFAULT '[]', survey_mileage NUMERIC(6,2) DEFAULT 0, status TEXT DEFAULT 'surveyed', query_note TEXT, quote_labour_json JSONB DEFAULT '[]', quote_subcontractor_json JSONB DEFAULT '[]', quote_materials_json JSONB DEFAULT '[]', quote_plant_json JSONB DEFAULT '[]', quote_prelim_json JSONB DEFAULT '[]', quote_subtotal NUMERIC(10,2) DEFAULT 0, quote_total NUMERIC(10,2) DEFAULT 0, outcome TEXT, outcome_reason TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), pub_name TEXT, postcode TEXT, trade_type TEXT)",
         "ALTER TABLE survey_forms ADD COLUMN IF NOT EXISTS quote_subcontractor_json JSONB DEFAULT '[]'",
         "CREATE TABLE IF NOT EXISTS quote_outcomes (id SERIAL PRIMARY KEY, job_id TEXT, display_id TEXT UNIQUE, survey_form_id INTEGER REFERENCES survey_forms(id) ON DELETE SET NULL, outcome TEXT, wisdom_status TEXT, wisdom_reason TEXT, reason_heading TEXT, reason_date TEXT, pub_name TEXT, trade_type TEXT, t0_released TIMESTAMPTZ, t1_surveyed TIMESTAMPTZ, t2_quote_uploaded TIMESTAMPTZ, t3_decision TIMESTAMPTZ, t4_completed TIMESTAMPTZ, detected_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())",
@@ -335,6 +368,12 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+
+    try:
+        cur.execute("INSERT INTO fleet_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
     conn.commit()
     cur.close()
@@ -438,6 +477,22 @@ def lookup_mot(reg):
             return {"status": "error", "expiry": None, "error": f"DVLA returned {r.status_code}"}
     except Exception as e:
         return {"status": "error", "expiry": None, "error": str(e)}
+
+
+# ── Financial Year Helper (April–March) ──────────────────────────────────────
+
+def fy_bounds(for_date=None):
+    """Return (fy_start, fy_end, fy_label) for the FY April-March containing for_date."""
+    d = for_date or date.today()
+    if d.month >= 4:
+        start = date(d.year, 4, 1)
+        end = date(d.year + 1, 3, 31)
+        label = f"FY{d.year}/{str(d.year+1)[2:]}"
+    else:
+        start = date(d.year - 1, 4, 1)
+        end = date(d.year, 3, 31)
+        label = f"FY{d.year-1}/{str(d.year)[2:]}"
+    return start, end, label
 
 
 # ── Mileage Calculation ───────────────────────────────────────────────────────
@@ -1389,6 +1444,53 @@ def profile():
     return render_template("profile.html", contractor=contractor, changes=changes, vehicle=vehicle)
 
 
+@app.route("/fuel_receipts")
+@login_required
+def fuel_receipts():
+    key = session["contractor_key"]
+    contractor = CONTRACTORS.get(key) or get_contractor(key)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT van_reg FROM vehicles WHERE contractor_key=%s", (key,))
+    v = cur.fetchone()
+    van_reg = v["van_reg"] if v else contractor.get("van_reg")
+    cur.execute("SELECT * FROM fuel_receipts WHERE contractor_key=%s ORDER BY submitted_at DESC LIMIT 30", (key,))
+    receipts = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("fuel_receipts.html", contractor=contractor, van_reg=van_reg, receipts=receipts)
+
+
+@app.route("/fuel_receipts/submit", methods=["POST"])
+@login_required
+def submit_fuel_receipt():
+    key = session["contractor_key"]
+    photo_path = None
+    f = request.files.get("receipt_photo")
+    if f and f.filename:
+        fname = secure_filename(f"{key}_fuel_{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.filename}")
+        f.save(os.path.join(UPLOAD_FOLDER, fname))
+        photo_path = fname
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO fuel_receipts (contractor_key, van_reg, receipt_date, litres, cost, odometer, photo_path)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (key, request.form.get("van_reg"), request.form.get("receipt_date") or date.today(),
+          request.form.get("litres") or None, request.form.get("cost") or 0,
+          request.form.get("odometer") or None, photo_path))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/uploads/<path:filename>")
+@login_required
+def serve_upload(filename):
+    return send_file(os.path.join(UPLOAD_FOLDER, secure_filename(filename)))
+
+
 @app.route("/profile/request_change", methods=["POST"])
 @login_required
 def request_profile_change():
@@ -2022,6 +2124,7 @@ def admin_surveys():
 @app.route("/admin/vehicles")
 @admin_required
 def admin_vehicles():
+    fy_start, fy_end, fy_label = fy_bounds()
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
@@ -2031,9 +2134,90 @@ def admin_vehicles():
         ORDER BY v.redstone_vehicle DESC, c.name
     """)
     vehicles = cur.fetchall()
+
+    # Servicing totals per vehicle (all-time, for money-pit view) + this FY
+    cur.execute("""
+        SELECT vehicle_id,
+               COALESCE(SUM(cost),0) as total_cost,
+               COUNT(*) as service_count,
+               COALESCE(SUM(cost) FILTER (WHERE service_date BETWEEN %s AND %s),0) as fy_cost
+        FROM vehicle_servicing GROUP BY vehicle_id
+    """, (fy_start, fy_end))
+    servicing_by_vehicle = {r["vehicle_id"]: r for r in cur.fetchall()}
+
+    cur.execute("""
+        SELECT id, vehicle_id, service_date, mileage, cost, description, invoice_photo_path
+        FROM vehicle_servicing ORDER BY service_date DESC
+    """)
+    all_servicing = cur.fetchall()
+    servicing_log_by_vehicle = defaultdict(list)
+    for s in all_servicing:
+        servicing_log_by_vehicle[s["vehicle_id"]].append(s)
+
+    # Fleet settings
+    cur.execute("SELECT * FROM fleet_settings WHERE id=1")
+    settings = cur.fetchone() or {"estimated_annual_jobs": 1200, "default_fuel_rate_per_mile": 0.15}
+
+    # Fixed overhead this FY: insurance + mot cost (annualised, redstone vans only) + servicing this FY
+    redstone_vans = [v for v in vehicles if v["redstone_vehicle"]]
+    total_insurance = sum(float(v["insurance_annual"] or 0) for v in redstone_vans)
+    total_mot = sum(float(v["mot_cost"] or 0) for v in redstone_vans)
+    total_servicing_fy = sum(float(servicing_by_vehicle.get(v["id"], {}).get("fy_cost", 0) or 0) for v in redstone_vans)
+    fixed_overhead_annual = total_insurance + total_mot + total_servicing_fy
+    est_jobs = int(settings["estimated_annual_jobs"] or 1200)
+    fixed_absorption_per_job = round(fixed_overhead_annual / est_jobs, 2) if est_jobs else 0
+
+    # Actual fuel rate per mile from approved receipts this FY vs company van job mileage this FY
+    cur.execute("""
+        SELECT COALESCE(SUM(cost),0) as total_fuel_cost, COALESCE(SUM(litres),0) as total_litres
+        FROM fuel_receipts WHERE status='approved' AND receipt_date BETWEEN %s AND %s
+    """, (fy_start, fy_end))
+    fuel_row = cur.fetchone()
+    total_fuel_cost = float(fuel_row["total_fuel_cost"] or 0)
+
+    redstone_keys = [v["contractor_key"] for v in redstone_vans if v["contractor_key"]]
+    company_van_miles = 0
+    if redstone_keys:
+        cur.execute("""
+            SELECT COALESCE(SUM(mileage_miles),0) as miles FROM job_cards
+            WHERE contractor_key = ANY(%s) AND card_date BETWEEN %s AND %s
+        """, (redstone_keys, fy_start, fy_end))
+        company_van_miles = float(cur.fetchone()["miles"] or 0)
+
+    actual_fuel_rate = round(total_fuel_cost / company_van_miles, 3) if company_van_miles else None
+    fuel_rate_used = actual_fuel_rate if actual_fuel_rate else float(settings["default_fuel_rate_per_mile"] or 0.15)
+
+    # Pending fuel receipts queue
+    cur.execute("""
+        SELECT fr.*, c.name as contractor_name FROM fuel_receipts fr
+        LEFT JOIN contractors_db c ON c.contractor_key = fr.contractor_key
+        WHERE fr.status='pending' ORDER BY fr.submitted_at ASC
+    """)
+    pending_receipts = cur.fetchall()
+
+    cur.execute("""
+        SELECT fr.*, c.name as contractor_name FROM fuel_receipts fr
+        LEFT JOIN contractors_db c ON c.contractor_key = fr.contractor_key
+        WHERE fr.status != 'pending' ORDER BY fr.reviewed_at DESC LIMIT 30
+    """)
+    recent_receipts = cur.fetchall()
+
+    # Money pit: average servicing cost across redstone fleet vs each van
+    fleet_avg_servicing = 0
+    if redstone_vans:
+        fleet_avg_servicing = sum(float(servicing_by_vehicle.get(v["id"], {}).get("total_cost", 0) or 0) for v in redstone_vans) / len(redstone_vans)
+
     cur.close()
     conn.close()
-    return render_template("admin_vehicles.html", vehicles=vehicles)
+    return render_template("admin_vehicles.html", vehicles=vehicles,
+        servicing_by_vehicle=servicing_by_vehicle, servicing_log_by_vehicle=servicing_log_by_vehicle,
+        settings=settings, fixed_overhead_annual=fixed_overhead_annual,
+        fixed_absorption_per_job=fixed_absorption_per_job, est_jobs=est_jobs,
+        total_insurance=total_insurance, total_mot=total_mot, total_servicing_fy=total_servicing_fy,
+        actual_fuel_rate=actual_fuel_rate, fuel_rate_used=fuel_rate_used,
+        total_fuel_cost=total_fuel_cost, company_van_miles=company_van_miles,
+        pending_receipts=pending_receipts, recent_receipts=recent_receipts,
+        fleet_avg_servicing=fleet_avg_servicing, fy_label=fy_label)
 
 
 @app.route("/admin/vehicles/<int:vid>/refresh_mot", methods=["POST"])
@@ -2083,12 +2267,89 @@ def update_vehicle(vid):
     cur = conn.cursor()
     cur.execute("""
         UPDATE vehicles SET make_model=%s, year=%s, last_service_mileage=%s,
-            service_interval_miles=%s, notes=%s, updated_at=NOW()
+            service_interval_miles=%s, notes=%s, insurance_annual=%s, mot_cost=%s, updated_at=NOW()
         WHERE id=%s
     """, (data.get("make_model"), data.get("year") or None,
           data.get("last_service_mileage") or 0,
           data.get("service_interval_miles") or 12000,
-          data.get("notes"), vid))
+          data.get("notes"),
+          data.get("insurance_annual") or 0,
+          data.get("mot_cost") or 0,
+          vid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/vehicles/<int:vid>/servicing/add", methods=["POST"])
+@admin_required
+def add_vehicle_servicing(vid):
+    invoice_path = None
+    f = request.files.get("invoice_photo")
+    if f and f.filename:
+        fname = secure_filename(f"vehicle{vid}_service_{datetime.now().strftime('%Y%m%d%H%M%S')}_{f.filename}")
+        f.save(os.path.join(UPLOAD_FOLDER, fname))
+        invoice_path = fname
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO vehicle_servicing (vehicle_id, service_date, mileage, cost, description, invoice_photo_path)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (vid, request.form.get("service_date") or date.today(),
+          request.form.get("mileage") or None,
+          request.form.get("cost") or 0,
+          request.form.get("description"), invoice_path))
+    # If mileage given and higher than current, treat as a service point
+    if request.form.get("mileage"):
+        cur.execute("UPDATE vehicles SET last_service_mileage=%s, updated_at=NOW() WHERE id=%s",
+                    (request.form.get("mileage"), vid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/vehicles/servicing/<int:sid>/delete", methods=["POST"])
+@admin_required
+def delete_vehicle_servicing(sid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM vehicle_servicing WHERE id=%s", (sid,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/fleet_settings/save", methods=["POST"])
+@admin_required
+def save_fleet_settings():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE fleet_settings SET estimated_annual_jobs=%s, default_fuel_rate_per_mile=%s, updated_at=NOW()
+        WHERE id=1
+    """, (request.form.get("estimated_annual_jobs") or 1200,
+          request.form.get("default_fuel_rate_per_mile") or 0.15))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/fuel_receipts/<int:rid>/<action>", methods=["POST"])
+@admin_required
+def review_fuel_receipt(rid, action):
+    if action not in ("approve", "reject"):
+        return jsonify({"ok": False, "error": "Invalid action"}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE fuel_receipts SET status=%s, admin_note=%s, reviewed_at=NOW(), reviewed_by=%s
+        WHERE id=%s
+    """, ("approved" if action == "approve" else "rejected",
+          request.form.get("admin_note"), session.get("contractor_key", "admin"), rid))
     conn.commit()
     cur.close()
     conn.close()
