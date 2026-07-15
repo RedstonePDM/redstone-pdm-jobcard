@@ -326,6 +326,9 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
         "CREATE TABLE IF NOT EXISTS survey_forms (id SERIAL PRIMARY KEY, job_id TEXT NOT NULL, contractor TEXT, contractor_key TEXT, visit_date DATE, time_arrived TEXT, time_departed TEXT, manager_on_duty TEXT, scope_of_works TEXT, measurements TEXT, condition_notes TEXT, recommended_approach TEXT, access_notes TEXT, parking_notes TEXT, materials_spec_json JSONB DEFAULT '[]', photo_paths JSONB DEFAULT '[]', survey_mileage NUMERIC(6,2) DEFAULT 0, status TEXT DEFAULT 'surveyed', query_note TEXT, quote_labour_json JSONB DEFAULT '[]', quote_subcontractor_json JSONB DEFAULT '[]', quote_materials_json JSONB DEFAULT '[]', quote_plant_json JSONB DEFAULT '[]', quote_prelim_json JSONB DEFAULT '[]', quote_subtotal NUMERIC(10,2) DEFAULT 0, quote_total NUMERIC(10,2) DEFAULT 0, outcome TEXT, outcome_reason TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), pub_name TEXT, postcode TEXT, trade_type TEXT)",
         "ALTER TABLE survey_forms ADD COLUMN IF NOT EXISTS quote_subcontractor_json JSONB DEFAULT '[]'",
+        "CREATE TABLE IF NOT EXISTS quote_outcomes (id SERIAL PRIMARY KEY, job_id TEXT, display_id TEXT UNIQUE, survey_form_id INTEGER REFERENCES survey_forms(id) ON DELETE SET NULL, outcome TEXT, wisdom_status TEXT, wisdom_reason TEXT, reason_heading TEXT, reason_date TEXT, pub_name TEXT, trade_type TEXT, t0_released TIMESTAMPTZ, t1_surveyed TIMESTAMPTZ, t2_quote_uploaded TIMESTAMPTZ, t3_decision TIMESTAMPTZ, t4_completed TIMESTAMPTZ, detected_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS quote_outcome_notes (id SERIAL PRIMARY KEY, quote_outcome_id INTEGER REFERENCES quote_outcomes(id) ON DELETE CASCADE, note TEXT NOT NULL, created_by TEXT DEFAULT 'admin', created_at TIMESTAMPTZ DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS quote_pipeline (id SERIAL PRIMARY KEY, job_id TEXT, display_id TEXT UNIQUE, survey_form_id INTEGER, wisdom_status TEXT, quote_value NUMERIC(10,2), pub_name TEXT, trade_type TEXT, entered_pipeline_at TIMESTAMPTZ DEFAULT NOW(), last_seen_at TIMESTAMPTZ DEFAULT NOW(), resolved_at TIMESTAMPTZ)",
     ]:
         try:
             cur.execute(col_sql)
@@ -3293,3 +3296,397 @@ def admin_survey_pdf(survey_id):
     return send_file(buf, mimetype='application/pdf',
         as_attachment=True,
         download_name=f"Redstone_Quote_{s['display_id'] or s['job_id']}.pdf")
+
+
+# ── Reports Routes ────────────────────────────────────────────────────────────
+
+@app.route("/admin/reports")
+@admin_required
+def admin_reports():
+    return render_template("admin_reports.html")
+
+
+@app.route("/api/reports/summary")
+@admin_required
+def api_reports_summary():
+    """Headline numbers for the reports dashboard."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Win/loss counts
+        cur.execute("""
+            SELECT outcome, COUNT(*) as cnt
+            FROM quote_outcomes
+            GROUP BY outcome
+        """)
+        outcome_counts = {r["outcome"]: r["cnt"] for r in cur.fetchall()}
+
+        # Pipeline value (awaiting approval)
+        cur.execute("""
+            SELECT COUNT(*) as cnt, COALESCE(SUM(sf.quote_total),0) as value
+            FROM survey_forms sf
+            WHERE sf.status = 'quote-submitted'
+        """)
+        pipeline = cur.fetchone()
+
+        # Total won value
+        cur.execute("""
+            SELECT COALESCE(SUM(sf.quote_total),0) as value
+            FROM survey_forms sf
+            WHERE sf.status = 'won'
+        """)
+        won_value = cur.fetchone()
+
+        # Average time to survey (T0 -> T1) in days
+        cur.execute("""
+            SELECT AVG(EXTRACT(EPOCH FROM (sf.submitted_at - j.first_seen))/86400) as avg_days
+            FROM survey_forms sf
+            JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
+            WHERE sf.submitted_at IS NOT NULL AND j.first_seen IS NOT NULL
+        """)
+        avg_survey_time = cur.fetchone()
+
+        # Quote machine sites (3+ surveys, 0 wins)
+        cur.execute("""
+            SELECT pub_name, COUNT(*) as surveys
+            FROM survey_forms
+            WHERE pub_name IS NOT NULL
+            GROUP BY pub_name
+            HAVING COUNT(*) >= 3
+            AND SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) = 0
+            ORDER BY surveys DESC
+        """)
+        quote_machines = [dict(r) for r in cur.fetchall()]
+
+        # Lost reasons breakdown
+        cur.execute("""
+            SELECT wisdom_reason, COUNT(*) as cnt
+            FROM quote_outcomes
+            WHERE outcome='lost' AND wisdom_reason IS NOT NULL AND wisdom_reason != ''
+            GROUP BY wisdom_reason
+            ORDER BY cnt DESC
+            LIMIT 10
+        """)
+        lost_reasons = [dict(r) for r in cur.fetchall()]
+
+        # Win/loss by trade type
+        cur.execute("""
+            SELECT trade_type,
+                   SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses,
+                   SUM(CASE WHEN outcome='cancelled' THEN 1 ELSE 0 END) as cancellations
+            FROM quote_outcomes
+            WHERE trade_type IS NOT NULL AND trade_type != ''
+            GROUP BY trade_type
+            ORDER BY (wins + losses + cancellations) DESC
+            LIMIT 10
+        """)
+        by_trade = [dict(r) for r in cur.fetchall()]
+
+        # Monthly win trend (last 12 months)
+        cur.execute("""
+            SELECT TO_CHAR(t3_decision,'YYYY-MM') as month,
+                   SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses
+            FROM quote_outcomes
+            WHERE t3_decision >= NOW() - INTERVAL '12 months'
+            GROUP BY month ORDER BY month
+        """)
+        monthly_trend = [dict(r) for r in cur.fetchall()]
+
+        # Cancellations this year
+        cur.execute("""
+            SELECT COUNT(*) as cnt
+            FROM quote_outcomes
+            WHERE outcome='cancelled'
+            AND EXTRACT(YEAR FROM detected_at) = EXTRACT(YEAR FROM NOW())
+        """)
+        cancellations_ytd = cur.fetchone()
+
+        # Survey cost estimate (mileage @ 45p + 4hrs @ day_rate/8 per survey)
+        cur.execute("""
+            SELECT COUNT(*) as cnt,
+                   COALESCE(SUM(survey_mileage * 0.45), 0) as mileage_cost
+            FROM survey_forms
+            WHERE survey_mileage IS NOT NULL AND survey_mileage > 0
+        """)
+        survey_costs = cur.fetchone()
+
+        return jsonify({
+            "wins":          outcome_counts.get("won", 0),
+            "losses":        outcome_counts.get("lost", 0),
+            "cancellations": outcome_counts.get("cancelled", 0),
+            "pipeline_count": pipeline["cnt"] if pipeline else 0,
+            "pipeline_value": float(pipeline["value"]) if pipeline else 0,
+            "won_value":     float(won_value["value"]) if won_value else 0,
+            "avg_survey_days": round(float(avg_survey_time["avg_days"]), 1) if avg_survey_time and avg_survey_time["avg_days"] else 0,
+            "quote_machines": quote_machines,
+            "lost_reasons":  lost_reasons,
+            "by_trade":      by_trade,
+            "monthly_trend": monthly_trend,
+            "cancellations_ytd": cancellations_ytd["cnt"] if cancellations_ytd else 0,
+            "survey_mileage_cost": float(survey_costs["mileage_cost"]) if survey_costs else 0,
+            "surveys_with_mileage": survey_costs["cnt"] if survey_costs else 0,
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/api/reports/outcomes")
+@admin_required
+def api_reports_outcomes():
+    """Full list of outcomes for the detail table."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT qo.*, sf.quote_total, sf.submitted_at as survey_date,
+                   sf.scope_of_works
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            ORDER BY qo.detected_at DESC
+            LIMIT 200
+        """)
+        rows = []
+        for r in cur.fetchall():
+            row = dict(r)
+            for k in ["t0_released","t1_surveyed","t2_quote_uploaded",
+                      "t3_decision","t4_completed","detected_at","created_at",
+                      "updated_at","survey_date"]:
+                if row.get(k):
+                    row[k] = str(row[k])
+            rows.append(row)
+        return jsonify(rows)
+    except Exception as e:
+        conn.rollback()
+        return jsonify([])
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/api/reports/outcome/<int:outcome_id>/notes", methods=["GET"])
+@admin_required
+def api_outcome_notes_get(outcome_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT * FROM quote_outcome_notes
+            WHERE quote_outcome_id=%s ORDER BY created_at ASC
+        """, (outcome_id,))
+        rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            r["created_at"] = str(r["created_at"])
+        return jsonify(rows)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/api/reports/outcome/<int:outcome_id>/notes", methods=["POST"])
+@admin_required
+def api_outcome_notes_post(outcome_id):
+    data = request.json or {}
+    note = data.get("note", "").strip()
+    if not note:
+        return jsonify({"ok": False, "error": "Empty note"})
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO quote_outcome_notes (quote_outcome_id, note, created_by)
+            VALUES (%s, %s, 'admin') RETURNING id, created_at
+        """, (outcome_id, note))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({"ok": True, "id": row["id"], "created_at": str(row["created_at"])})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/admin/reports/cancellations/pdf")
+@admin_required
+def admin_cancellations_pdf():
+    """Generate a formal PDF document of all cancellations for the year — billing evidence."""
+    year = request.args.get("year", str(date.today().year))
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT qo.*, sf.quote_total, sf.survey_mileage,
+                   sf.submitted_at as survey_date, sf.scope_of_works
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE qo.outcome = 'cancelled'
+            AND EXTRACT(YEAR FROM qo.detected_at) = %s
+            ORDER BY qo.detected_at ASC
+        """, (year,))
+        cancellations = [dict(r) for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                     Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_JUSTIFY
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        leftMargin=25*mm, rightMargin=25*mm,
+        topMargin=20*mm, bottomMargin=20*mm)
+
+    RED  = colors.HexColor('#c0392b')
+    DARK = colors.HexColor('#1a2332')
+    GREY = colors.HexColor('#888888')
+    LGREY = colors.HexColor('#f5f6f8')
+    styles = getSampleStyleSheet()
+
+    def sty(name, **kw):
+        return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+    body  = sty('body',  fontSize=9,  textColor=DARK, leading=13)
+    small = sty('small', fontSize=8,  textColor=GREY, leading=11)
+    bold  = sty('bold',  fontSize=9,  fontName='Helvetica-Bold', textColor=DARK, leading=13)
+    h1    = sty('h1',    fontSize=16, fontName='Helvetica-Bold', textColor=DARK)
+    h2    = sty('h2',    fontSize=11, fontName='Helvetica-Bold', textColor=DARK)
+    red_h = sty('rh',    fontSize=9,  fontName='Helvetica-Bold', textColor=RED)
+    justify = sty('j',   fontSize=9,  textColor=DARK, leading=14, alignment=TA_JUSTIFY)
+
+    today_str = date.today().strftime('%d %B %Y')
+    total_value = sum(float(c.get("quote_total") or 0) for c in cancellations)
+    total_mileage_cost = sum(
+        float(c.get("survey_mileage") or 0) * 0.45 for c in cancellations
+    )
+
+    elems = []
+
+    # Header
+    elems.append(Paragraph(
+        '<font color="#c0392b"><b>Redstone PDM Ltd</b></font>', sty('bh', fontSize=14, fontName='Helvetica-Bold', textColor=DARK)
+    ))
+    elems.append(Spacer(1, 2*mm))
+    elems.append(Paragraph(f"Cancelled Contract Register — {year}", h1))
+    elems.append(Spacer(1, 1*mm))
+    elems.append(Paragraph(f"Prepared: {today_str}  ·  For internal use and commercial review", small))
+    elems.append(HRFlowable(width="100%", thickness=1.5, color=RED))
+    elems.append(Spacer(1, 4*mm))
+
+    # Executive summary
+    elems.append(Paragraph("Executive Summary", h2))
+    elems.append(Spacer(1, 2*mm))
+    summary_text = (
+        f"During the period 1 January {year} to 31 December {year}, Redstone PDM Ltd recorded "
+        f"<b>{len(cancellations)} cancelled contract(s)</b> across JD Wetherspoon managed sites. "
+        f"These cancellations occurred after survey visits had been conducted and quotes submitted and approved. "
+        f"The combined quoted value of cancelled works was <b>£{total_value:,.2f}</b> (ex VAT). "
+        f"In addition, Redstone PDM Ltd incurred an estimated <b>£{total_mileage_cost:,.2f}</b> in survey "
+        f"travel costs alone, excluding office administration, quote preparation time and material procurement "
+        f"costs already initiated at time of cancellation. "
+        f"This document is prepared to support a formal review of the cost impact of late-stage cancellations "
+        f"and to inform future commercial discussions with JD Wetherspoon regarding preliminary cost recovery."
+    )
+    elems.append(Paragraph(summary_text, justify))
+    elems.append(Spacer(1, 6*mm))
+
+    # Cost summary table
+    elems.append(Paragraph("Cost Summary", h2))
+    elems.append(Spacer(1, 2*mm))
+    cost_data = [
+        [Paragraph("<b>Item</b>", bold), Paragraph("<b>Amount</b>", bold)],
+        ["Number of cancelled contracts", str(len(cancellations))],
+        ["Combined quoted value (ex VAT)", f"£{total_value:,.2f}"],
+        ["Estimated survey travel costs (@ 45p/mile)", f"£{total_mileage_cost:,.2f}"],
+        [Paragraph("<b>Total identifiable costs</b>", bold),
+         Paragraph(f"<b>£{(total_mileage_cost):.2f}</b>", bold)],
+    ]
+    cost_tbl = Table(cost_data, colWidths=[120*mm, 45*mm])
+    cost_tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,0), DARK),
+        ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+        ('ROWBACKGROUNDS', (0,1),(-1,-2), [colors.white, LGREY]),
+        ('BACKGROUND', (0,-1),(-1,-1), colors.HexColor('#f0f2f5')),
+        ('LINEABOVE', (0,-1),(-1,-1), 1.5, DARK),
+        ('ALIGN', (1,0),(-1,-1), 'RIGHT'),
+        ('TOPPADDING', (0,0),(-1,-1), 5),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+        ('LEFTPADDING', (0,0),(-1,-1), 8),
+        ('RIGHTPADDING', (0,0),(-1,-1), 8),
+    ]))
+    elems.append(cost_tbl)
+    elems.append(Spacer(1, 6*mm))
+
+    # Individual cancellations
+    elems.append(Paragraph("Cancellation Detail", h2))
+    elems.append(Spacer(1, 2*mm))
+
+    rows = [[
+        Paragraph("<b>Job Ref</b>", bold),
+        Paragraph("<b>Site</b>", bold),
+        Paragraph("<b>Trade</b>", bold),
+        Paragraph("<b>Quote Value</b>", bold),
+        Paragraph("<b>Date Detected</b>", bold),
+        Paragraph("<b>Reason</b>", bold),
+    ]]
+    for c in cancellations:
+        det_date = ""
+        if c.get("detected_at"):
+            try:
+                from datetime import datetime as dt2
+                d = dt2.fromisoformat(str(c["detected_at"]).replace("+00:00",""))
+                det_date = d.strftime("%d/%m/%Y")
+            except Exception:
+                det_date = str(c["detected_at"])[:10]
+        rows.append([
+            Paragraph(str(c.get("display_id") or c.get("job_id","—")), sty('s9', fontSize=8, textColor=DARK, fontName='Helvetica')),
+            Paragraph(str(c.get("pub_name","—")), sty('s9b', fontSize=8, textColor=DARK)),
+            Paragraph(str(c.get("trade_type","—")), sty('s9c', fontSize=8, textColor=DARK)),
+            Paragraph(f"£{float(c.get('quote_total') or 0):,.2f}", sty('s9d', fontSize=8, textColor=DARK)),
+            Paragraph(det_date, sty('s9e', fontSize=8, textColor=DARK)),
+            Paragraph(str(c.get("wisdom_reason","—"))[:80], sty('s9f', fontSize=8, textColor=DARK, leading=10)),
+        ])
+
+    detail_tbl = Table(rows, colWidths=[25*mm, 40*mm, 28*mm, 22*mm, 22*mm, 28*mm])
+    detail_tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,0), DARK),
+        ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+        ('ROWBACKGROUNDS', (0,1),(-1,-1), [colors.white, LGREY]),
+        ('ALIGN', (3,0),(4,-1), 'RIGHT'),
+        ('VALIGN', (0,0),(-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0),(-1,-1), 4),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 4),
+        ('LEFTPADDING', (0,0),(-1,-1), 5),
+        ('RIGHTPADDING', (0,0),(-1,-1), 5),
+        ('FONTSIZE', (0,0),(-1,-1), 8),
+    ]))
+    elems.append(detail_tbl)
+    elems.append(Spacer(1, 6*mm))
+
+    # Closing statement
+    elems.append(HRFlowable(width="100%", thickness=0.5, color=GREY))
+    elems.append(Spacer(1, 3*mm))
+    elems.append(Paragraph(
+        f"This document was generated by Redstone PDM Ltd on {today_str}. "
+        "All figures are based on internal records and Wisdom contractor portal data. "
+        "This register is maintained to support commercial negotiations and future preliminary cost recovery claims.",
+        small
+    ))
+
+    doc.build(elems)
+    buf.seek(0)
+    from flask import send_file
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Redstone_Cancellation_Register_{year}.pdf")
