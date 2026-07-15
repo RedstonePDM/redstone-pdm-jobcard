@@ -313,7 +313,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 <script>
 let currentSurveyId = null;
 let currentStatus = null;
-let quoteLines = { labour: [], materials: [], plant: [], prelim: [] };
+let quoteLines = { labour: [], subcontractor: [], materials: [], plant: [], prelim: [] };
 let outcomeType = null;
 
 const MARKUP = 0.20;
@@ -362,10 +362,11 @@ async function openDrawer(surveyId) {
   const s = await res.json();
   currentStatus = s.status;
   quoteLines = {
-    labour:   s.quote_labour_json   || [],
-    materials: s.quote_materials_json || [],
-    plant:    s.quote_plant_json    || [],
-    prelim:   s.quote_prelim_json   || [],
+    labour:        s.quote_labour_json        || [],
+    subcontractor: s.quote_subcontractor_json || [],
+    materials:     s.quote_materials_json     || [],
+    plant:         s.quote_plant_json         || [],
+    prelim:        s.quote_prelim_json        || [],
   };
 
   document.getElementById('drawer-title').textContent = s.pub_name || s.job_id;
@@ -430,10 +431,17 @@ function renderDrawer(s) {
       </div>
     </div>
 
-    ${s.measurements ? `<div class="survey-data-section">
+    <div class="survey-data-section">
       <div class="sds-title">📏 Measurements & Dimensions</div>
-      <div class="sds-field"><div class="sds-value" style="white-space:pre-wrap">${s.measurements}</div></div>
-    </div>` : ''}
+      <div class="sds-field">
+        <div class="scope-edit-hint">✏️ Edit to refine before building the quote</div>
+        <div class="scope-edit-wrap"><textarea id="drawer-measurements">${(s.measurements||'').replace(/`/g, "'")}</textarea></div>
+        <div class="scope-save-row">
+          <button class="scope-save-btn" onclick="saveMeasurements()">Save Changes</button>
+          <span class="scope-saved-msg" id="meas-saved-msg">✓ Saved</span>
+        </div>
+      </div>
+    </div>
 
     ${s.condition_notes ? `<div class="survey-data-section">
       <div class="sds-title">⚠️ Condition & Risk Notes</div>
@@ -484,6 +492,13 @@ function renderDrawer(s) {
         <button class="add-line-btn" onclick="addLine('labour')">+ Add Labour Line</button>
       </div>
 
+      <!-- Subcontractor -->
+      <div class="qb-section">
+        <div class="qb-section-label" style="color:#8e44ad">Subcontractor Cost <span style="font-size:9px;background:#f3e5f5;color:#6a1b9a;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:4px">+20% APPLIED</span></div>
+        <div id="qb-subcontractor-lines"></div>
+        <button class="add-line-btn" onclick="addLine('subcontractor')" style="border-color:#ce93d8;color:#8e44ad">+ Add Subcontractor Line</button>
+      </div>
+
       <!-- Materials -->
       <div class="qb-section">
         <div class="qb-section-label">Materials</div>
@@ -508,8 +523,10 @@ function renderDrawer(s) {
       <!-- Totals -->
       <div class="quote-totals" id="quote-totals">
         <div class="qt-row"><span>Labour</span><span id="qt-labour">£0.00</span></div>
+        <div class="qt-row"><span>Subcontractor cost</span><span id="qt-subcon">£0.00</span></div>
+        <div class="qt-row markup"><span>Subcontractor markup (20%)</span><span id="qt-subcon-markup">£0.00</span></div>
         <div class="qt-row"><span>Materials (cost)</span><span id="qt-materials-cost">£0.00</span></div>
-        <div class="qt-row markup"><span>Markup (20%) Total</span><span id="qt-markup">£0.00</span></div>
+        <div class="qt-row markup"><span>Materials markup (20%)</span><span id="qt-markup">£0.00</span></div>
         <div class="qt-row"><span>Plant & Equipment</span><span id="qt-plant">£0.00</span></div>
         <div class="qt-row"><span>Prelim / Mobilisation</span><span id="qt-prelim">£0.00</span></div>
         <div class="qt-row total"><span>Quote Total (ex VAT)</span><span id="qt-total">£0.00</span></div>
@@ -527,10 +544,11 @@ function renderDrawer(s) {
 
 // ── Quote Line Management ─────────────────────────────────────────────────────
 const LINE_PLACEHOLDERS = {
-  labour:    ['Description (e.g. Skilled Decorator)', 'Days', 'Rate/day (£)'],
-  materials: ['Description (e.g. Dulux Trade Matt 10L)', 'Qty', 'Unit cost (£)'],
-  plant:     ['Description (e.g. Scaffold tower hire)', 'Days', 'Rate/day (£)'],
-  prelim:    ['Description (e.g. Mobilisation / Site setup)', 'Qty', 'Cost (£)'],
+  labour:        ['Description (e.g. Skilled Decorator)', 'Days', 'Rate/day (£)'],
+  subcontractor: ['Subcontractor / Trade (e.g. Electrician)', 'Days', 'Cost/day (£)'],
+  materials:     ['Description (e.g. Dulux Trade Matt 10L)', 'Qty', 'Unit cost (£)'],
+  plant:         ['Description (e.g. Scaffold tower hire)', 'Days', 'Rate/day (£)'],
+  prelim:        ['Description (e.g. Mobilisation / Site setup)', 'Qty', 'Cost (£)'],
 };
 
 function addLine(section) {
@@ -544,10 +562,11 @@ function removeLine(section, idx) {
 }
 
 function renderQuoteLines() {
-  ['labour','materials','plant','prelim'].forEach(section => {
+  ['labour','subcontractor','materials','plant','prelim'].forEach(section => {
     const container = document.getElementById(`qb-${section}-lines`);
     if (!container) return;
     const ph = LINE_PLACEHOLDERS[section];
+    const showMarkup = section === 'materials' || section === 'subcontractor';
     container.innerHTML = quoteLines[section].map((line, i) => {
       const cost = (line.qty||0)*(line.unit_cost||0);
       const marked = cost * 1.20;
@@ -559,7 +578,7 @@ function renderQuoteLines() {
         <input type="number" step="0.01" min="0" value="${line.unit_cost||0}" placeholder="${ph[2]}"
           oninput="quoteLines['${section}'][${i}].unit_cost=parseFloat(this.value)||0;updateLineTotal('${section}',${i})">
         <div class="quote-line-total" id="lt-${section}-${i}">£${cost.toFixed(2)}</div>
-        <div class="quote-line-marked" id="lm-${section}-${i}" title="+20% markup">£${marked.toFixed(2)}</div>
+        ${showMarkup ? `<div class="quote-line-marked" id="lm-${section}-${i}" title="+20% markup">£${marked.toFixed(2)}</div>` : '<div></div>'}
         <button class="btn-remove-line" onclick="removeLine('${section}',${i})">×</button>
       </div>`;
     }).join('');
@@ -578,15 +597,19 @@ function updateLineTotal(section, idx) {
 }
 
 function updateTotals() {
-  let labourTotal = 0, materialsTotal = 0, plantTotal = 0, prelimTotal = 0;
+  let labourTotal = 0, subconTotal = 0, materialsTotal = 0, plantTotal = 0, prelimTotal = 0;
   quoteLines['labour'].forEach(l => labourTotal += parseFloat(l.total||0));
+  quoteLines['subcontractor'].forEach(l => subconTotal += parseFloat(l.total||0));
   quoteLines['materials'].forEach(l => materialsTotal += parseFloat(l.total||0));
   quoteLines['plant'].forEach(l => plantTotal += parseFloat(l.total||0));
   quoteLines['prelim'].forEach(l => prelimTotal += parseFloat(l.total||0));
+  const subconMarkup = subconTotal * MARKUP;
   const materialsMarkup = materialsTotal * MARKUP;
-  const total = labourTotal + materialsTotal + materialsMarkup + plantTotal + prelimTotal;
+  const total = labourTotal + subconTotal + subconMarkup + materialsTotal + materialsMarkup + plantTotal + prelimTotal;
   const el = id => document.getElementById(id);
   if (el('qt-labour')) el('qt-labour').textContent = `£${labourTotal.toFixed(2)}`;
+  if (el('qt-subcon')) el('qt-subcon').textContent = `£${subconTotal.toFixed(2)}`;
+  if (el('qt-subcon-markup')) el('qt-subcon-markup').textContent = `£${subconMarkup.toFixed(2)}`;
   if (el('qt-materials-cost')) el('qt-materials-cost').textContent = `£${materialsTotal.toFixed(2)}`;
   if (el('qt-markup')) el('qt-markup').textContent = `£${materialsMarkup.toFixed(2)}`;
   if (el('qt-plant')) el('qt-plant').textContent = `£${plantTotal.toFixed(2)}`;
@@ -630,6 +653,7 @@ async function saveQuote(newStatus) {
     body: JSON.stringify({
       status: newStatus,
       quote_labour_json: quoteLines.labour,
+      quote_subcontractor_json: quoteLines.subcontractor,
       quote_materials_json: quoteLines.materials,
       quote_plant_json: quoteLines.plant,
       quote_prelim_json: quoteLines.prelim,
@@ -761,6 +785,24 @@ async function saveScope() {
   const data = await res.json();
   if (data.ok) {
     const msg = document.getElementById('scope-saved-msg');
+    if (msg) { msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 2000); }
+  } else {
+    alert('Save failed: ' + (data.error || 'please try again'));
+  }
+}
+
+async function saveMeasurements() {
+  if (!currentSurveyId) return;
+  const measurements = document.getElementById('drawer-measurements')?.value;
+  if (measurements === undefined) return;
+  const res = await fetch(`/admin/survey/${currentSurveyId}/measurements`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ measurements })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const msg = document.getElementById('meas-saved-msg');
     if (msg) { msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 2000); }
   } else {
     alert('Save failed: ' + (data.error || 'please try again'));
