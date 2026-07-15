@@ -324,7 +324,8 @@ def init_db():
       "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
-        "CREATE TABLE IF NOT EXISTS survey_forms (id SERIAL PRIMARY KEY, job_id TEXT NOT NULL, contractor TEXT, contractor_key TEXT, visit_date DATE, time_arrived TEXT, time_departed TEXT, manager_on_duty TEXT, scope_of_works TEXT, measurements TEXT, condition_notes TEXT, recommended_approach TEXT, access_notes TEXT, parking_notes TEXT, materials_spec_json JSONB DEFAULT '[]', photo_paths JSONB DEFAULT '[]', survey_mileage NUMERIC(6,2) DEFAULT 0, status TEXT DEFAULT 'surveyed', query_note TEXT, quote_labour_json JSONB DEFAULT '[]', quote_materials_json JSONB DEFAULT '[]', quote_plant_json JSONB DEFAULT '[]', quote_prelim_json JSONB DEFAULT '[]', quote_subtotal NUMERIC(10,2) DEFAULT 0, quote_total NUMERIC(10,2) DEFAULT 0, outcome TEXT, outcome_reason TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), pub_name TEXT, postcode TEXT, trade_type TEXT)",
+        "CREATE TABLE IF NOT EXISTS survey_forms (id SERIAL PRIMARY KEY, job_id TEXT NOT NULL, contractor TEXT, contractor_key TEXT, visit_date DATE, time_arrived TEXT, time_departed TEXT, manager_on_duty TEXT, scope_of_works TEXT, measurements TEXT, condition_notes TEXT, recommended_approach TEXT, access_notes TEXT, parking_notes TEXT, materials_spec_json JSONB DEFAULT '[]', photo_paths JSONB DEFAULT '[]', survey_mileage NUMERIC(6,2) DEFAULT 0, status TEXT DEFAULT 'surveyed', query_note TEXT, quote_labour_json JSONB DEFAULT '[]', quote_subcontractor_json JSONB DEFAULT '[]', quote_materials_json JSONB DEFAULT '[]', quote_plant_json JSONB DEFAULT '[]', quote_prelim_json JSONB DEFAULT '[]', quote_subtotal NUMERIC(10,2) DEFAULT 0, quote_total NUMERIC(10,2) DEFAULT 0, outcome TEXT, outcome_reason TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), pub_name TEXT, postcode TEXT, trade_type TEXT)",
+        "ALTER TABLE survey_forms ADD COLUMN IF NOT EXISTS quote_subcontractor_json JSONB DEFAULT '[]'",
     ]:
         try:
             cur.execute(col_sql)
@@ -2939,7 +2940,8 @@ def admin_save_quote(survey_id):
         cur.execute("""
             UPDATE survey_forms SET
                 status=%s,
-                quote_labour_json=%s, quote_materials_json=%s,
+                quote_labour_json=%s, quote_subcontractor_json=%s,
+                quote_materials_json=%s,
                 quote_plant_json=%s, quote_prelim_json=%s,
                 quote_subtotal=%s, quote_total=%s,
                 updated_at=NOW()
@@ -2947,6 +2949,7 @@ def admin_save_quote(survey_id):
         """, (
             data.get("status", "quote-draft"),
             psycopg2.extras.Json(data.get("quote_labour_json", [])),
+            psycopg2.extras.Json(data.get("quote_subcontractor_json", [])),
             psycopg2.extras.Json(data.get("quote_materials_json", [])),
             psycopg2.extras.Json(data.get("quote_plant_json", [])),
             psycopg2.extras.Json(data.get("quote_prelim_json", [])),
@@ -2972,6 +2975,24 @@ def admin_save_scope(survey_id):
     cur = conn.cursor()
     try:
         cur.execute("UPDATE survey_forms SET scope_of_works=%s, updated_at=NOW() WHERE id=%s", (scope, survey_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route("/admin/survey/<int:survey_id>/measurements", methods=["POST"])
+@admin_required
+def admin_save_measurements(survey_id):
+    data = request.json or {}
+    measurements = data.get("measurements", "")
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE survey_forms SET measurements=%s, updated_at=NOW() WHERE id=%s", (measurements, survey_id))
         conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
@@ -3096,16 +3117,18 @@ def admin_survey_pdf(survey_id):
 
     # Line items
     sections = [
-        ("Labour", s["quote_labour_json"] or []),
-        ("Materials", s["quote_materials_json"] or []),
-        ("Plant & Equipment", s["quote_plant_json"] or []),
-        ("Prelim / Mobilisation", s["quote_prelim_json"] or []),
+        ("Labour", s["quote_labour_json"] or [], False),
+        ("Subcontractor", s.get("quote_subcontractor_json") or [], True),
+        ("Materials", s["quote_materials_json"] or [], True),
+        ("Plant & Equipment", s["quote_plant_json"] or [], False),
+        ("Prelim / Mobilisation", s["quote_prelim_json"] or [], False),
     ]
 
     labour_total = materials_total = plant_total = prelim_total = 0
     line_rows = [["Description", "Qty", "Unit Cost", "Total"]]
 
-    for section_name, lines in sections:
+    subcon_total = 0
+    for section_name, lines, apply_markup in sections:
         if not lines:
             continue
         line_rows.append([Paragraph(f"<b>{section_name}</b>", sty('sh', fontSize=9, fontName='Helvetica-Bold', textColor=RED)), "", "", ""])
@@ -3115,6 +3138,8 @@ def admin_survey_pdf(survey_id):
             tot = qty * uc
             if section_name == "Labour":
                 labour_total += tot
+            elif section_name == "Subcontractor":
+                subcon_total += tot
             elif section_name == "Materials":
                 materials_total += tot
             elif section_name == "Plant & Equipment":
@@ -3128,11 +3153,14 @@ def admin_survey_pdf(survey_id):
                 f"£{tot:.2f}",
             ])
 
+    subcon_markup = subcon_total * MARKUP
     materials_markup = materials_total * MARKUP
-    total = labour_total + materials_total + materials_markup + plant_total + prelim_total
+    total = labour_total + subcon_total + subcon_markup + materials_total + materials_markup + plant_total + prelim_total
 
     if labour_total:
         line_rows.append(["", "", Paragraph("<b>Labour</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{labour_total:.2f}"])
+    if subcon_total:
+        line_rows.append(["", "", Paragraph("<b>Subcontractor</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{(subcon_total + subcon_markup):.2f}"])
     if materials_total:
         line_rows.append(["", "", Paragraph("<b>Materials</b>", sty('st', fontSize=9, fontName='Helvetica-Bold', textColor=DARK)), f"£{(materials_total + materials_markup):.2f}"])
     if plant_total:
