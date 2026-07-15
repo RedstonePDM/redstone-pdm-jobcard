@@ -52,6 +52,17 @@
   .status-pill.rejected { background: #fdf0ef; color: #c0392b; }
 
   .empty-state { text-align: center; padding: 24px; color: #aaa; font-size: 13px; }
+
+  .month-toggle {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 4px; font-size: 13px; font-weight: 700; color: #1a2332;
+    cursor: pointer; border-bottom: 1.5px solid #f0f2f5; margin-top: 6px;
+  }
+  .month-toggle .chevron { transition: transform 0.15s; color: #888; }
+  .month-toggle .chevron.open { transform: rotate(90deg); }
+  .month-group { display: none; padding-top: 8px; }
+  .month-group.show { display: block; }
+
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     background: #1a2332; color: white; padding: 12px 22px; border-radius: 8px;
     font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
@@ -110,7 +121,18 @@
   <div class="card">
     <h3>Your Receipts</h3>
     {% if receipts %}
+      {% set ns = namespace(current_month=None) %}
       {% for r in receipts %}
+        {% set month_key = r.receipt_date.strftime('%B %Y') if r.receipt_date else 'Undated' %}
+        {% if month_key != ns.current_month %}
+          {% if ns.current_month is not none %}</div>{% endif %}
+          {% set ns.current_month = month_key %}
+          <div class="month-toggle" onclick="this.nextElementSibling.classList.toggle('show'); this.querySelector('.chevron').classList.toggle('open')">
+            <span>{{ month_key }}</span>
+            <span class="chevron {% if loop.first %}open{% endif %}">▸</span>
+          </div>
+          <div class="month-group {% if loop.first %}show{% endif %}">
+        {% endif %}
       <div class="receipt-row">
         <div class="r-icon">⛽</div>
         <div class="r-info">
@@ -120,6 +142,7 @@
         <span class="status-pill {{ r.status }}">{{ r.status|capitalize }}</span>
       </div>
       {% endfor %}
+      </div>
     {% else %}
       <div class="empty-state">No fuel receipts submitted yet.</div>
     {% endif %}
