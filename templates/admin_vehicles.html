@@ -31,16 +31,25 @@
   .btn-danger { background: #f8d7da; color: #842029; }
   .btn-danger:hover { background: #f5c2c7; }
   .btn-ghost { background: #f0f2f5; color: #333; }
+  .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* Section cards */
   .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
-  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
   .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+
+  /* Period tabs */
+  .period-tabs { display: flex; gap: 6px; }
+  .period-tab {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: #f0f2f5; color: #555; text-decoration: none; cursor: pointer;
+  }
+  .period-tab.active { background: #1a2332; color: white; }
 
   /* Fleet economics summary */
   .econ-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 6px; }
   @media (max-width: 900px) { .econ-grid { grid-template-columns: repeat(2, 1fr); } }
-  .econ-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 14px 16px; }
+  .econ-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 14px 16px; position: relative; }
   .econ-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
   .econ-value { font-size: 20px; color: #1a2332; font-weight: 800; margin-top: 4px; }
   .econ-note { font-size: 11px; color: #aaa; margin-top: 3px; }
@@ -48,10 +57,13 @@
   .econ-box.highlight .econ-value { color: #c0392b; }
   .econ-box.green { background: #effdf4; border-color: #b7e4c7; }
   .econ-box.green .econ-value { color: #1a7a4a; }
+  .econ-edit-link { position: absolute; top: 12px; right: 12px; font-size: 11px; color: #1a4fa0; cursor: pointer; }
+  .econ-edit-input { width: 100%; padding: 6px 8px; border: 1.5px solid #c0392b; border-radius: 6px; font-size: 16px; font-weight: 700; margin-top: 4px; }
 
   .settings-row { display: flex; gap: 16px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap; }
   .settings-field label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 5px; }
   .settings-field input { padding: 8px 10px; border: 1.5px solid #ddd; border-radius: 7px; font-size: 13px; width: 160px; }
+  .settings-field input:disabled { background: #f5f5f5; color: #999; border-color: #eee; }
 
   /* Fuel receipt queue */
   .receipt-row {
@@ -69,6 +81,12 @@
   .status-pill.rejected { background: #fdf0ef; color: #c0392b; }
   .empty-state { text-align: center; padding: 20px; color: #aaa; font-size: 13px; }
 
+  /* Cost rollup table */
+  .rollup-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .rollup-table th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 6px 10px; border-bottom: 1.5px solid #eee; }
+  .rollup-table td { font-size: 13px; padding: 8px 10px; border-bottom: 1px solid #f5f5f5; }
+  .rollup-table td.num { text-align: right; font-weight: 700; }
+
   /* Vehicle grid */
   .vehicle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 
@@ -77,6 +95,7 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     border-left: 4px solid #e0e0e0;
   }
+  .vehicle-card.archived { opacity: 0.65; }
   .vehicle-card.mot-valid    { border-left-color: #1a7a4a; }
   .vehicle-card.mot-due_soon { border-left-color: #e6a817; }
   .vehicle-card.mot-expired  { border-left-color: #c0392b; }
@@ -153,7 +172,7 @@
   <div class="page-header">
     <h2>Fleet & Vehicles</h2>
     <div style="display:flex;gap:10px">
-      <button class="btn btn-secondary" onclick="refreshAllMOT()">🔄 Refresh All MOT</button>
+      <button class="btn btn-secondary" onclick="refreshAllMOT()">🔄 Refresh All MOT & Tax</button>
       <button class="btn btn-primary" onclick="openAddModal()">+ Add Vehicle</button>
     </div>
   </div>
@@ -161,23 +180,31 @@
   <!-- Fleet Economics -->
   <div class="section-card">
     <div class="section-title">
-      <span>💰 Fleet Economics — {{ fy_label }}</span>
+      <span>💰 Fleet Economics — {{ period_label }}</span>
+      <div class="period-tabs">
+        <a class="period-tab {% if period=='month' %}active{% endif %}" href="?period=month{% if show_archived %}&archived=1{% endif %}">This Month</a>
+        <a class="period-tab {% if period=='fy' or not period %}active{% endif %}" href="?period=fy{% if show_archived %}&archived=1{% endif %}">This FY</a>
+        <a class="period-tab {% if period=='all' %}active{% endif %}" href="?period=all{% if show_archived %}&archived=1{% endif %}">All Time</a>
+      </div>
     </div>
     <div class="section-sub">What it actually costs to run a Redstone van, per job. Feeds the margin calculation.</div>
 
     <div class="econ-grid">
-      <div class="econ-box">
-        <div class="econ-label">Annual Insurance</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_insurance) }}</div>
-        <div class="econ-note">Across {{ vehicles|selectattr('redstone_vehicle')|list|length }} Redstone vans</div>
+      <div class="econ-box" id="insurance-box">
+        <span class="econ-edit-link" onclick="toggleInsuranceEdit()">Edit</span>
+        <div class="econ-label">Total Annual Insurance</div>
+        <div class="econ-value" id="insurance-display">£{{ '{:,.0f}'.format(total_insurance) }}</div>
+        <input type="number" step="0.01" class="econ-edit-input" id="insurance-input" style="display:none" value="{{ total_insurance }}">
+        <div class="econ-note">£{{ '%.0f'|format(insurance_per_van) }}/van across {{ vehicles|selectattr('redstone_vehicle')|list|length }} Redstone vans</div>
       </div>
       <div class="econ-box">
-        <div class="econ-label">Annual MOT</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_mot) }}</div>
+        <div class="econ-label">Annual MOT + Road Tax</div>
+        <div class="econ-value">£{{ '{:,.0f}'.format(total_mot + total_road_tax) }}</div>
+        <div class="econ-note">MOT £{{ '{:,.0f}'.format(total_mot) }} · Tax £{{ '{:,.0f}'.format(total_road_tax) }}</div>
       </div>
       <div class="econ-box">
-        <div class="econ-label">Servicing This FY</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_servicing_fy) }}</div>
+        <div class="econ-label">Servicing — {{ period_label }}</div>
+        <div class="econ-value">£{{ '{:,.0f}'.format(total_servicing_period) }}</div>
       </div>
       <div class="econ-box highlight">
         <div class="econ-label">Fixed Absorption / Job</div>
@@ -193,31 +220,33 @@
         <div class="econ-note">{% if actual_fuel_rate %}Actual, from approved receipts{% else %}Default — not enough receipt data yet{% endif %}</div>
       </div>
       <div class="econ-box">
-        <div class="econ-label">Approved Fuel Spend</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_fuel_cost) }}</div>
+        <div class="econ-label">Parking — {{ period_label }}</div>
+        <div class="econ-value">£{{ '{:,.0f}'.format(total_parking_period) }}</div>
+        <div class="econ-note">Redstone-van engineers only</div>
       </div>
       <div class="econ-box">
-        <div class="econ-label">Company Van Miles</div>
-        <div class="econ-value">{{ '{:,.0f}'.format(company_van_miles) }}</div>
-        <div class="econ-note">Logged on job cards this FY</div>
+        <div class="econ-label">ULEZ / Congestion — {{ period_label }}</div>
+        <div class="econ-value">£{{ '{:,.0f}'.format(total_congestion_cost) }}</div>
+        <div class="econ-note">Auto-pay, Redstone vans only</div>
       </div>
       <div class="econ-box">
         <div class="econ-label">Own-Vehicle Engineers</div>
         <div class="econ-value">£0 fleet cost</div>
-        <div class="econ-note">Their mileage rate covers it entirely</div>
+        <div class="econ-note">Mileage rate covers it entirely</div>
       </div>
     </div>
 
     <form class="settings-row" id="settings-form" onsubmit="saveSettings(event)">
       <div class="settings-field">
         <label>Estimated Annual Jobs</label>
-        <input type="number" id="set-jobs" value="{{ est_jobs }}">
+        <input type="number" id="set-jobs" value="{{ est_jobs }}" disabled>
       </div>
       <div class="settings-field">
         <label>Default Fuel Rate (£/mile)</label>
-        <input type="number" step="0.001" id="set-fuel" value="{{ settings.default_fuel_rate_per_mile }}">
+        <input type="number" step="0.001" id="set-fuel" value="{{ settings.default_fuel_rate_per_mile }}" disabled>
       </div>
-      <button type="submit" class="btn btn-secondary btn-sm">Save Settings</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="settings-edit-btn" onclick="toggleSettingsEdit()">✏️ Edit</button>
+      <button type="submit" class="btn btn-secondary btn-sm" id="settings-save-btn" style="display:none">Save Settings</button>
     </form>
   </div>
 
@@ -261,6 +290,37 @@
     {% endif %}
   </div>
 
+  <!-- Parking & Congestion rollup -->
+  {% if parking_by_contractor or congestion_by_contractor %}
+  <div class="section-card">
+    <div class="section-title"><span>🅿️ Parking & ULEZ/Congestion — By Engineer, {{ period_label }}</span></div>
+    <table class="rollup-table">
+      <thead><tr><th>Engineer</th><th style="text-align:right">Parking</th><th style="text-align:right">ULEZ/Congestion</th><th style="text-align:right">Days Charged</th></tr></thead>
+      <tbody>
+        {% for v in vehicles if v.redstone_vehicle and v.contractor_key %}
+        {% set pk = parking_by_contractor.get(v.contractor_key, 0) %}
+        {% set cg = congestion_by_contractor.get(v.contractor_key) %}
+        {% if pk or cg %}
+        <tr>
+          <td>{{ v.driver_name or v.contractor_key }} ({{ v.van_reg }})</td>
+          <td class="num">£{{ '%.2f'|format(pk) }}</td>
+          <td class="num">£{{ '%.2f'|format(cg.total_cost if cg else 0) }}</td>
+          <td class="num">{{ cg.days_charged if cg else 0 }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Archive toggle -->
+  <div style="margin-bottom:14px">
+    <a href="?period={{ period }}{% if not show_archived %}&archived=1{% endif %}" style="font-size:12px;color:#1a4fa0;text-decoration:none">
+      {% if show_archived %}← Back to Active Vehicles{% else %}View Archived Vehicles →{% endif %}
+    </a>
+  </div>
+
   <!-- Vehicle Cards -->
   <div class="vehicle-grid">
     {% for v in vehicles %}
@@ -273,7 +333,7 @@
     {% set svc_total = svc.total_cost if svc else 0 %}
     {% set is_moneypit = v.redstone_vehicle and fleet_avg_servicing and svc_total > (fleet_avg_servicing * 1.3) %}
 
-    <div class="vehicle-card mot-{{ mot_status }}" id="vcard-{{ v.id }}">
+    <div class="vehicle-card mot-{{ mot_status }} {% if v.archived %}archived{% endif %}" id="vcard-{{ v.id }}">
       <div class="vc-top">
         <div>
           <div class="vc-reg">{{ v.van_reg }}</div>
@@ -304,12 +364,14 @@
           <div class="vc-stat-value">{{ '{:,}'.format(v.current_mileage or 0) }}</div>
         </div>
         <div>
-          <div class="vc-stat-label">Insurance / yr</div>
-          <div class="vc-stat-value">£{{ '{:,.0f}'.format(v.insurance_annual or 0) }}</div>
+          <div class="vc-stat-label">Tax Status</div>
+          <div class="vc-stat-value {% if v.tax_status and 'not' in v.tax_status|lower %}red{% endif %}">
+            {{ v.tax_status or '—' }}{% if v.tax_due_date %} · due {{ v.tax_due_date.strftime('%d %b %Y') }}{% endif %}
+          </div>
         </div>
         <div>
-          <div class="vc-stat-label">MOT Cost</div>
-          <div class="vc-stat-value">£{{ '{:,.0f}'.format(v.mot_cost or 0) }}</div>
+          <div class="vc-stat-label">Insurance / Tax Cost</div>
+          <div class="vc-stat-value">£{{ '%.0f'|format(insurance_per_van if v.redstone_vehicle else 0) }} / £{{ '{:,.0f}'.format(v.road_tax_cost or 0) }}</div>
         </div>
       </div>
 
@@ -330,18 +392,24 @@
           £{{ '{:,.0f}'.format(svc_total) }}
           {% if is_moneypit %} ⚠ money pit{% endif %}
         </div>
-        <div class="moneypit-note">Fleet average: £{{ '{:,.0f}'.format(fleet_avg_servicing) }}</div>
+        <div class="moneypit-note">Fleet average: £{{ '{:,.0f}'.format(fleet_avg_servicing) }}{% if v.purchase_price %} · Purchased £{{ '{:,.0f}'.format(v.purchase_price) }}{% endif %}</div>
       </div>
       {% endif %}
 
       <div class="vc-actions">
-        <button class="btn btn-secondary btn-sm" onclick="refreshMOT({{ v.id }})">Check MOT</button>
+        {% if not v.archived %}
+        <button class="btn btn-secondary btn-sm" onclick="refreshMOT({{ v.id }})">Check MOT/Tax</button>
         <button class="btn btn-sm btn-ghost"
-          onclick="openEditModal({{ v.id }}, '{{ v.make_model or '' }}', {{ v.year or 'null' }}, {{ v.last_service_mileage or 0 }}, {{ v.service_interval_miles or 12000 }}, '{{ v.notes or '' }}', {{ v.insurance_annual or 0 }}, {{ v.mot_cost or 0 }})">Edit</button>
+          onclick="openEditModal({{ v.id }}, '{{ v.make_model or '' }}', {{ v.year or 'null' }}, {{ v.last_service_mileage or 0 }}, {{ v.service_interval_miles or 12000 }}, '{{ (v.notes or '')|replace("'", "\\'") }}', {{ v.mot_cost or 0 }}, {{ v.purchase_price or 0 }}, {{ v.road_tax_cost or 0 }}, '{{ v.contractor_key or '' }}')">Edit</button>
         {% if v.redstone_vehicle %}
         <button class="btn btn-sm btn-ghost" onclick="openServiceModal({{ v.id }}, '{{ v.van_reg }}')">+ Log Service</button>
         {% endif %}
-        <button class="btn btn-danger btn-sm" onclick="deleteVehicle({{ v.id }}, '{{ v.van_reg }}')">Remove</button>
+        <a class="btn btn-sm btn-ghost" href="/admin/vehicles/{{ v.id }}/service_history/print" target="_blank">🖨 Print History</a>
+        <button class="btn btn-danger btn-sm" onclick="archiveVehicle({{ v.id }}, '{{ v.van_reg }}')">Archive</button>
+        {% else %}
+        <a class="btn btn-sm btn-ghost" href="/admin/vehicles/{{ v.id }}/service_history/print" target="_blank">🖨 Print History</a>
+        <button class="btn btn-secondary btn-sm" onclick="unarchiveVehicle({{ v.id }})">Restore</button>
+        {% endif %}
       </div>
 
       {% if servicing_log_by_vehicle.get(v.id) %}
@@ -349,7 +417,7 @@
       <div class="service-log" id="svclog-{{ v.id }}">
         {% for s in servicing_log_by_vehicle.get(v.id) %}
         <div class="service-log-item">
-          <span>{{ s.service_date.strftime('%d %b %Y') if s.service_date else '' }} — {{ s.description or 'Service' }}{% if s.mileage %} ({{ '{:,}'.format(s.mileage) }}mi){% endif %}</span>
+          <span>{{ s.service_date.strftime('%d %b %Y') if s.service_date else '' }} — {{ s.description or 'Service' }}{% if s.mileage %} ({{ '{:,}'.format(s.mileage) }}mi){% endif %}{% if s.invoice_photo_path %} · <a href="/uploads/{{ s.invoice_photo_path }}" target="_blank">invoice</a>{% endif %}</span>
           <span>£{{ '%.2f'|format(s.cost or 0) }} <a href="#" onclick="deleteServicing({{ s.id }}, {{ v.id }}); return false;" style="color:#c0392b;margin-left:8px">✕</a></span>
         </div>
         {% endfor %}
@@ -451,15 +519,33 @@
       <label>Last Serviced At (miles)</label>
       <input type="number" id="edit-service-at">
     </div>
+    <div class="form-group">
+      <label>Assigned Driver</label>
+      <select id="edit-contractor">
+        <option value="">Unassigned</option>
+        <option value="dave_duppa">Dave Duppa</option>
+        <option value="mark_ashpool">Mark Ashpool</option>
+        <option value="richard_chambers">Richard Chambers</option>
+        <option value="ash_everett">Ashley Everett</option>
+        <option value="cassius_kwarteng">Cassius Kwarteng</option>
+        <option value="dave_lefevre">Dave Lefevre</option>
+        <option value="aziz_rehman">Aziz Rehman</option>
+        <option value="james_rutland">James Rutland</option>
+      </select>
+    </div>
     <div class="form-row">
-      <div class="form-group">
-        <label>Annual Insurance (£)</label>
-        <input type="number" step="0.01" id="edit-insurance">
-      </div>
       <div class="form-group">
         <label>MOT Cost (£)</label>
         <input type="number" step="0.01" id="edit-mot-cost">
       </div>
+      <div class="form-group">
+        <label>Road Tax Cost (£/yr)</label>
+        <input type="number" step="0.01" id="edit-road-tax">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Purchase Price (£)</label>
+      <input type="number" step="0.01" id="edit-purchase-price" placeholder="What Redstone paid for this vehicle">
     </div>
     <div class="form-group">
       <label>Notes</label>
@@ -544,15 +630,17 @@
     else alert('Error adding vehicle: ' + (data.error || 'unknown'));
   }
 
-  function openEditModal(vid, make, year, serviceAt, interval, notes, insurance, motCost) {
+  function openEditModal(vid, make, year, serviceAt, interval, notes, motCost, purchasePrice, roadTax, contractorKey) {
     document.getElementById('edit-vid').value = vid;
     document.getElementById('edit-make').value = make;
     document.getElementById('edit-year').value = year || '';
     document.getElementById('edit-service-at').value = serviceAt;
     document.getElementById('edit-interval').value = interval;
     document.getElementById('edit-notes').value = notes;
-    document.getElementById('edit-insurance').value = insurance || 0;
     document.getElementById('edit-mot-cost').value = motCost || 0;
+    document.getElementById('edit-purchase-price').value = purchasePrice || 0;
+    document.getElementById('edit-road-tax').value = roadTax || 0;
+    document.getElementById('edit-contractor').value = contractorKey || '';
     document.getElementById('edit-modal').classList.add('show');
   }
 
@@ -564,16 +652,24 @@
     form.append('last_service_mileage', document.getElementById('edit-service-at').value);
     form.append('service_interval_miles', document.getElementById('edit-interval').value);
     form.append('notes', document.getElementById('edit-notes').value);
-    form.append('insurance_annual', document.getElementById('edit-insurance').value || 0);
     form.append('mot_cost', document.getElementById('edit-mot-cost').value || 0);
+    form.append('purchase_price', document.getElementById('edit-purchase-price').value || 0);
+    form.append('road_tax_cost', document.getElementById('edit-road-tax').value || 0);
+    form.append('contractor_key', document.getElementById('edit-contractor').value);
     const res = await fetch(`/admin/vehicles/${vid}/update`, { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) { closeModals(); location.reload(); }
   }
 
-  async function deleteVehicle(vid, reg) {
-    if (!confirm(`Remove ${reg} from the fleet? This cannot be undone.`)) return;
-    const res = await fetch(`/admin/vehicles/${vid}/delete`, { method: 'POST' });
+  async function archiveVehicle(vid, reg) {
+    if (!confirm(`Archive ${reg}? It will move out of the active fleet list but its full history (servicing, MOT, receipts) stays intact and can be restored any time.`)) return;
+    const res = await fetch(`/admin/vehicles/${vid}/archive`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) location.reload();
+  }
+
+  async function unarchiveVehicle(vid) {
+    const res = await fetch(`/admin/vehicles/${vid}/unarchive`, { method: 'POST' });
     const data = await res.json();
     if (data.ok) location.reload();
   }
@@ -583,14 +679,8 @@
     btn.disabled = true; btn.textContent = 'Checking...';
     const res = await fetch(`/admin/vehicles/${vid}/refresh_mot`, { method: 'POST' });
     const data = await res.json();
-    if (data.ok) {
-      const statusMap = { valid: '✓ MOT Valid', due_soon: '⚠ Due Soon', expired: '✗ Expired', unknown: 'MOT Unknown', error: 'Check Failed' };
-      document.getElementById(`mot-badge-${vid}`).textContent = statusMap[data.status] || 'Unknown';
-      document.getElementById(`mot-badge-${vid}`).className = `mot-badge ${data.status}`;
-      document.getElementById(`mot-expiry-${vid}`).textContent = data.expiry || '—';
-      document.getElementById(`vcard-${vid}`).className = `vehicle-card mot-${data.status}`;
-    }
-    btn.disabled = false; btn.textContent = 'Check MOT';
+    btn.disabled = false; btn.textContent = 'Check MOT/Tax';
+    if (data.ok) location.reload();
   }
 
   async function refreshAllMOT() {
@@ -598,7 +688,7 @@
     btn.disabled = true; btn.textContent = 'Refreshing...';
     const res = await fetch('/admin/vehicles/refresh_all_mot', { method: 'POST' });
     const data = await res.json();
-    btn.disabled = false; btn.textContent = '🔄 Refresh All MOT';
+    btn.disabled = false; btn.textContent = '🔄 Refresh All MOT & Tax';
     if (data.ok) location.reload();
   }
 
@@ -634,15 +724,55 @@
     if (data.ok) location.reload();
   }
 
+  function toggleSettingsEdit() {
+    const jobs = document.getElementById('set-jobs');
+    const fuel = document.getElementById('set-fuel');
+    const editBtn = document.getElementById('settings-edit-btn');
+    const saveBtn = document.getElementById('settings-save-btn');
+    const editing = !jobs.disabled;
+    jobs.disabled = editing;
+    fuel.disabled = editing;
+    editBtn.style.display = editing ? 'inline-block' : 'none';
+    saveBtn.style.display = editing ? 'none' : 'inline-block';
+  }
+
   async function saveSettings(e) {
     e.preventDefault();
     const form = new FormData();
     form.append('estimated_annual_jobs', document.getElementById('set-jobs').value);
     form.append('default_fuel_rate_per_mile', document.getElementById('set-fuel').value);
+    form.append('total_insurance_annual', {{ total_insurance }});
     const res = await fetch('/admin/fleet_settings/save', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) location.reload();
   }
+
+  function toggleInsuranceEdit() {
+    const display = document.getElementById('insurance-display');
+    const input = document.getElementById('insurance-input');
+    if (input.style.display === 'none') {
+      display.style.display = 'none';
+      input.style.display = 'block';
+      input.focus();
+    } else {
+      saveInsurance();
+    }
+  }
+
+  async function saveInsurance() {
+    const val = document.getElementById('insurance-input').value || 0;
+    const form = new FormData();
+    form.append('estimated_annual_jobs', {{ est_jobs }});
+    form.append('default_fuel_rate_per_mile', {{ settings.default_fuel_rate_per_mile }});
+    form.append('total_insurance_annual', val);
+    const res = await fetch('/admin/fleet_settings/save', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) location.reload();
+  }
+
+  document.getElementById('insurance-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveInsurance();
+  });
 
   async function reviewReceipt(rid, action) {
     const row = document.getElementById(`receipt-${rid}`);
