@@ -632,7 +632,9 @@ function renderDrawerActions(s) {
   btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')">💾 Save Quote</button>`;
 
   if (status !== 'quote-submitted' && status !== 'won' && status !== 'lost') {
-    btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')">📤 Submit to JDW</button>`;
+    btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')">📤 Mark as Submitted</button>`;
+  } else if (status === 'quote-submitted') {
+    btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')" style="opacity:0.7">📤 Resubmit</button>`;
   }
   if (status === 'quote-submitted' || status === 'won' || status === 'lost') {
     btns += `<button class="btn-action btn-mark-won" onclick="openOutcomeModal('won')">✓ Won</button>`;
@@ -672,9 +674,13 @@ async function saveQuote(newStatus) {
   if (data.ok) {
     currentStatus = newStatus;
     updateRowStatus(currentSurveyId, newStatus, total);
-    showToast(newStatus === 'quote-submitted' ? '✓ Marked as submitted to JDW' : '✓ Quote draft saved');
-    // Refresh actions
-    renderDrawerActions({ status: newStatus });
+    if (newStatus === 'quote-submitted') {
+      showToast('✓ Marked as Submitted');
+      closeDrawer();
+    } else {
+      showToast('✓ Quote saved');
+      renderDrawerActions({ status: newStatus });
+    }
   } else {
     alert('Save failed: ' + (data.error||'please try again'));
   }
