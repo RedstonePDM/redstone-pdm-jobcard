@@ -190,30 +190,33 @@
     <div class="section-sub">What it actually costs to run a Redstone van, per job. Feeds the margin calculation.</div>
 
     <div class="econ-grid">
-      <div class="econ-box" id="insurance-box">
-        <span class="econ-edit-link" onclick="toggleInsuranceEdit()">Edit</span>
+      <div class="econ-box">
         <div class="econ-label">Total Annual Insurance</div>
-        <div class="econ-value" id="insurance-display">£{{ '{:,.0f}'.format(total_insurance) }}</div>
-        <input type="number" step="0.01" class="econ-edit-input" id="insurance-input" style="display:none" value="{{ total_insurance }}">
-        <div class="econ-note">£{{ '%.0f'|format(insurance_per_van) }}/van across {{ vehicles|selectattr('redstone_vehicle')|list|length }} Redstone vans</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_insurance) }}</div>
+        <div class="econ-note">£{{ '%.2f'|format(insurance_per_van) }}/van across {{ vehicles|selectattr('redstone_vehicle')|list|length }} Redstone vans</div>
       </div>
       <div class="econ-box">
-        <div class="econ-label">Annual MOT + Road Tax</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_mot + total_road_tax) }}</div>
-        <div class="econ-note">MOT £{{ '{:,.0f}'.format(total_mot) }} · Tax £{{ '{:,.0f}'.format(total_road_tax) }}</div>
+        <div class="econ-label">Annual MOT</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_mot) }}</div>
+        <div class="econ-note">Fixed cost — same every period</div>
+      </div>
+      <div class="econ-box">
+        <div class="econ-label">Annual Road Tax</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_road_tax) }}</div>
+        <div class="econ-note">Fixed cost — same every period</div>
       </div>
       <div class="econ-box">
         <div class="econ-label">Servicing — {{ period_label }}</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_servicing_period) }}</div>
-      </div>
-      <div class="econ-box highlight">
-        <div class="econ-label">Fixed Absorption / Job</div>
-        <div class="econ-value">£{{ '%.2f'|format(fixed_absorption_per_job) }}</div>
-        <div class="econ-note">£{{ '{:,.0f}'.format(fixed_overhead_annual) }} ÷ {{ est_jobs }} est. jobs/yr</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_servicing_period) }}</div>
       </div>
     </div>
 
     <div class="econ-grid" style="margin-top:14px">
+      <div class="econ-box highlight">
+        <div class="econ-label">Fixed Absorption / Job</div>
+        <div class="econ-value">£{{ '%.2f'|format(fixed_absorption_per_job) }}</div>
+        <div class="econ-note">£{{ '{:,.2f}'.format(fixed_overhead_annual) }} ÷ {{ est_jobs }} est. jobs/yr</div>
+      </div>
       <div class="econ-box green">
         <div class="econ-label">Fuel Rate In Use</div>
         <div class="econ-value">{{ (fuel_rate_used * 100)|round(1) }}p/mi</div>
@@ -221,22 +224,21 @@
       </div>
       <div class="econ-box">
         <div class="econ-label">Parking — {{ period_label }}</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_parking_period) }}</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_parking_period) }}</div>
         <div class="econ-note">Redstone-van engineers only</div>
       </div>
       <div class="econ-box">
         <div class="econ-label">ULEZ / Congestion — {{ period_label }}</div>
-        <div class="econ-value">£{{ '{:,.0f}'.format(total_congestion_cost) }}</div>
+        <div class="econ-value">£{{ '{:,.2f}'.format(total_congestion_cost) }}</div>
         <div class="econ-note">Auto-pay, Redstone vans only</div>
-      </div>
-      <div class="econ-box">
-        <div class="econ-label">Own-Vehicle Engineers</div>
-        <div class="econ-value">£0 fleet cost</div>
-        <div class="econ-note">Mileage rate covers it entirely</div>
       </div>
     </div>
 
     <form class="settings-row" id="settings-form" onsubmit="saveSettings(event)">
+      <div class="settings-field">
+        <label>Total Annual Insurance (£)</label>
+        <input type="number" step="0.01" id="set-insurance" value="{{ total_insurance }}" disabled>
+      </div>
       <div class="settings-field">
         <label>Estimated Annual Jobs</label>
         <input type="number" id="set-jobs" value="{{ est_jobs }}" disabled>
@@ -249,6 +251,7 @@
       <button type="submit" class="btn btn-secondary btn-sm" id="settings-save-btn" style="display:none">Save Settings</button>
     </form>
   </div>
+
 
   <!-- Fuel Receipts Queue -->
   <div class="section-card">
@@ -316,9 +319,13 @@
 
   <!-- Archive toggle -->
   <div style="margin-bottom:14px">
-    <a href="?period={{ period }}{% if not show_archived %}&archived=1{% endif %}" style="font-size:12px;color:#1a4fa0;text-decoration:none">
-      {% if show_archived %}← Back to Active Vehicles{% else %}View Archived Vehicles →{% endif %}
+    <a href="?period={{ period }}{% if not show_archived %}&archived=1{% endif %}"
+       class="btn btn-ghost btn-sm" style="text-decoration:none">
+      {% if show_archived %}← Back to Active Vehicles{% else %}🗄 View Archived Vehicles{% endif %}
     </a>
+    {% if show_archived %}
+    <span style="font-size:12px;color:#888;margin-left:8px">Archived vehicles keep their full history — hit Restore on any of them to bring it back.</span>
+    {% endif %}
   </div>
 
   <!-- Vehicle Cards -->
@@ -370,8 +377,16 @@
           </div>
         </div>
         <div>
-          <div class="vc-stat-label">Insurance / Tax Cost</div>
-          <div class="vc-stat-value">£{{ '%.0f'|format(insurance_per_van if v.redstone_vehicle else 0) }} / £{{ '{:,.0f}'.format(v.road_tax_cost or 0) }}</div>
+          <div class="vc-stat-label">Insurance Share</div>
+          <div class="vc-stat-value">£{{ '%.2f'|format(insurance_per_van if v.redstone_vehicle else 0) }}</div>
+        </div>
+        <div>
+          <div class="vc-stat-label">Road Tax Cost</div>
+          <div class="vc-stat-value">£{{ '%.2f'|format(v.road_tax_cost or 0) }}</div>
+        </div>
+        <div>
+          <div class="vc-stat-label">MOT Cost</div>
+          <div class="vc-stat-value">£{{ '%.2f'|format(v.mot_cost or 0) }}</div>
         </div>
       </div>
 
@@ -398,7 +413,7 @@
 
       <div class="vc-actions">
         {% if not v.archived %}
-        <button class="btn btn-secondary btn-sm" onclick="refreshMOT({{ v.id }})">Check MOT/Tax</button>
+        <button class="btn btn-secondary btn-sm" onclick="refreshMOT({{ v.id }}, this)">Check MOT/Tax</button>
         <button class="btn btn-sm btn-ghost"
           onclick="openEditModal({{ v.id }}, '{{ v.make_model or '' }}', {{ v.year or 'null' }}, {{ v.last_service_mileage or 0 }}, {{ v.service_interval_miles or 12000 }}, '{{ (v.notes or '')|replace("'", "\\'") }}', {{ v.mot_cost or 0 }}, {{ v.purchase_price or 0 }}, {{ v.road_tax_cost or 0 }}, '{{ v.contractor_key or '' }}')">Edit</button>
         {% if v.redstone_vehicle %}
@@ -674,22 +689,40 @@
     if (data.ok) location.reload();
   }
 
-  async function refreshMOT(vid) {
-    const btn = event.target;
+  async function refreshMOT(vid, btn) {
     btn.disabled = true; btn.textContent = 'Checking...';
-    const res = await fetch(`/admin/vehicles/${vid}/refresh_mot`, { method: 'POST' });
-    const data = await res.json();
-    btn.disabled = false; btn.textContent = 'Check MOT/Tax';
-    if (data.ok) location.reload();
+    try {
+      const res = await fetch(`/admin/vehicles/${vid}/refresh_mot`, { method: 'POST' });
+      const data = await res.json();
+      btn.disabled = false; btn.textContent = 'Check MOT/Tax';
+      if (data.ok) {
+        location.reload();
+      } else {
+        alert('MOT/Tax check failed: ' + (data.error || 'unknown error') + '\n\nExisting MOT/tax data has NOT been changed.');
+      }
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Check MOT/Tax';
+      alert('Network error checking MOT/Tax — existing data unchanged.');
+    }
   }
 
   async function refreshAllMOT() {
     const btn = event.target;
     btn.disabled = true; btn.textContent = 'Refreshing...';
-    const res = await fetch('/admin/vehicles/refresh_all_mot', { method: 'POST' });
-    const data = await res.json();
-    btn.disabled = false; btn.textContent = '🔄 Refresh All MOT & Tax';
-    if (data.ok) location.reload();
+    try {
+      const res = await fetch('/admin/vehicles/refresh_all_mot', { method: 'POST' });
+      const data = await res.json();
+      btn.disabled = false; btn.textContent = '🔄 Refresh All MOT & Tax';
+      if (data.ok) {
+        if (data.failed > 0) {
+          alert(`${data.updated} vehicle(s) updated. ${data.failed} lookup(s) failed and were left unchanged.`);
+        }
+        location.reload();
+      }
+    } catch (err) {
+      btn.disabled = false; btn.textContent = '🔄 Refresh All MOT & Tax';
+      alert('Network error refreshing fleet MOT/Tax.');
+    }
   }
 
   function openServiceModal(vid, reg) {
@@ -725,54 +758,30 @@
   }
 
   function toggleSettingsEdit() {
+    const insurance = document.getElementById('set-insurance');
     const jobs = document.getElementById('set-jobs');
     const fuel = document.getElementById('set-fuel');
     const editBtn = document.getElementById('settings-edit-btn');
     const saveBtn = document.getElementById('settings-save-btn');
     const editing = !jobs.disabled;
+    insurance.disabled = editing;
     jobs.disabled = editing;
     fuel.disabled = editing;
     editBtn.style.display = editing ? 'inline-block' : 'none';
     saveBtn.style.display = editing ? 'none' : 'inline-block';
+    if (!editing) insurance.focus();
   }
 
   async function saveSettings(e) {
     e.preventDefault();
     const form = new FormData();
+    form.append('total_insurance_annual', document.getElementById('set-insurance').value || 0);
     form.append('estimated_annual_jobs', document.getElementById('set-jobs').value);
     form.append('default_fuel_rate_per_mile', document.getElementById('set-fuel').value);
-    form.append('total_insurance_annual', {{ total_insurance }});
     const res = await fetch('/admin/fleet_settings/save', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) location.reload();
   }
-
-  function toggleInsuranceEdit() {
-    const display = document.getElementById('insurance-display');
-    const input = document.getElementById('insurance-input');
-    if (input.style.display === 'none') {
-      display.style.display = 'none';
-      input.style.display = 'block';
-      input.focus();
-    } else {
-      saveInsurance();
-    }
-  }
-
-  async function saveInsurance() {
-    const val = document.getElementById('insurance-input').value || 0;
-    const form = new FormData();
-    form.append('estimated_annual_jobs', {{ est_jobs }});
-    form.append('default_fuel_rate_per_mile', {{ settings.default_fuel_rate_per_mile }});
-    form.append('total_insurance_annual', val);
-    const res = await fetch('/admin/fleet_settings/save', { method: 'POST', body: form });
-    const data = await res.json();
-    if (data.ok) location.reload();
-  }
-
-  document.getElementById('insurance-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') saveInsurance();
-  });
 
   async function reviewReceipt(rid, action) {
     const row = document.getElementById(`receipt-${rid}`);
