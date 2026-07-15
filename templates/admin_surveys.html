@@ -625,28 +625,16 @@ function updateTotals() {
 
 // ── Drawer Actions ────────────────────────────────────────────────────────────
 function renderDrawerActions(s) {
-  const status = s.status || 'surveyed';
-  let btns = '';
+  const status = (s.status || 'surveyed').trim().toLowerCase();
 
-  const editable = ['surveyed','queried','resubmitted','quote-draft'];
-  const submittable = ['surveyed','queried','resubmitted','quote-draft'];
+  // Always show these three regardless of status
+  let btns = `<button class="btn-action btn-query" onclick="openQueryModal()">⚠ Query Engineer</button>`;
+  btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')">💾 Save Quote</button>`;
 
-  if (editable.includes(status)) {
-    btns += `<button class="btn-action btn-query" onclick="openQueryModal()">⚠ Query Engineer</button>`;
-  }
-  if (editable.includes(status)) {
-    btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')">💾 Save Quote</button>`;
-  }
-  if (submittable.includes(status)) {
+  if (status !== 'quote-submitted' && status !== 'won' && status !== 'lost') {
     btns += `<button class="btn-action btn-submit-quote" onclick="saveQuote('quote-submitted')">📤 Submit to JDW</button>`;
   }
-  if (status === 'quote-submitted') {
-    btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')" style="background:#8e44ad">✏ Edit Quote</button>`;
-    btns += `<button class="btn-action btn-mark-won" onclick="openOutcomeModal('won')">✓ Won</button>`;
-    btns += `<button class="btn-action btn-mark-lost" onclick="openOutcomeModal('lost')">✗ Lost</button>`;
-  }
-  if (['won','lost'].includes(status)) {
-    btns += `<button class="btn-action btn-save-quote" onclick="saveQuote('quote-draft')" style="background:#8e44ad">✏ Revise Quote</button>`;
+  if (status === 'quote-submitted' || status === 'won' || status === 'lost') {
     btns += `<button class="btn-action btn-mark-won" onclick="openOutcomeModal('won')">✓ Won</button>`;
     btns += `<button class="btn-action btn-mark-lost" onclick="openOutcomeModal('lost')">✗ Lost</button>`;
   }
