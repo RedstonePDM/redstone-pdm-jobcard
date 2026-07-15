@@ -8,6 +8,7 @@ Contractors log in, complete job cards, system generates PDFs and emails.
 import os
 import io
 import re
+import time
 import json
 import math
 import requests
@@ -42,6 +43,11 @@ FROM_EMAIL       = os.environ.get("FROM_EMAIL", "info@redstonepdm.com")
 ACCOUNTS_EMAIL   = os.environ.get("ACCOUNTS_EMAIL", "accounts@redstonepdm.com")
 GMAPS_API_KEY    = os.environ.get("GMAPS_API_KEY", "")
 PLANNER_URL      = os.environ.get("PLANNER_URL", "https://redstone-planner-production.up.railway.app")
+MOT_API_KEY      = os.environ.get("MOT_API_KEY", "")
+MOT_CLIENT_ID    = os.environ.get("MOT_CLIENT_ID", "")
+MOT_CLIENT_SECRET = os.environ.get("MOT_CLIENT_SECRET", "")
+# DVLA Vehicle Enquiry Service key — separate from the MOT History API above,
+# only needed for road tax status/due date. Not currently configured.
 DVLA_API_KEY     = os.environ.get("DVLA_API_KEY", "")
 TEST_MODE        = os.environ.get("TEST_MODE", "false").lower() == "true"
 TEST_EMAIL       = os.environ.get("TEST_EMAIL", "dave@redstonepdm.com")
@@ -463,47 +469,87 @@ def admin_required(f):
 
 # ── DVLA MOT Lookup ───────────────────────────────────────────────────────────
 
+_mot_token_cache = {"token": None, "expires_at": 0}
+
+def get_mot_access_token():
+    """Get (and cache) an OAuth2 bearer token for the DVSA MOT History API.
+    Token endpoint is Azure AD; tenant ID below is DVSA's published tenant for
+    this API and is not a secret — the client_id/client_secret are."""
+    now = time.time()
+    if _mot_token_cache["token"] and _mot_token_cache["expires_at"] > now + 30:
+        return _mot_token_cache["token"]
+    token_url = ("https://login.microsoftonline.com/"
+                 "a455b827-244f-4c97-b5b4-ce5d13b4d00c/oauth2/v2.0/token")
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": MOT_CLIENT_ID,
+        "client_secret": MOT_CLIENT_SECRET,
+        "scope": "https://tapi.dvsa.gov.uk/.default",
+    }
+    r = requests.post(token_url, data=data, timeout=10)
+    if r.status_code != 200:
+        raise Exception(f"MOT token request failed: HTTP {r.status_code}: {(r.text or '')[:300]}")
+    body = r.json()
+    token = body["access_token"]
+    _mot_token_cache["token"] = token
+    _mot_token_cache["expires_at"] = now + int(body.get("expires_in", 3600))
+    return token
+
+
 def lookup_mot(reg):
-    if not DVLA_API_KEY:
-        print("MOT LOOKUP: DVLA_API_KEY is not set in environment")
-        return {"status": "unknown", "expiry": None, "error": "DVLA_API_KEY is not set in Railway's environment variables"}
+    if not (MOT_API_KEY and MOT_CLIENT_ID and MOT_CLIENT_SECRET):
+        print("MOT LOOKUP: MOT_API_KEY / MOT_CLIENT_ID / MOT_CLIENT_SECRET not fully set")
+        return {"status": "unknown", "expiry": None,
+                "error": "MOT_API_KEY / MOT_CLIENT_ID / MOT_CLIENT_SECRET not fully set in Railway"}
     try:
         reg_clean = reg.replace(" ", "").upper()
-        url = "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles"
-        headers = {"x-api-key": DVLA_API_KEY, "Content-Type": "application/json"}
-        payload = {"registrationNumber": reg_clean}
-        r = requests.post(url, headers=headers, json=payload, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            mot_expiry_str = data.get("motExpiryDate")
-            mot_expiry = None
-            mot_status = "unknown"
-            if mot_expiry_str:
-                mot_expiry = datetime.strptime(mot_expiry_str, "%Y-%m-%d").date()
-                today = date.today()
-                days_left = (mot_expiry - today).days
+        token = get_mot_access_token()
+        url = f"https://history.mot.api.gov.uk/v1/trade/vehicles/registration/{reg_clean}"
+        headers = {"Authorization": f"Bearer {token}", "X-API-Key": MOT_API_KEY}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 404:
+            return {"status": "error", "expiry": None, "error": f"No DVSA record found for {reg_clean}"}
+        if r.status_code != 200:
+            body_snippet = (r.text or "")[:300]
+            print(f"MOT LOOKUP FAILED for {reg}: HTTP {r.status_code} — {body_snippet}")
+            return {"status": "error", "expiry": None,
+                    "error": f"MOT History API returned HTTP {r.status_code}: {body_snippet}"}
+
+        data = r.json()
+        tests = data.get("motTests") or []
+        mot_expiry = None
+        mot_status = "unknown"
+        if tests:
+            # Tests come back most-recent-first from this API
+            latest = tests[0]
+            if latest.get("testResult", "").upper() == "PASSED" and latest.get("expiryDate"):
+                mot_expiry = datetime.strptime(latest["expiryDate"], "%Y-%m-%d").date()
+                days_left = (mot_expiry - date.today()).days
                 if days_left < 0:
                     mot_status = "expired"
                 elif days_left <= 30:
                     mot_status = "due_soon"
                 else:
                     mot_status = "valid"
-            return {
-                "status": mot_status, "expiry": mot_expiry,
-                "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
-                "make": data.get("make", ""), "colour": data.get("colour", ""),
-                "year": data.get("yearOfManufacture"),
-                "tax_status": data.get("taxStatus"),
-                "tax_due_date": data.get("taxDueDate"),
-            }
-        else:
-            body_snippet = (r.text or "")[:300]
-            print(f"MOT LOOKUP FAILED for {reg}: HTTP {r.status_code} — {body_snippet}")
-            return {"status": "error", "expiry": None,
-                    "error": f"DVLA returned HTTP {r.status_code}: {body_snippet}"}
+            else:
+                mot_status = "expired"  # most recent test was a fail/other, treat as not valid
+
+        return {
+            "status": mot_status, "expiry": mot_expiry,
+            "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
+            "make": data.get("make", ""), "colour": data.get("primaryColour", ""),
+            "year": (data.get("manufactureDate") or "")[:4] or None,
+            # Tax status/due date needs the separate DVLA Vehicle Enquiry
+            # Service (a different key, DVLA_API_KEY) which isn't configured —
+            # left blank rather than guessed.
+            "tax_status": None,
+            "tax_due_date": None,
+        }
     except Exception as e:
         print(f"MOT LOOKUP EXCEPTION for {reg}: {type(e).__name__}: {e}")
         return {"status": "error", "expiry": None, "error": f"{type(e).__name__}: {e}"}
+
+
 
 
 
