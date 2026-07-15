@@ -7,6 +7,7 @@ Contractors log in, complete job cards, system generates PDFs and emails.
 
 import os
 import io
+import re
 import json
 import math
 import requests
@@ -326,6 +327,25 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_annual NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mot_cost NUMERIC(6,2) DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS road_tax_cost NUMERIC(6,2) DEFAULT 0",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS tax_status TEXT",
+        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS tax_due_date DATE",
+        "ALTER TABLE fleet_settings ADD COLUMN IF NOT EXISTS total_insurance_annual NUMERIC(8,2) DEFAULT 0",
+        """CREATE TABLE IF NOT EXISTS vehicle_congestion_charges (
+            id SERIAL PRIMARY KEY,
+            contractor_key TEXT NOT NULL,
+            vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL,
+            charge_date DATE NOT NULL,
+            job_id TEXT,
+            postcode TEXT,
+            ulez BOOLEAN DEFAULT false,
+            congestion BOOLEAN DEFAULT false,
+            cost NUMERIC(6,2) NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(contractor_key, charge_date)
+        )""",
         """CREATE TABLE IF NOT EXISTS vehicle_servicing (
             id SERIAL PRIMARY KEY,
             vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE CASCADE,
@@ -472,11 +492,45 @@ def lookup_mot(reg):
                 "days_left": (mot_expiry - date.today()).days if mot_expiry else None,
                 "make": data.get("make", ""), "colour": data.get("colour", ""),
                 "year": data.get("yearOfManufacture"),
+                "tax_status": data.get("taxStatus"),
+                "tax_due_date": data.get("taxDueDate"),
             }
         else:
             return {"status": "error", "expiry": None, "error": f"DVLA returned {r.status_code}"}
     except Exception as e:
         return {"status": "error", "expiry": None, "error": str(e)}
+
+
+# ── ULEZ / Congestion Charge Zone Detection ───────────────────────────────────
+# ULEZ now covers everything inside the M25 — approximated here by London
+# postcode area prefixes. The central Congestion Charge zone is much smaller
+# and only roughly bounded by postcode district. Both are heuristics based on
+# postcode text, not true geofencing — good enough to prompt, not to silently
+# auto-charge, which is why this only ever suggests a charge for confirmation.
+
+ULEZ_POSTCODE_AREAS = {
+    "E","EC","N","NW","SE","SW","W","WC",              # Central/Greater London
+    "BR","CR","DA","EN","HA","IG","KT","RM","SM","TW","UB","WD",  # Outer London / M25 ring
+}
+
+CONGESTION_ZONE_DISTRICTS = {
+    "EC1","EC2","EC3","EC4","WC1","WC2","W1","SW1","SE1","N1","E1","E1W",
+}
+
+def check_zone_charge(postcode):
+    """Return dict of {ulez, congestion, cost} based on postcode text heuristics."""
+    if not postcode:
+        return {"ulez": False, "congestion": False, "cost": 0.0}
+    pc = postcode.upper().replace(" ", "")
+    m = re.match(r"^([A-Z]{1,2})(\d)", pc)
+    area = m.group(1) if m else ""
+    district_match = re.match(r"^([A-Z]{1,2}\d[A-Z]?)", pc)
+    district = district_match.group(1) if district_match else ""
+
+    ulez = area in ULEZ_POSTCODE_AREAS
+    congestion = district in CONGESTION_ZONE_DISTRICTS
+    cost = (12.50 if ulez else 0) + (15.00 if congestion else 0)
+    return {"ulez": ulez, "congestion": congestion, "cost": round(cost, 2)}
 
 
 # ── Financial Year Helper (April–March) ──────────────────────────────────────
@@ -1164,12 +1218,16 @@ def dashboard():
         conn.rollback()
         survey_jobs = []
 
+    cur.execute("SELECT van_reg, mot_expiry, mot_status FROM vehicles WHERE contractor_key=%s AND archived=false", (key,))
+    my_vehicle = cur.fetchone()
+
     cur.close()
     conn.close()
     return render_template("dashboard.html", contractor=contractor, jobs=jobs,
                            recent_cards=recent_cards, week_start=week_start,
                            today=today, week_published=week_published,
-                           queried_count=queried_count, survey_jobs=survey_jobs)
+                           queried_count=queried_count, survey_jobs=survey_jobs,
+                           my_vehicle=my_vehicle)
 
 
 @app.route("/job/<job_id>/<card_date>")
@@ -2124,25 +2182,41 @@ def admin_surveys():
 @app.route("/admin/vehicles")
 @admin_required
 def admin_vehicles():
+    period = request.args.get("period", "fy")   # fy | month | all
+    show_archived = request.args.get("archived") == "1"
+
     fy_start, fy_end, fy_label = fy_bounds()
+    today = date.today()
+    if period == "month":
+        p_start = date(today.year, today.month, 1)
+        p_end = today
+        period_label = today.strftime("%B %Y")
+    elif period == "all":
+        p_start = date(2020, 1, 1)
+        p_end = today
+        period_label = "All Time"
+    else:
+        p_start, p_end, period_label = fy_start, fy_end, fy_label
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
         SELECT v.*, c.name as driver_name
         FROM vehicles v
         LEFT JOIN contractors_db c ON c.contractor_key = v.contractor_key
+        WHERE v.archived = %s
         ORDER BY v.redstone_vehicle DESC, c.name
-    """)
+    """, (show_archived,))
     vehicles = cur.fetchall()
 
-    # Servicing totals per vehicle (all-time, for money-pit view) + this FY
+    # Servicing totals per vehicle (all-time, for money-pit view) + selected period
     cur.execute("""
         SELECT vehicle_id,
                COALESCE(SUM(cost),0) as total_cost,
                COUNT(*) as service_count,
-               COALESCE(SUM(cost) FILTER (WHERE service_date BETWEEN %s AND %s),0) as fy_cost
+               COALESCE(SUM(cost) FILTER (WHERE service_date BETWEEN %s AND %s),0) as period_cost
         FROM vehicle_servicing GROUP BY vehicle_id
-    """, (fy_start, fy_end))
+    """, (p_start, p_end))
     servicing_by_vehicle = {r["vehicle_id"]: r for r in cur.fetchall()}
 
     cur.execute("""
@@ -2156,36 +2230,61 @@ def admin_vehicles():
 
     # Fleet settings
     cur.execute("SELECT * FROM fleet_settings WHERE id=1")
-    settings = cur.fetchone() or {"estimated_annual_jobs": 1200, "default_fuel_rate_per_mile": 0.15}
+    settings = cur.fetchone() or {"estimated_annual_jobs": 1200, "default_fuel_rate_per_mile": 0.15, "total_insurance_annual": 0}
 
-    # Fixed overhead this FY: insurance + mot cost (annualised, redstone vans only) + servicing this FY
     redstone_vans = [v for v in vehicles if v["redstone_vehicle"]]
-    total_insurance = sum(float(v["insurance_annual"] or 0) for v in redstone_vans)
+    n_redstone = len(redstone_vans) or 1
+    total_insurance = float(settings["total_insurance_annual"] or 0)
+    insurance_per_van = round(total_insurance / n_redstone, 2)
     total_mot = sum(float(v["mot_cost"] or 0) for v in redstone_vans)
-    total_servicing_fy = sum(float(servicing_by_vehicle.get(v["id"], {}).get("fy_cost", 0) or 0) for v in redstone_vans)
-    fixed_overhead_annual = total_insurance + total_mot + total_servicing_fy
+    total_road_tax = sum(float(v["road_tax_cost"] or 0) for v in redstone_vans)
+    total_servicing_period = sum(float(servicing_by_vehicle.get(v["id"], {}).get("period_cost", 0) or 0) for v in redstone_vans)
+    fixed_overhead_annual = total_insurance + total_mot + total_road_tax + total_servicing_period
     est_jobs = int(settings["estimated_annual_jobs"] or 1200)
     fixed_absorption_per_job = round(fixed_overhead_annual / est_jobs, 2) if est_jobs else 0
 
-    # Actual fuel rate per mile from approved receipts this FY vs company van job mileage this FY
+    # Actual fuel rate per mile from approved receipts vs company van job mileage, selected period
     cur.execute("""
         SELECT COALESCE(SUM(cost),0) as total_fuel_cost, COALESCE(SUM(litres),0) as total_litres
         FROM fuel_receipts WHERE status='approved' AND receipt_date BETWEEN %s AND %s
-    """, (fy_start, fy_end))
+    """, (p_start, p_end))
     fuel_row = cur.fetchone()
     total_fuel_cost = float(fuel_row["total_fuel_cost"] or 0)
 
     redstone_keys = [v["contractor_key"] for v in redstone_vans if v["contractor_key"]]
     company_van_miles = 0
+    parking_by_contractor = {}
     if redstone_keys:
         cur.execute("""
             SELECT COALESCE(SUM(mileage_miles),0) as miles FROM job_cards
             WHERE contractor_key = ANY(%s) AND card_date BETWEEN %s AND %s
-        """, (redstone_keys, fy_start, fy_end))
+        """, (redstone_keys, p_start, p_end))
         company_van_miles = float(cur.fetchone()["miles"] or 0)
+
+        cur.execute("""
+            SELECT contractor_key, COALESCE(SUM(parking_cost),0) as total_parking
+            FROM job_cards WHERE contractor_key = ANY(%s) AND card_date BETWEEN %s AND %s
+            GROUP BY contractor_key
+        """, (redstone_keys, p_start, p_end))
+        parking_by_contractor = {r["contractor_key"]: float(r["total_parking"] or 0) for r in cur.fetchall()}
 
     actual_fuel_rate = round(total_fuel_cost / company_van_miles, 3) if company_van_miles else None
     fuel_rate_used = actual_fuel_rate if actual_fuel_rate else float(settings["default_fuel_rate_per_mile"] or 0.15)
+
+    # Congestion/ULEZ rollup per contractor, selected period
+    congestion_by_contractor = {}
+    total_congestion_cost = 0.0
+    if redstone_keys:
+        cur.execute("""
+            SELECT contractor_key, COALESCE(SUM(cost),0) as total_cost, COUNT(*) as days_charged
+            FROM vehicle_congestion_charges WHERE contractor_key = ANY(%s) AND charge_date BETWEEN %s AND %s
+            GROUP BY contractor_key
+        """, (redstone_keys, p_start, p_end))
+        for r in cur.fetchall():
+            congestion_by_contractor[r["contractor_key"]] = {"total_cost": float(r["total_cost"] or 0), "days_charged": r["days_charged"]}
+            total_congestion_cost += float(r["total_cost"] or 0)
+
+    total_parking_period = sum(parking_by_contractor.values())
 
     # Pending fuel receipts queue
     cur.execute("""
@@ -2202,7 +2301,7 @@ def admin_vehicles():
     """)
     recent_receipts = cur.fetchall()
 
-    # Money pit: average servicing cost across redstone fleet vs each van
+    # Money pit: average servicing cost across redstone fleet (all-time) vs each van
     fleet_avg_servicing = 0
     if redstone_vans:
         fleet_avg_servicing = sum(float(servicing_by_vehicle.get(v["id"], {}).get("total_cost", 0) or 0) for v in redstone_vans) / len(redstone_vans)
@@ -2213,11 +2312,15 @@ def admin_vehicles():
         servicing_by_vehicle=servicing_by_vehicle, servicing_log_by_vehicle=servicing_log_by_vehicle,
         settings=settings, fixed_overhead_annual=fixed_overhead_annual,
         fixed_absorption_per_job=fixed_absorption_per_job, est_jobs=est_jobs,
-        total_insurance=total_insurance, total_mot=total_mot, total_servicing_fy=total_servicing_fy,
+        total_insurance=total_insurance, insurance_per_van=insurance_per_van,
+        total_mot=total_mot, total_road_tax=total_road_tax, total_servicing_period=total_servicing_period,
         actual_fuel_rate=actual_fuel_rate, fuel_rate_used=fuel_rate_used,
         total_fuel_cost=total_fuel_cost, company_van_miles=company_van_miles,
         pending_receipts=pending_receipts, recent_receipts=recent_receipts,
-        fleet_avg_servicing=fleet_avg_servicing, fy_label=fy_label)
+        fleet_avg_servicing=fleet_avg_servicing, fy_label=fy_label,
+        period=period, period_label=period_label, show_archived=show_archived,
+        parking_by_contractor=parking_by_contractor, total_parking_period=total_parking_period,
+        congestion_by_contractor=congestion_by_contractor, total_congestion_cost=total_congestion_cost)
 
 
 @app.route("/admin/vehicles/<int:vid>/refresh_mot", methods=["POST"])
@@ -2231,9 +2334,11 @@ def refresh_mot(vid):
         return jsonify({"ok": False, "error": "Not found"})
     result = lookup_mot(v["van_reg"])
     cur.execute("""
-        UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW()
+        UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW(),
+            tax_status=%s, tax_due_date=%s
         WHERE id=%s
-    """, (result.get("expiry"), result.get("status","unknown"), vid))
+    """, (result.get("expiry"), result.get("status","unknown"),
+          result.get("tax_status"), result.get("tax_due_date"), vid))
     conn.commit()
     cur.close()
     conn.close()
@@ -2245,13 +2350,15 @@ def refresh_mot(vid):
 def refresh_all_mot():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, van_reg FROM vehicles")
+    cur.execute("SELECT id, van_reg FROM vehicles WHERE archived = false")
     vehicles = cur.fetchall()
     updated = 0
     for v in vehicles:
         result = lookup_mot(v["van_reg"])
-        cur.execute("UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW() WHERE id=%s",
-                    (result.get("expiry"), result.get("status","unknown"), v["id"]))
+        cur.execute("""UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW(),
+            tax_status=%s, tax_due_date=%s WHERE id=%s""",
+                    (result.get("expiry"), result.get("status","unknown"),
+                     result.get("tax_status"), result.get("tax_due_date"), v["id"]))
         updated += 1
     conn.commit()
     cur.close()
@@ -2267,14 +2374,17 @@ def update_vehicle(vid):
     cur = conn.cursor()
     cur.execute("""
         UPDATE vehicles SET make_model=%s, year=%s, last_service_mileage=%s,
-            service_interval_miles=%s, notes=%s, insurance_annual=%s, mot_cost=%s, updated_at=NOW()
+            service_interval_miles=%s, notes=%s, mot_cost=%s, purchase_price=%s,
+            road_tax_cost=%s, contractor_key=%s, updated_at=NOW()
         WHERE id=%s
     """, (data.get("make_model"), data.get("year") or None,
           data.get("last_service_mileage") or 0,
           data.get("service_interval_miles") or 12000,
           data.get("notes"),
-          data.get("insurance_annual") or 0,
           data.get("mot_cost") or 0,
+          data.get("purchase_price") or 0,
+          data.get("road_tax_cost") or 0,
+          data.get("contractor_key") or None,
           vid))
     conn.commit()
     cur.close()
@@ -2322,16 +2432,35 @@ def delete_vehicle_servicing(sid):
     return jsonify({"ok": True})
 
 
+@app.route("/admin/vehicles/<int:vid>/service_history/print")
+@admin_required
+def print_service_history(vid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT v.*, c.name as driver_name FROM vehicles v LEFT JOIN contractors_db c ON c.contractor_key = v.contractor_key WHERE v.id=%s", (vid,))
+    vehicle = cur.fetchone()
+    cur.execute("SELECT * FROM vehicle_servicing WHERE vehicle_id=%s ORDER BY service_date ASC", (vid,))
+    log = cur.fetchall()
+    cur.close()
+    conn.close()
+    if not vehicle:
+        return "Vehicle not found", 404
+    total_spend = sum(float(s["cost"] or 0) for s in log)
+    return render_template("vehicle_service_print.html", vehicle=vehicle, log=log, total_spend=total_spend)
+
+
 @app.route("/admin/fleet_settings/save", methods=["POST"])
 @admin_required
 def save_fleet_settings():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        UPDATE fleet_settings SET estimated_annual_jobs=%s, default_fuel_rate_per_mile=%s, updated_at=NOW()
+        UPDATE fleet_settings SET estimated_annual_jobs=%s, default_fuel_rate_per_mile=%s,
+            total_insurance_annual=%s, updated_at=NOW()
         WHERE id=1
     """, (request.form.get("estimated_annual_jobs") or 1200,
-          request.form.get("default_fuel_rate_per_mile") or 0.15))
+          request.form.get("default_fuel_rate_per_mile") or 0.15,
+          request.form.get("total_insurance_annual") or 0))
     conn.commit()
     cur.close()
     conn.close()
@@ -2370,6 +2499,7 @@ def add_vehicle():
             make_model=EXCLUDED.make_model, year=EXCLUDED.year,
             contractor_key=EXCLUDED.contractor_key,
             redstone_vehicle=EXCLUDED.redstone_vehicle,
+            archived=false,
             updated_at=NOW()
     """, (
         data.get("van_reg","").upper().replace(" ",""),
@@ -2388,12 +2518,24 @@ def add_vehicle():
     return jsonify({"ok": True})
 
 
-@app.route("/admin/vehicles/<int:vid>/delete", methods=["POST"])
+@app.route("/admin/vehicles/<int:vid>/archive", methods=["POST"])
 @admin_required
-def delete_vehicle(vid):
+def archive_vehicle(vid):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM vehicles WHERE id=%s", (vid,))
+    cur.execute("UPDATE vehicles SET archived=true, updated_at=NOW() WHERE id=%s", (vid,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/vehicles/<int:vid>/unarchive", methods=["POST"])
+@admin_required
+def unarchive_vehicle(vid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE vehicles SET archived=false, updated_at=NOW() WHERE id=%s", (vid,))
     conn.commit()
     cur.close()
     conn.close()
@@ -2881,6 +3023,67 @@ def save_note():
     cur.close()
     conn.close()
     return jsonify({"ok": True})
+
+
+@app.route("/api/congestion_check")
+@login_required
+def api_congestion_check():
+    """Given a postcode, tells the job card whether to prompt for a ULEZ/Congestion
+    charge — only relevant for engineers driving a Redstone-owned van, and only
+    once per contractor per day (own-vehicle engineers are never charged)."""
+    key = session["contractor_key"]
+    postcode = request.args.get("postcode", "")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT redstone_vehicle FROM vehicles WHERE contractor_key=%s", (key,))
+    v = cur.fetchone()
+    if not v or not v["redstone_vehicle"]:
+        cur.close(); conn.close()
+        return jsonify({"prompt": False, "reason": "not_company_van"})
+
+    cur.execute("SELECT id FROM vehicle_congestion_charges WHERE contractor_key=%s AND charge_date=%s",
+                (key, date.today()))
+    already = cur.fetchone()
+    cur.close()
+    conn.close()
+    if already:
+        return jsonify({"prompt": False, "reason": "already_logged_today"})
+
+    zone = check_zone_charge(postcode)
+    if not zone["ulez"] and not zone["congestion"]:
+        return jsonify({"prompt": False, "reason": "not_in_zone"})
+    return jsonify({"prompt": True, **zone})
+
+
+@app.route("/api/congestion_log", methods=["POST"])
+@login_required
+def api_congestion_log():
+    key = session["contractor_key"]
+    data = request.get_json() or {}
+    postcode = data.get("postcode", "")
+    job_id = data.get("job_id")
+    zone = check_zone_charge(postcode)
+    cost = data.get("cost", zone["cost"])
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM vehicles WHERE contractor_key=%s", (key,))
+    v = cur.fetchone()
+    vehicle_id = v["id"] if v else None
+    try:
+        cur.execute("""
+            INSERT INTO vehicle_congestion_charges
+                (contractor_key, vehicle_id, charge_date, job_id, postcode, ulez, congestion, cost)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (contractor_key, charge_date) DO NOTHING
+        """, (key, vehicle_id, date.today(), job_id, postcode, zone["ulez"], zone["congestion"], cost))
+        conn.commit()
+        ok = True
+    except Exception:
+        conn.rollback()
+        ok = False
+    cur.close()
+    conn.close()
+    return jsonify({"ok": ok})
 
 
 @app.route("/api/my_note")
