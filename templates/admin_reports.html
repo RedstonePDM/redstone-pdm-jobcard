@@ -1,1 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reports — Redstone PDM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+.topbar { background: #1a2332; height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.topbar-brand { font-weight: 700; font-size: 18px; color: white; cursor: pointer; }
+.topbar-brand span { color: #c0392b; }
+.topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+.topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+
+.page { max-width: 1200px; margin: 0 auto; padding: 28px 20px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.page-header h2 { font-size: 22px; font-weight: 700; color: #1a2332; }
+.page-header .sub { font-size: 13px; color: #888; margin-top: 3px; }
+
+/* Year selector */
+.year-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+.year-btn { padding: 7px 16px; border-radius: 20px; border: 1.5px solid #e0e0e0; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #666; transition: all 0.15s; }
+.year-btn.active { background: #1a2332; color: white; border-color: #1a2332; }
+
+/* KPI cards */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.kpi { background: white; border-radius: 12px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-left: 4px solid #e0e0e0; }
+.kpi.green  { border-left-color: #27ae60; }
+.kpi.red    { border-left-color: #c0392b; }
+.kpi.amber  { border-left-color: #e6a817; }
+.kpi.blue   { border-left-color: #1a4fa0; }
+.kpi.purple { border-left-color: #8e44ad; }
+.kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #888; margin-bottom: 6px; }
+.kpi-value { font-size: 26px; font-weight: 800; color: #1a2332; line-height: 1; }
+.kpi-sub   { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+/* Section cards */
+.section-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 20px; }
+.section-title { font-size: 14px; font-weight: 700; color: #1a2332; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-title .actions { display: flex; gap: 8px; }
+
+/* Charts grid */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+@media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+.chart-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.chart-title { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 14px; }
+
+/* Outcomes table */
+.outcomes-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.outcomes-table th { background: #1a2332; color: white; padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+.outcomes-table td { padding: 9px 12px; border-bottom: 1px solid #f0f2f5; color: #1a2332; vertical-align: top; }
+.outcomes-table tr:hover td { background: #f8f9fb; }
+.outcome-pill { padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+.op-won        { background: #e8f5e9; color: #1b5e20; }
+.op-lost       { background: #fdf0ef; color: #c0392b; }
+.op-cancelled  { background: #fff8e1; color: #856404; }
+
+/* Quote machine alert */
+.qm-list { display: flex; flex-direction: column; gap: 8px; }
+.qm-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 8px; }
+.qm-name { font-size: 13px; font-weight: 600; color: #1a2332; }
+.qm-count { font-size: 12px; color: #856404; }
+
+/* Trade breakdown table */
+.trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.trade-table th { padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; border-bottom: 2px solid #f0f2f5; }
+.trade-table td { padding: 7px 10px; border-bottom: 1px solid #f5f5f5; }
+.trade-bar { height: 6px; border-radius: 3px; background: #e0e0e0; margin-top: 3px; }
+.trade-bar-fill { height: 100%; border-radius: 3px; }
+
+/* Notes drawer */
+.notes-drawer-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; }
+.notes-drawer-overlay.active { display: block; }
+.notes-drawer { position: fixed; right: 0; top: 0; width: 420px; max-width: 95vw; height: 100vh; background: white; z-index: 201; box-shadow: -4px 0 20px rgba(0,0,0,0.15); display: flex; flex-direction: column; }
+.notes-drawer-header { background: #1a2332; color: white; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.notes-drawer-header h3 { font-size: 14px; font-weight: 700; }
+.notes-close { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 20px; cursor: pointer; }
+.notes-body { flex: 1; overflow-y: auto; padding: 16px; }
+.note-item { margin-bottom: 14px; padding: 12px 14px; background: #f8f9fb; border-radius: 8px; border-left: 3px solid #1a4fa0; }
+.note-time { font-size: 10px; color: #aaa; margin-bottom: 4px; }
+.note-text { font-size: 13px; color: #1a2332; line-height: 1.5; }
+.notes-footer { padding: 14px 16px; border-top: 1px solid #e0e0e0; flex-shrink: 0; }
+.notes-footer textarea { width: 100%; padding: 10px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-family: inherit; resize: none; min-height: 70px; outline: none; }
+.notes-footer textarea:focus { border-color: #1a4fa0; }
+.notes-footer button { margin-top: 8px; width: 100%; padding: 9px; background: #1a2332; color: white; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+/* Buttons */
+.btn { padding: 8px 16px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+.btn-dark   { background: #1a2332; color: white; }
+.btn-dark:hover { background: #111926; }
+.btn-red    { background: #c0392b; color: white; }
+.btn-red:hover  { background: #a93226; }
+.btn-outline { background: white; color: #1a2332; border: 1.5px solid #e0e0e0; }
+.btn-outline:hover { border-color: #1a2332; }
+
+.empty-state { text-align: center; padding: 40px; color: #aaa; font-size: 13px; }
+.loading { text-align: center; padding: 30px; color: #bbb; font-size: 13px; }
+
+.win-rate-circle { display: flex; align-items: center; justify-content: center; flex-direction: column; }
+.win-rate-big { font-size: 48px; font-weight: 800; color: #27ae60; line-height: 1; }
+.win-rate-label { font-size: 13px; color: #888; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/surveys">Surveys</a>
+    <a href="/admin/jobcards">Job Cards</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>📊 Business Analytics</h2>
+      <div class="sub">Quote pipeline, win/loss, cancellations and survey efficiency</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a id="btn-cancel-pdf" href="/admin/reports/cancellations/pdf?year=2026" target="_blank" class="btn btn-red">📄 Cancellation Register PDF</a>
+    </div>
+  </div>
+
+  <!-- Year selector -->
+  <div class="year-bar" id="year-bar"></div>
+
+  <!-- KPI row -->
+  <div class="kpi-row" id="kpi-row">
+    <div class="loading">Loading...</div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Win / Loss Trend (12 months)</div>
+      <canvas id="chart-trend" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Overall Win Rate</div>
+      <div class="win-rate-circle" style="height:180px">
+        <div class="win-rate-big" id="win-rate-pct">—</div>
+        <div class="win-rate-label">of decided quotes won</div>
+        <canvas id="chart-donut" height="100" style="margin-top:10px;max-width:120px"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lost reasons + Trade breakdown -->
+  <div class="charts-grid">
+    <div class="section-card">
+      <div class="section-title">Lost Reasons</div>
+      <canvas id="chart-reasons" height="200"></canvas>
+    </div>
+    <div class="section-card">
+      <div class="section-title">Win/Loss by Trade Type</div>
+      <table class="trade-table" id="trade-table">
+        <thead><tr><th>Trade</th><th>Wins</th><th>Losses</th><th>Cancelled</th></tr></thead>
+        <tbody id="trade-tbody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Quote machine alert -->
+  <div class="section-card" id="qm-section" style="display:none">
+    <div class="section-title">
+      ⚠️ Quote Machine Alert
+      <span style="font-size:11px;color:#888;font-weight:400">Sites with 3+ surveys and zero wins</span>
+    </div>
+    <div class="qm-list" id="qm-list"></div>
+  </div>
+
+  <!-- Outcomes detail table -->
+  <div class="section-card">
+    <div class="section-title">
+      All Outcomes
+      <div class="actions">
+        <select id="filter-outcome" class="btn btn-outline" onchange="filterOutcomes()" style="font-weight:600;font-size:12px">
+          <option value="">All outcomes</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="outcomes-table" id="outcomes-table">
+        <thead>
+          <tr>
+            <th>Job Ref</th>
+            <th>Site</th>
+            <th>Trade</th>
+            <th>Outcome</th>
+            <th>Wisdom Status</th>
+            <th>Reason</th>
+            <th>Date</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="outcomes-tbody">
+          <tr><td colspan="8" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Notes drawer -->
+<div class="notes-drawer-overlay" id="notes-overlay" onclick="closeNotes()"></div>
+<div class="notes-drawer" id="notes-drawer">
+  <div class="notes-drawer-header">
+    <h3 id="notes-drawer-title">Notes</h3>
+    <button class="notes-close" onclick="closeNotes()">×</button>
+  </div>
+  <div class="notes-body" id="notes-body"></div>
+  <div class="notes-footer">
+    <textarea id="note-input" placeholder="Add a note..."></textarea>
+    <button onclick="saveNote()">Save Note</button>
+  </div>
+</div>
+
+<script>
+let allOutcomes = [];
+let currentOutcomeId = null;
+let currentYear = new Date().getFullYear();
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  buildYearBar();
+  loadAll();
+});
+
+function buildYearBar() {
+  const bar = document.getElementById('year-bar');
+  const years = [];
+  for (let y = 2024; y <= currentYear + 1; y++) years.push(y);
+  bar.innerHTML = years.map(y =>
+    `<button class="year-btn${y === currentYear ? ' active' : ''}" onclick="setYear(${y})">${y}</button>`
+  ).join('');
+  document.getElementById('btn-cancel-pdf').href =
+    `/admin/reports/cancellations/pdf?year=${currentYear}`;
+}
+
+function setYear(y) {
+  currentYear = y;
+  buildYearBar();
+  loadAll();
+}
+
+async function loadAll() {
+  const [summary, outcomes] = await Promise.all([
+    fetch('/api/reports/summary').then(r => r.json()),
+    fetch('/api/reports/outcomes').then(r => r.json()),
+  ]);
+  allOutcomes = outcomes;
+  renderKPIs(summary);
+  renderCharts(summary);
+  renderOutcomes(outcomes);
+  renderQuoteMachines(summary.quote_machines || []);
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+function renderKPIs(d) {
+  const total = (d.wins || 0) + (d.losses || 0);
+  const rate = total > 0 ? Math.round((d.wins / total) * 100) : 0;
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi green">
+      <div class="kpi-label">Wins</div>
+      <div class="kpi-value">${d.wins || 0}</div>
+      <div class="kpi-sub">Quote requests won</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">Lost</div>
+      <div class="kpi-value">${d.losses || 0}</div>
+      <div class="kpi-sub">Declined or withdrawn</div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-label">Cancelled</div>
+      <div class="kpi-value">${d.cancellations || 0}</div>
+      <div class="kpi-sub">${d.cancellations_ytd || 0} this year</div>
+    </div>
+    <div class="kpi blue">
+      <div class="kpi-label">Pipeline</div>
+      <div class="kpi-value">${d.pipeline_count || 0}</div>
+      <div class="kpi-sub">£${fmt(d.pipeline_value || 0)} awaiting decision</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Won Value</div>
+      <div class="kpi-value">£${fmt(d.won_value || 0)}</div>
+      <div class="kpi-sub">Approved quote value</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value">${rate}%</div>
+      <div class="kpi-sub">Of all decided quotes</div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-label">Avg Survey Time</div>
+      <div class="kpi-value">${d.avg_survey_days || '—'}</div>
+      <div class="kpi-sub">Days from release to survey</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">Survey Travel Cost</div>
+      <div class="kpi-value">£${fmt(d.survey_mileage_cost || 0)}</div>
+      <div class="kpi-sub">Mileage @ 45p across ${d.surveys_with_mileage || 0} surveys</div>
+    </div>
+  `;
+  document.getElementById('win-rate-pct').textContent = rate + '%';
+}
+
+function fmt(n) {
+  return parseFloat(n).toLocaleString('en-GB', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+let chartTrend, chartDonut, chartReasons;
+
+function renderCharts(d) {
+  // Trend chart
+  const trend = d.monthly_trend || [];
+  const tCtx = document.getElementById('chart-trend').getContext('2d');
+  if (chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(tCtx, {
+    type: 'bar',
+    data: {
+      labels: trend.map(r => r.month),
+      datasets: [
+        { label: 'Wins', data: trend.map(r => r.wins), backgroundColor: '#27ae60' },
+        { label: 'Lost', data: trend.map(r => r.losses), backgroundColor: '#c0392b' },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: false }, y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+
+  // Donut
+  const dCtx = document.getElementById('chart-donut').getContext('2d');
+  if (chartDonut) chartDonut.destroy();
+  const wins = d.wins || 0, losses = d.losses || 0, cancels = d.cancellations || 0;
+  chartDonut = new Chart(dCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Won', 'Lost', 'Cancelled'],
+      datasets: [{ data: [wins, losses, cancels],
+        backgroundColor: ['#27ae60','#c0392b','#e6a817'],
+        borderWidth: 2 }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
+  });
+
+  // Lost reasons bar
+  const reasons = d.lost_reasons || [];
+  const rCtx = document.getElementById('chart-reasons').getContext('2d');
+  if (chartReasons) chartReasons.destroy();
+  chartReasons = new Chart(rCtx, {
+    type: 'bar',
+    data: {
+      labels: reasons.map(r => r.wisdom_reason || 'Unknown'),
+      datasets: [{ label: 'Count', data: reasons.map(r => r.cnt),
+        backgroundColor: '#c0392b' }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+
+  // Trade breakdown table
+  const trades = d.by_trade || [];
+  const maxTotal = Math.max(...trades.map(t => (t.wins||0)+(t.losses||0)+(t.cancellations||0)), 1);
+  document.getElementById('trade-tbody').innerHTML = trades.length === 0
+    ? '<tr><td colspan="4" class="empty-state">No data yet</td></tr>'
+    : trades.map(t => {
+        const total = (t.wins||0)+(t.losses||0)+(t.cancellations||0);
+        const pct = Math.round(((t.wins||0)/total)*100);
+        return `<tr>
+          <td><div style="font-weight:600">${t.trade_type}</div>
+              <div class="trade-bar"><div class="trade-bar-fill" style="width:${Math.round(total/maxTotal*100)}%;background:#1a4fa0"></div></div>
+          </td>
+          <td style="color:#27ae60;font-weight:700">${t.wins||0}</td>
+          <td style="color:#c0392b;font-weight:700">${t.losses||0}</td>
+          <td style="color:#e6a817;font-weight:700">${t.cancellations||0}</td>
+        </tr>`;
+      }).join('');
+}
+
+// ── Quote Machines ────────────────────────────────────────────────────────────
+function renderQuoteMachines(qms) {
+  const section = document.getElementById('qm-section');
+  const list = document.getElementById('qm-list');
+  if (!qms.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = qms.map(q => `
+    <div class="qm-item">
+      <div class="qm-name">🚨 ${q.pub_name}</div>
+      <div class="qm-count">${q.surveys} surveys · 0 wins</div>
+    </div>`).join('');
+}
+
+// ── Outcomes Table ────────────────────────────────────────────────────────────
+function filterOutcomes() {
+  const f = document.getElementById('filter-outcome').value;
+  const filtered = f ? allOutcomes.filter(o => o.outcome === f) : allOutcomes;
+  renderOutcomes(filtered);
+}
+
+function renderOutcomes(outcomes) {
+  const tbody = document.getElementById('outcomes-tbody');
+  if (!outcomes.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No outcomes recorded yet — they will appear automatically after each sync.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = outcomes.map(o => {
+    const pillClass = { won:'op-won', lost:'op-lost', cancelled:'op-cancelled' }[o.outcome] || '';
+    const detDate = o.detected_at ? o.detected_at.substring(0,10) : '—';
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${o.display_id||o.job_id||'—'}</td>
+      <td style="font-weight:600">${o.pub_name||'—'}</td>
+      <td style="font-size:12px">${o.trade_type||'—'}</td>
+      <td><span class="outcome-pill ${pillClass}">${o.outcome||'—'}</span></td>
+      <td style="font-size:12px;color:#888">${o.wisdom_status||'—'}</td>
+      <td style="font-size:12px;max-width:200px">${o.wisdom_reason||'—'}</td>
+      <td style="font-size:12px;color:#888">${detDate}</td>
+      <td><button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="openNotes(${o.id},'${(o.pub_name||'').replace(/'/g,"\\'")}')">📝 Notes</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Notes ─────────────────────────────────────────────────────────────────────
+async function openNotes(outcomeId, pubName) {
+  currentOutcomeId = outcomeId;
+  document.getElementById('notes-drawer-title').textContent = `Notes — ${pubName}`;
+  document.getElementById('notes-body').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('notes-overlay').classList.add('active');
+  document.getElementById('notes-drawer').style.right = '0';
+  document.getElementById('note-input').value = '';
+
+  const notes = await fetch(`/api/reports/outcome/${outcomeId}/notes`).then(r => r.json());
+  const body = document.getElementById('notes-body');
+  if (!notes.length) {
+    body.innerHTML = '<div class="empty-state">No notes yet. Add the first one below.</div>';
+  } else {
+    body.innerHTML = notes.map(n => `
+      <div class="note-item">
+        <div class="note-time">${n.created_at.substring(0,16).replace('T',' ')}</div>
+        <div class="note-text">${n.note}</div>
+      </div>`).join('');
+  }
+}
+
+function closeNotes() {
+  document.getElementById('notes-overlay').classList.remove('active');
+  document.getElementById('notes-drawer').style.right = '-420px';
+  currentOutcomeId = null;
+}
+
+async function saveNote() {
+  const note = document.getElementById('note-input').value.trim();
+  if (!note || !currentOutcomeId) return;
+  const res = await fetch(`/api/reports/outcome/${currentOutcomeId}/notes`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ note })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById('note-input').value = '';
+    await openNotes(currentOutcomeId,
+      document.getElementById('notes-drawer-title').textContent.replace('Notes — ',''));
+  }
+}
+</script>
+</body>
+</html>
 
