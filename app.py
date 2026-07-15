@@ -2333,6 +2333,14 @@ def refresh_mot(vid):
     if not v:
         return jsonify({"ok": False, "error": "Not found"})
     result = lookup_mot(v["van_reg"])
+    if result.get("status") in ("error", "unknown"):
+        # Lookup failed (bad key, DVLA down, rate limited, etc) — never wipe
+        # existing MOT/tax data with a blank. Just record that we tried.
+        cur.execute("UPDATE vehicles SET mot_checked_at=NOW() WHERE id=%s", (vid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"ok": False, "error": result.get("error", "Lookup returned no data — DVLA may be unavailable, or check DVLA_API_KEY.")})
     cur.execute("""
         UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW(),
             tax_status=%s, tax_due_date=%s
@@ -2353,8 +2361,13 @@ def refresh_all_mot():
     cur.execute("SELECT id, van_reg FROM vehicles WHERE archived = false")
     vehicles = cur.fetchall()
     updated = 0
+    failed = 0
     for v in vehicles:
         result = lookup_mot(v["van_reg"])
+        if result.get("status") in ("error", "unknown"):
+            cur.execute("UPDATE vehicles SET mot_checked_at=NOW() WHERE id=%s", (v["id"],))
+            failed += 1
+            continue
         cur.execute("""UPDATE vehicles SET mot_expiry=%s, mot_status=%s, mot_checked_at=NOW(),
             tax_status=%s, tax_due_date=%s WHERE id=%s""",
                     (result.get("expiry"), result.get("status","unknown"),
@@ -2363,7 +2376,7 @@ def refresh_all_mot():
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"ok": True, "updated": updated})
+    return jsonify({"ok": True, "updated": updated, "failed": failed})
 
 
 @app.route("/admin/vehicles/<int:vid>/update", methods=["POST"])
