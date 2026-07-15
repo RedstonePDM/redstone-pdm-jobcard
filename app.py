@@ -3033,8 +3033,7 @@ def admin_survey_pdf(survey_id):
     cur = conn.cursor()
     cur.execute("""
         SELECT sf.*,
-               COALESCE(j.display_id, sf.job_id) as display_id,
-               COALESCE(sf.quote_subcontractor_json, '[]'::jsonb) as quote_subcontractor_json
+               COALESCE(j.display_id, sf.job_id) as display_id_resolved
         FROM survey_forms sf
         LEFT JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
         WHERE sf.id = %s
@@ -3043,6 +3042,16 @@ def admin_survey_pdf(survey_id):
     cur.close(); conn.close()
     if not s:
         return "Not found", 404
+    s = dict(s)
+    # Ensure all json fields are lists, never None
+    s['display_id'] = s.get('display_id_resolved') or s.get('job_id','')
+    for field in ['quote_labour_json','quote_subcontractor_json','quote_materials_json','quote_plant_json','quote_prelim_json']:
+        if not s.get(field):
+            s[field] = []
+    # Ensure text fields are strings
+    for field in ['scope_of_works','pub_name','postcode','trade_type']:
+        if not s.get(field):
+            s[field] = ''
 
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -3110,19 +3119,19 @@ def admin_survey_pdf(survey_id):
     elems.append(Spacer(1, 6*mm))
 
     # Scope
-    if s["scope_of_works"]:
+    if s.get("scope_of_works"):
         elems.append(Paragraph("Description of Works", h2))
         elems.append(Spacer(1,2*mm))
-        elems.append(Paragraph(s["scope_of_works"].replace('\n','<br/>'), body))
+        elems.append(Paragraph((s["scope_of_works"] or '').replace('\n','<br/>'), body))
         elems.append(Spacer(1,5*mm))
 
     # Line items
     sections = [
-        ("Labour", s["quote_labour_json"] or [], False),
-        ("Subcontractor", s.get("quote_subcontractor_json") or [], True),
-        ("Materials", s["quote_materials_json"] or [], True),
-        ("Plant & Equipment", s["quote_plant_json"] or [], False),
-        ("Prelim / Mobilisation", s["quote_prelim_json"] or [], False),
+        ("Labour", s['quote_labour_json'] or [], False),
+        ("Subcontractor", s['quote_subcontractor_json'] or [], True),
+        ("Materials", s['quote_materials_json'] or [], True),
+        ("Plant & Equipment", s['quote_plant_json'] or [], False),
+        ("Prelim / Mobilisation", s['quote_prelim_json'] or [], False),
     ]
 
     labour_total = materials_total = plant_total = prelim_total = 0
