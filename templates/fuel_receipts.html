@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fuel Receipts — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+  .topbar {
+    background: #1a2332; color: white; padding: 0 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 14px; border-radius: 6px; }
+  .topbar-nav a:hover { background: rgba(255,255,255,0.15); color: white; }
+
+  .page { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+  .page-title { font-size: 20px; font-weight: 800; color: #1a2332; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #888; margin-bottom: 20px; }
+
+  .card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .card h3 { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 16px; }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
+  input { width: 100%; padding: 10px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; color: #1a2332; }
+  input:focus { outline: none; border-color: #c0392b; }
+  input[type=file] { padding: 8px; font-size: 13px; }
+
+  .btn { padding: 12px 18px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; width: 100%; }
+  .btn-primary { background: #c0392b; color: white; }
+  .btn-primary:hover { background: #a93226; }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+  .receipt-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    background: #fafbfc; border-radius: 10px; margin-bottom: 8px; border: 1.5px solid #f0f2f5;
+  }
+  .r-icon { font-size: 20px; }
+  .r-info { flex: 1; }
+  .r-date { font-size: 13px; font-weight: 700; color: #1a2332; }
+  .r-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .status-pill { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .status-pill.pending  { background: #fff8ef; color: #c77a10; }
+  .status-pill.approved { background: #effdf4; color: #1a7a4a; }
+  .status-pill.rejected { background: #fdf0ef; color: #c0392b; }
+
+  .empty-state { text-align: center; padding: 24px; color: #aaa; font-size: 13px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #1a2332; color: white; padding: 12px 22px; border-radius: 8px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/dashboard'">Redstone <span>PDM</span></div>
+  <div class="topbar-nav">
+    <a href="/dashboard">← Home</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-title">⛽ Fuel Receipts</div>
+  <div class="page-sub">Log any fuel bought on the company card. Redstone reviews and approves each one.</div>
+
+  <div class="card">
+    <h3>Add a receipt</h3>
+    <form id="fuel-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="receipt-date" required>
+        </div>
+        <div class="form-group">
+          <label>Van Registration</label>
+          <input type="text" id="van-reg" value="{{ van_reg or '' }}" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Litres</label>
+          <input type="number" step="0.01" id="litres" placeholder="e.g. 65.4">
+        </div>
+        <div class="form-group">
+          <label>Total Cost (£)</label>
+          <input type="number" step="0.01" id="cost" placeholder="e.g. 98.50" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Odometer Reading (optional)</label>
+        <input type="number" id="odometer" placeholder="Current mileage">
+      </div>
+      <div class="form-group">
+        <label>Photo of Receipt</label>
+        <input type="file" id="receipt-photo" accept="image/*" capture="environment">
+      </div>
+      <button type="submit" class="btn btn-primary" id="submit-btn">Submit Receipt</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Your Receipts</h3>
+    {% if receipts %}
+      {% for r in receipts %}
+      <div class="receipt-row">
+        <div class="r-icon">⛽</div>
+        <div class="r-info">
+          <div class="r-date">{{ r.receipt_date.strftime('%d %b %Y') if r.receipt_date else '' }} — £{{ '%.2f'|format(r.cost or 0) }}</div>
+          <div class="r-meta">{{ r.van_reg or '' }}{% if r.litres %} · {{ r.litres }}L{% endif %}{% if r.odometer %} · {{ '{:,}'.format(r.odometer) }} mi{% endif %}</div>
+        </div>
+        <span class="status-pill {{ r.status }}">{{ r.status|capitalize }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No fuel receipts submitted yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  document.getElementById('receipt-date').valueAsDate = new Date();
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  document.getElementById('fuel-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+
+    const form = new FormData();
+    form.append('receipt_date', document.getElementById('receipt-date').value);
+    form.append('van_reg', document.getElementById('van-reg').value);
+    form.append('litres', document.getElementById('litres').value);
+    form.append('cost', document.getElementById('cost').value);
+    form.append('odometer', document.getElementById('odometer').value);
+    const photo = document.getElementById('receipt-photo').files[0];
+    if (photo) form.append('receipt_photo', photo);
+
+    try {
+      const res = await fetch('/fuel_receipts/submit', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('Receipt submitted for approval');
+        setTimeout(() => location.reload(), 900);
+      } else {
+        showToast('Error submitting receipt');
+        btn.disabled = false; btn.textContent = 'Submit Receipt';
+      }
+    } catch (err) {
+      showToast('Network error — try again');
+      btn.disabled = false; btn.textContent = 'Submit Receipt';
+    }
+  });
+</script>
+</body>
+</html>
