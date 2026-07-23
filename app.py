@@ -3833,7 +3833,148 @@ def admin_survey_pdf(survey_id):
 
 # ── Reports Routes ────────────────────────────────────────────────────────────
 
-@app.route("/admin/reports")
+@app.route("/admin/margin")
+@admin_required
+def admin_margin():
+    period = request.args.get("period", "fy")
+    fy_start, fy_end, fy_label = fy_bounds()
+    today = date.today()
+    if period == "month":
+        p_start = date(today.year, today.month, 1)
+        p_end = today
+        period_label = today.strftime("%B %Y")
+    elif period == "all":
+        p_start = date(2020, 1, 1)
+        p_end = today
+        period_label = "All Time"
+    else:
+        p_start, p_end, period_label = fy_start, fy_end, fy_label
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Cost side: aggregate every job card by job_id (labour + materials + admin
+    # materials + parking — fleet/fuel costs are tracked separately on the
+    # Fleet Economics page and deliberately excluded here to avoid double-counting).
+    cur.execute("""
+        SELECT jc.job_id,
+               COALESCE(SUM(jc.labour_cost),0) as labour_cost,
+               COALESCE(SUM(jc.materials_total),0) as materials_cost,
+               COALESCE(SUM(jc.admin_materials_total),0) as admin_materials_cost,
+               COALESCE(SUM(jc.parking_cost),0) as parking_cost,
+               COUNT(*) as card_count,
+               MAX(jc.card_date) as last_card_date
+        FROM job_cards jc
+        WHERE jc.card_date BETWEEN %s AND %s
+        GROUP BY jc.job_id
+    """, (p_start, p_end))
+    cost_rows = {r["job_id"]: r for r in cur.fetchall()}
+
+    # Revenue side, reactive/MIV/PPM: scraped Wisdom "agreed" totals
+    cur.execute("SELECT job_id, display_id, job_type, total_agreed, status, payment_date FROM job_wetherspoons_costs")
+    wisdom_costs = {r["job_id"]: r for r in cur.fetchall()}
+
+    # Revenue side, quoted (5000): what was actually quoted and won
+    cur.execute("""
+        SELECT job_id, quote_total, outcome, pub_name, trade_type
+        FROM survey_forms WHERE outcome = 'won'
+    """)
+    won_quotes = {r["job_id"]: r for r in cur.fetchall()}
+
+    # Job metadata (pub name, trade) for jobs not already covered above
+    all_job_ids = set(cost_rows.keys()) | set(wisdom_costs.keys()) | set(won_quotes.keys())
+    cur.execute("SELECT job_id, pub_name, trade_type, sub_trade_type FROM jobs WHERE job_id = ANY(%s)",
+                (list(all_job_ids),) if all_job_ids else ([],))
+    job_meta = {r["job_id"]: r for r in cur.fetchall()}
+
+    rows = []
+    for job_id in all_job_ids:
+        cost = cost_rows.get(job_id)
+        if not cost:
+            continue  # no job card work logged in this period — nothing to show
+
+        total_cost = (float(cost["labour_cost"] or 0) + float(cost["materials_cost"] or 0) +
+                      float(cost["admin_materials_cost"] or 0) + float(cost["parking_cost"] or 0))
+
+        prefix = job_id[0] if job_id else ""
+        wc = wisdom_costs.get(job_id)
+        wq = won_quotes.get(job_id)
+        meta = job_meta.get(job_id, {})
+
+        if prefix == "5" and wq:
+            job_type = "quoted"
+            revenue = float(wq["quote_total"] or 0)
+            rev_status = "confirmed"  # a won quote is an agreed price
+            pub_name = wq.get("pub_name") or meta.get("pub_name")
+            trade_type = wq.get("trade_type") or meta.get("trade_type")
+        elif prefix == "2" and wc:
+            job_type = "ppm"
+            revenue = float(wc["total_agreed"] or 0)
+            rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
+            pub_name = meta.get("pub_name")
+            trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+        elif prefix in ("1", "3") and wc:
+            job_type = "reactive"
+            revenue = float(wc["total_agreed"] or 0)
+            rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
+            pub_name = meta.get("pub_name")
+            trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+        else:
+            # Job cards exist but Wisdom hasn't returned a cost yet (still
+            # open, or hasn't reached Ready for Payment) — show as pending
+            # rather than guessing at revenue.
+            job_type = "ppm" if prefix == "2" else ("quoted" if prefix == "5" else "reactive")
+            revenue = None
+            rev_status = "pending"
+            pub_name = meta.get("pub_name")
+            trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+
+        margin = (revenue - total_cost) if revenue is not None else None
+        margin_pct = (margin / revenue * 100) if margin is not None and revenue else None
+
+        rows.append({
+            "job_id": job_id, "job_type": job_type, "pub_name": pub_name, "trade_type": trade_type,
+            "revenue": revenue, "rev_status": rev_status,
+            "labour_cost": float(cost["labour_cost"] or 0),
+            "materials_cost": float(cost["materials_cost"] or 0) + float(cost["admin_materials_cost"] or 0),
+            "parking_cost": float(cost["parking_cost"] or 0),
+            "total_cost": total_cost, "margin": margin, "margin_pct": margin_pct,
+            "card_count": cost["card_count"], "last_card_date": cost["last_card_date"],
+        })
+
+    rows.sort(key=lambda r: (r["last_card_date"] or date.min), reverse=True)
+
+    # Type-level summary — only rows with confirmed/estimated revenue count
+    # towards totals; pending jobs are shown but excluded from the maths.
+    summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0} for t in ("reactive", "ppm", "quoted")}
+    pending_count = 0
+    for r in rows:
+        if r["revenue"] is None:
+            pending_count += 1
+            continue
+        summary[r["job_type"]]["revenue"] += r["revenue"]
+        summary[r["job_type"]]["cost"] += r["total_cost"]
+        summary[r["job_type"]]["count"] += 1
+
+    total_revenue = sum(s["revenue"] for s in summary.values())
+    total_cost_all = sum(s["cost"] for s in summary.values())
+    total_margin = total_revenue - total_cost_all
+    total_margin_pct = (total_margin / total_revenue * 100) if total_revenue else 0
+
+    for t in summary:
+        s = summary[t]
+        s["margin"] = s["revenue"] - s["cost"]
+        s["margin_pct"] = (s["margin"] / s["revenue"] * 100) if s["revenue"] else 0
+
+    cur.close()
+    conn.close()
+    return render_template("admin_margin.html", rows=rows, summary=summary,
+        total_revenue=total_revenue, total_cost=total_cost_all, total_margin=total_margin,
+        total_margin_pct=total_margin_pct, pending_count=pending_count,
+        period=period, period_label=period_label, fy_label=fy_label)
+
+
+
 @admin_required
 def admin_reports():
     return render_template("admin_reports.html")
