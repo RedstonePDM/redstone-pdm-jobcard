@@ -149,29 +149,22 @@
     </div>
   </div>
 
-  <!-- Per-job table -->
-  <div class="section-card">
-    <div class="section-title">Job-by-Job Margin</div>
-    <div class="section-sub">Confirmed = Wisdom shows Approved to Invoice, or a won quote. Estimated = Ready for Payment, not yet locked. Pending = job cards submitted but Wisdom hasn't returned a cost yet.</div>
-    {% if rows %}
+  <!-- Per-job table, grouped like a bank statement: cleared, pending, then not-yet-realised -->
+  {% macro job_table(group_rows) %}
     <table>
       <thead>
         <tr>
-          <th>Job</th><th>Pub / Trade</th><th>Type</th><th>Status</th>
+          <th>Job</th><th>Pub / Trade</th><th>Type</th>
           <th class="num">Revenue</th><th class="num">Labour</th><th class="num">Materials</th><th class="num">Parking</th>
           <th class="num">Total Cost</th><th class="num">Margin</th><th class="num">Margin %</th>
         </tr>
       </thead>
       <tbody>
-        {% for r in rows %}
+        {% for r in group_rows %}
         <tr>
           <td><strong>{{ r.job_id }}</strong><div style="font-size:11px;color:#aaa">{% if r.has_cost %}{{ r.card_count }} card{{ 's' if r.card_count != 1 }}{% else %}no job card yet{% endif %}</div></td>
           <td>{{ r.pub_name or '—' }}<div style="font-size:11px;color:#aaa">{{ r.trade_type or '' }}</div></td>
           <td><span class="job-type-pill {{ r.job_type }}">{{ r.job_type|capitalize }}</span></td>
-          <td>
-            <span class="rev-status {{ r.rev_status }}">{{ r.rev_status|capitalize }}</span>
-            {% if not r.has_cost %}<div style="margin-top:4px"><span class="cost-status">Awaiting costs</span></div>{% endif %}
-          </td>
           <td class="num">{% if r.revenue is not none %}£{{ '{:,.2f}'.format(r.revenue) }}{% else %}—{% endif %}</td>
           <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.labour_cost) }}{% else %}—{% endif %}</td>
           <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.materials_cost) }}{% else %}—{% endif %}</td>
@@ -185,9 +178,35 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}
-    <div class="empty-state">No job cards logged for this period yet.</div>
-    {% endif %}
+  {% endmacro %}
+
+  {% set confirmed_rows = rows|selectattr('rev_status','equalto','confirmed')|selectattr('has_cost')|list %}
+  {% set estimated_rows = rows|selectattr('rev_status','equalto','estimated')|list %}
+  {% set awaiting_wisdom_rows = rows|selectattr('rev_status','equalto','pending')|list %}
+  {% set awaiting_cost_rows = rows|rejectattr('has_cost')|rejectattr('rev_status','equalto','pending')|list %}
+
+  <div class="section-card">
+    <div class="section-title">✅ Confirmed — Approved to Invoice / Won Quotes</div>
+    <div class="section-sub">Locked in on Wisdom's side, and the job card cost is in — real margin.</div>
+    {% if confirmed_rows %}{{ job_table(confirmed_rows) }}{% else %}<div class="empty-state">Nothing confirmed with matching costs yet this period.</div>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">🕒 Pending — Ready for Payment</div>
+    <div class="section-sub">Like a pending transaction on a bank statement — Wisdom hasn't approved these to invoice yet, so treat the revenue and any margin here as provisional, not final.</div>
+    {% if estimated_rows %}{{ job_table(estimated_rows) }}{% else %}<div class="empty-state">Nothing sitting in Ready for Payment right now.</div>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">⏳ Awaiting Engineer Costs</div>
+    <div class="section-sub">Wisdom has confirmed a figure, but no job card has been logged for it yet — margin can't be calculated until both sides are in.</div>
+    {% if awaiting_cost_rows %}{{ job_table(awaiting_cost_rows) }}{% else %}<div class="empty-state">Nothing waiting on job card costs right now.</div>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">📋 Awaiting Wisdom Data</div>
+    <div class="section-sub">Job cards logged and costed, but Wisdom hasn't returned a figure yet — usually still in Awaiting Costs / Awaiting Re-Visit on Wisdom's side.</div>
+    {% if awaiting_wisdom_rows %}{{ job_table(awaiting_wisdom_rows) }}{% else %}<div class="empty-state">Nothing waiting on Wisdom right now.</div>{% endif %}
   </div>
 </div>
 </body>
