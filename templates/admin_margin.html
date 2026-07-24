@@ -34,8 +34,7 @@
   .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
 
   /* Headline summary */
-  .headline-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  @media (max-width: 900px) { .headline-grid { grid-template-columns: repeat(2, 1fr); } }
+  .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
   .hl-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
   .hl-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
   .hl-value { font-size: 24px; color: #1a2332; font-weight: 800; margin-top: 5px; }
@@ -70,6 +69,7 @@
   .rev-status.confirmed { background: #effdf4; color: #1a7a4a; }
   .rev-status.estimated { background: #fff8ef; color: #c77a10; }
   .rev-status.pending   { background: #f0f2f5; color: #888; }
+  .cost-status { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: #f0f2f5; color: #888; }
 
   .margin-cell.good { color: #1a7a4a; font-weight: 700; }
   .margin-cell.bad  { color: #c0392b; font-weight: 700; }
@@ -119,9 +119,14 @@
         <div class="hl-note">{{ '%.1f'|format(total_margin_pct) }}% margin</div>
       </div>
       <div class="hl-box">
-        <div class="hl-label">Jobs Awaiting Wisdom Data</div>
-        <div class="hl-value">{{ pending_count }}</div>
+        <div class="hl-label">Awaiting Wisdom Data</div>
+        <div class="hl-value">{{ awaiting_wisdom }}</div>
         <div class="hl-note">Job cards logged, no confirmed cost yet</div>
+      </div>
+      <div class="hl-box">
+        <div class="hl-label">Awaiting Engineer Costs</div>
+        <div class="hl-value">{{ awaiting_costs }}</div>
+        <div class="hl-note">Wisdom confirmed, no job card logged yet</div>
       </div>
     </div>
   </div>
@@ -160,15 +165,18 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td><strong>{{ r.job_id }}</strong><div style="font-size:11px;color:#aaa">{{ r.card_count }} card{{ 's' if r.card_count != 1 }}</div></td>
+          <td><strong>{{ r.job_id }}</strong><div style="font-size:11px;color:#aaa">{% if r.has_cost %}{{ r.card_count }} card{{ 's' if r.card_count != 1 }}{% else %}no job card yet{% endif %}</div></td>
           <td>{{ r.pub_name or '—' }}<div style="font-size:11px;color:#aaa">{{ r.trade_type or '' }}</div></td>
           <td><span class="job-type-pill {{ r.job_type }}">{{ r.job_type|capitalize }}</span></td>
-          <td><span class="rev-status {{ r.rev_status }}">{{ r.rev_status|capitalize }}</span></td>
+          <td>
+            <span class="rev-status {{ r.rev_status }}">{{ r.rev_status|capitalize }}</span>
+            {% if not r.has_cost %}<div style="margin-top:4px"><span class="cost-status">Awaiting costs</span></div>{% endif %}
+          </td>
           <td class="num">{% if r.revenue is not none %}£{{ '{:,.2f}'.format(r.revenue) }}{% else %}—{% endif %}</td>
-          <td class="num">£{{ '{:,.2f}'.format(r.labour_cost) }}</td>
-          <td class="num">£{{ '{:,.2f}'.format(r.materials_cost) }}</td>
-          <td class="num">£{{ '{:,.2f}'.format(r.parking_cost) }}</td>
-          <td class="num">£{{ '{:,.2f}'.format(r.total_cost) }}</td>
+          <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.labour_cost) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.materials_cost) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.parking_cost) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if r.has_cost %}£{{ '{:,.2f}'.format(r.total_cost) }}{% else %}—{% endif %}</td>
           <td class="num margin-cell {{ 'good' if (r.margin or 0) >= 0 else 'bad' }}">
             {% if r.margin is not none %}£{{ '{:,.2f}'.format(r.margin) }}{% else %}—{% endif %}
           </td>
