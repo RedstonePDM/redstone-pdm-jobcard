@@ -3871,7 +3871,7 @@ def admin_margin():
     cost_rows = {r["job_id"]: r for r in cur.fetchall()}
 
     # Revenue side, reactive/MIV/PPM: scraped Wisdom "agreed" totals
-    cur.execute("SELECT job_id, display_id, job_type, total_agreed, status, payment_date FROM job_wetherspoons_costs")
+    cur.execute("SELECT job_id, display_id, job_type, total_agreed, status, payment_date, pub_name, trade_type FROM job_wetherspoons_costs")
     wisdom_costs = {r["job_id"]: r for r in cur.fetchall()}
 
     # Revenue side, quoted (5000): what was actually quoted and won
@@ -3911,14 +3911,14 @@ def admin_margin():
             job_type = "ppm"
             revenue = float(wc["total_agreed"] or 0)
             rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
-            pub_name = meta.get("pub_name")
-            trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+            pub_name = wc.get("pub_name") or meta.get("pub_name")
+            trade_type = wc.get("trade_type") or meta.get("trade_type") or meta.get("sub_trade_type")
         elif prefix in ("1", "3") and wc:
             job_type = "reactive"
             revenue = float(wc["total_agreed"] or 0)
             rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
-            pub_name = meta.get("pub_name")
-            trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+            pub_name = wc.get("pub_name") or meta.get("pub_name")
+            trade_type = wc.get("trade_type") or meta.get("trade_type") or meta.get("sub_trade_type")
         elif not has_cost:
             # Has Wisdom revenue but doesn't match any known prefix rule —
             # skip rather than guess at job type.
