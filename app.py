@@ -3890,16 +3890,16 @@ def admin_margin():
     rows = []
     for job_id in all_job_ids:
         cost = cost_rows.get(job_id)
-        if not cost:
-            continue  # no job card work logged in this period — nothing to show
-
-        total_cost = (float(cost["labour_cost"] or 0) + float(cost["materials_cost"] or 0) +
-                      float(cost["admin_materials_cost"] or 0) + float(cost["parking_cost"] or 0))
-
         prefix = job_id[0] if job_id else ""
         wc = wisdom_costs.get(job_id)
         wq = won_quotes.get(job_id)
         meta = job_meta.get(job_id, {})
+
+        has_cost = cost is not None
+        total_cost = 0.0
+        if has_cost:
+            total_cost = (float(cost["labour_cost"] or 0) + float(cost["materials_cost"] or 0) +
+                          float(cost["admin_materials_cost"] or 0) + float(cost["parking_cost"] or 0))
 
         if prefix == "5" and wq:
             job_type = "quoted"
@@ -3919,6 +3919,10 @@ def admin_margin():
             rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
             pub_name = meta.get("pub_name")
             trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+        elif not has_cost:
+            # Has Wisdom revenue but doesn't match any known prefix rule —
+            # skip rather than guess at job type.
+            continue
         else:
             # Job cards exist but Wisdom hasn't returned a cost yet (still
             # open, or hasn't reached Ready for Payment) — show as pending
@@ -3929,28 +3933,36 @@ def admin_margin():
             pub_name = meta.get("pub_name")
             trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
 
-        margin = (revenue - total_cost) if revenue is not None else None
+        # Margin only makes sense once BOTH sides are known — never fabricate
+        # a 100% margin just because the cost side hasn't been logged yet.
+        margin = (revenue - total_cost) if (revenue is not None and has_cost) else None
         margin_pct = (margin / revenue * 100) if margin is not None and revenue else None
 
         rows.append({
             "job_id": job_id, "job_type": job_type, "pub_name": pub_name, "trade_type": trade_type,
-            "revenue": revenue, "rev_status": rev_status,
-            "labour_cost": float(cost["labour_cost"] or 0),
-            "materials_cost": float(cost["materials_cost"] or 0) + float(cost["admin_materials_cost"] or 0),
-            "parking_cost": float(cost["parking_cost"] or 0),
+            "revenue": revenue, "rev_status": rev_status, "has_cost": has_cost,
+            "labour_cost": float(cost["labour_cost"] or 0) if has_cost else 0.0,
+            "materials_cost": (float(cost["materials_cost"] or 0) + float(cost["admin_materials_cost"] or 0)) if has_cost else 0.0,
+            "parking_cost": float(cost["parking_cost"] or 0) if has_cost else 0.0,
             "total_cost": total_cost, "margin": margin, "margin_pct": margin_pct,
-            "card_count": cost["card_count"], "last_card_date": cost["last_card_date"],
+            "card_count": cost["card_count"] if has_cost else 0,
+            "last_card_date": cost["last_card_date"] if has_cost else None,
         })
 
     rows.sort(key=lambda r: (r["last_card_date"] or date.min), reverse=True)
 
-    # Type-level summary — only rows with confirmed/estimated revenue count
-    # towards totals; pending jobs are shown but excluded from the maths.
+    # Type-level summary — only rows with both revenue AND cost known count
+    # towards totals; anything still missing one side is shown but excluded
+    # from the maths so the numbers stay honest.
     summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0} for t in ("reactive", "ppm", "quoted")}
-    pending_count = 0
+    awaiting_wisdom = 0     # job card logged, no Wisdom revenue yet
+    awaiting_costs = 0      # Wisdom revenue confirmed, no job card yet
     for r in rows:
-        if r["revenue"] is None:
-            pending_count += 1
+        if r["margin"] is None:
+            if r["revenue"] is None:
+                awaiting_wisdom += 1
+            if not r["has_cost"]:
+                awaiting_costs += 1
             continue
         summary[r["job_type"]]["revenue"] += r["revenue"]
         summary[r["job_type"]]["cost"] += r["total_cost"]
@@ -3970,7 +3982,7 @@ def admin_margin():
     conn.close()
     return render_template("admin_margin.html", rows=rows, summary=summary,
         total_revenue=total_revenue, total_cost=total_cost_all, total_margin=total_margin,
-        total_margin_pct=total_margin_pct, pending_count=pending_count,
+        total_margin_pct=total_margin_pct, awaiting_wisdom=awaiting_wisdom, awaiting_costs=awaiting_costs,
         period=period, period_label=period_label, fy_label=fy_label)
 
 
