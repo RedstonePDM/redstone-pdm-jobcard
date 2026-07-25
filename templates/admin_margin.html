@@ -65,8 +65,9 @@
   .hl-box.margin-bad .hl-value { color: #c0392b; }
 
   /* Type breakdown */
-  .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  @media (max-width: 800px) { .type-grid { grid-template-columns: 1fr; } }
+  .type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 1000px) { .type-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .type-grid { grid-template-columns: 1fr; } }
   .type-card { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
   .type-title { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 10px; display:flex; justify-content:space-between; }
   .type-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: #555; }
@@ -84,6 +85,7 @@
 
   .job-type-pill { padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
   .job-type-pill.reactive { background: #eff4ff; color: #1a4fa0; }
+  .job-type-pill.miv { background: #fff4e6; color: #b56a11; }
   .job-type-pill.ppm { background: #f4efff; color: #6c3fc5; }
   .job-type-pill.quoted { background: #effbff; color: #0b7285; }
 
@@ -138,7 +140,6 @@
       <div class="pipeline-box paid">
         <div class="pipeline-label">Paid (All Time)</div>
         <div class="pipeline-count">{{ paid_count }}</div>
-        <div class="pipeline-total">£{{ '{:,.0f}'.format(paid_total) }}</div>
         <a href="/admin/margin/paid" class="btn-link" style="display:block;margin-top:6px">View Paid Jobs →</a>
       </div>
     </div>
@@ -194,7 +195,7 @@
   <div class="section-card">
     <div class="section-title">By Job Type — {{ period_label }}</div>
     <div class="type-grid">
-      {% for type_key, type_name in [('reactive','Reactive / MIV'), ('ppm','PPM'), ('quoted','Quoted Work')] %}
+      {% for type_key, type_name in [('reactive','Reactive (1000)'), ('miv','MIV (3000)'), ('ppm','PPM (2000)'), ('quoted','Quoted Work (5000)')] %}
       {% set s = summary[type_key] %}
       <div class="type-card">
         <div class="type-title"><span>{{ type_name }}</span><span style="color:#888;font-weight:400">{{ s.count }} job{{ 's' if s.count != 1 }}</span></div>
