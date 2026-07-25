@@ -4041,6 +4041,32 @@ def admin_margin():
     cur.execute("SELECT COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total FROM job_wetherspoons_costs WHERE status='paid'")
     paid_summary = cur.fetchone()
 
+    # Snapshot for the prominent Paid Jobs & Customer Analysis section —
+    # top 5 pubs and top 5 trades for the CURRENT period tab (not all-time),
+    # so this section actually responds to This Month / This FY / All Time
+    # the way the person expects when they click those tabs.
+    cur.execute("""
+        SELECT pub_name, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+        GROUP BY pub_name ORDER BY total_spend DESC LIMIT 5
+    """, (p_start, p_end))
+    paid_top_pubs = cur.fetchall()
+
+    cur.execute("""
+        SELECT trade_type, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND trade_type IS NOT NULL
+        GROUP BY trade_type ORDER BY total_spend DESC LIMIT 5
+    """, (p_start, p_end))
+    paid_top_trades = cur.fetchall()
+
+    cur.execute("""
+        SELECT COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total
+        FROM job_wetherspoons_costs WHERE status='paid' AND payment_date BETWEEN %s AND %s
+    """, (p_start, p_end))
+    paid_period_summary = cur.fetchone()
+
     cur.close()
     conn.close()
     return render_template("admin_margin.html",
@@ -4051,7 +4077,9 @@ def admin_margin():
         total_cost_known_count=total_cost_known_count, period=period, period_label=period_label, fy_label=fy_label,
         pipeline_overview=pipeline_overview, total_stuck=total_stuck,
         avg_payment_delay=avg_payment_delay, pay_delay_sample_size=len(pay_delays),
-        paid_count=paid_summary["cnt"], paid_total=float(paid_summary["total"] or 0))
+        paid_count=paid_summary["cnt"], paid_total=float(paid_summary["total"] or 0),
+        paid_top_pubs=paid_top_pubs, paid_top_trades=paid_top_trades,
+        paid_period_count=paid_period_summary["cnt"], paid_period_total=float(paid_period_summary["total"] or 0))
 
 
 @app.route("/admin/margin/paid")
