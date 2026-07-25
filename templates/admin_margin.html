@@ -87,6 +87,8 @@
   .job-type-pill.ppm { background: #f4efff; color: #6c3fc5; }
   .job-type-pill.quoted { background: #effbff; color: #0b7285; }
 
+  .count-pill { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: #eff4ff; color: #1a4fa0; vertical-align: middle; }
+
   .margin-cell.good { color: #1a7a4a; font-weight: 700; }
   .margin-cell.bad  { color: #c0392b; font-weight: 700; }
 
@@ -116,6 +118,7 @@
       <a class="period-tab {% if period=='all' %}active{% endif %}" href="?period=all">All Time</a>
     </div>
   </div>
+  <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT (as sourced directly from Wisdom).</div>
 
   <!-- Live pipeline overview -->
   <div class="section-card">
@@ -162,25 +165,27 @@
   <!-- Headline -->
   <div class="section-card">
     <div class="section-title">Business Overview — {{ period_label }}</div>
-    <div class="section-sub">Confirmed revenue only (Approved to Invoice, Invoiced, or a won quote). Cost is labour + materials + parking from submitted job cards for this period. Fleet/fuel overhead is tracked separately on the Fleet &amp; Vehicles page.</div>
+    <div class="section-sub">Confirmed revenue (Approved to Invoice, Invoiced, or a won quote) — counted as soon as Wisdom confirms it, whether or not a job card cost has been logged yet. Cost is labour + materials + parking from submitted job cards, so far. Fleet/fuel overhead is tracked separately on the Fleet &amp; Vehicles page.</div>
     <div class="headline-grid">
       <div class="hl-box">
         <div class="hl-label">Confirmed Revenue</div>
         <div class="hl-value">£{{ '{:,.2f}'.format(total_revenue) }}</div>
+        <div class="hl-note">{{ total_confirmed_count }} confirmed job{{ 's' if total_confirmed_count != 1 }}</div>
       </div>
       <div class="hl-box">
         <div class="hl-label">Cost</div>
         <div class="hl-value">£{{ '{:,.2f}'.format(total_cost) }}</div>
+        <div class="hl-note">From {{ total_cost_known_count }} of {{ total_confirmed_count }} job{{ 's' if total_confirmed_count != 1 }} with a job card logged</div>
       </div>
       <div class="hl-box {{ 'margin-good' if total_margin >= 0 else 'margin-bad' }}">
         <div class="hl-label">Gross Margin</div>
         <div class="hl-value">£{{ '{:,.2f}'.format(total_margin) }}</div>
-        <div class="hl-note">{{ '%.1f'|format(total_margin_pct) }}% margin</div>
+        <div class="hl-note">{{ '%.1f'|format(total_margin_pct) }}% margin{% if total_cost_known_count < total_confirmed_count %} — partial, {{ total_confirmed_count - total_cost_known_count }} job{{ 's' if (total_confirmed_count - total_cost_known_count) != 1 }} still missing cost data{% endif %}</div>
       </div>
       <div class="hl-box">
-        <div class="hl-label">Awaiting Engineer Costs</div>
+        <div class="hl-label">Missing Job Card</div>
         <div class="hl-value">{{ awaiting_engineer_cost_rows|length }}</div>
-        <div class="hl-note">Wisdom confirmed a figure, no job card logged yet</div>
+        <div class="hl-note">Wisdom confirmed a figure (any stage), no job card logged yet</div>
       </div>
     </div>
   </div>
@@ -237,19 +242,19 @@
   {% endmacro %}
 
   <div class="section-card">
-    <div class="section-title">🕒 Ready for Payment</div>
+    <div class="section-title">🕒 Ready for Payment<span class="count-pill">{{ ready_for_payment_rows|length }}</span></div>
     <div class="section-sub">Like a pending transaction on a bank statement — needs your sense-check and approval before it moves to Approved to Invoice. Revenue shown is provisional until then.</div>
     {% if ready_for_payment_rows %}{{ job_table(ready_for_payment_rows, show_stage=true) }}{% else %}<div class="empty-state">Nothing sitting in Ready for Payment right now.</div>{% endif %}
   </div>
 
   <div class="section-card">
-    <div class="section-title">✅ Approved to Invoice / Invoiced / Won Quotes</div>
-    <div class="section-sub">Locked in — payment terms have started. Once paid, these move to the Paid Jobs page permanently.</div>
+    <div class="section-title">✅ Confirmed & Invoiced<span class="count-pill">{{ approved_invoiced_rows|length }}</span></div>
+    <div class="section-sub">Approved to Invoice, Invoiced, or a won quote — locked in, payment terms have started. Once paid, these move to the Paid Jobs page permanently.</div>
     {% if approved_invoiced_rows %}{{ job_table(approved_invoiced_rows, show_stage=true) }}{% else %}<div class="empty-state">Nothing confirmed right now.</div>{% endif %}
   </div>
 
   <div class="section-card">
-    <div class="section-title">⏳ Awaiting Engineer Costs</div>
+    <div class="section-title">⏳ Missing Job Card<span class="count-pill">{{ awaiting_engineer_cost_rows|length }}</span></div>
     <div class="section-sub">Wisdom has a figure (at whatever stage), but no job card has been logged for it yet — margin can't be calculated until both sides are in.</div>
     {% if awaiting_engineer_cost_rows %}{{ job_table(awaiting_engineer_cost_rows) }}{% else %}<div class="empty-state">Nothing waiting on job card costs right now.</div>{% endif %}
   </div>
