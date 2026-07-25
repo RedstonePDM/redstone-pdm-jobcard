@@ -61,6 +61,7 @@
 
   .empty-state { text-align: center; padding: 24px; color: #aaa; font-size: 13px; }
   .table-scroll { max-height: 500px; overflow-y: auto; }
+  .btn-link { font-size: 12px; color: #1a4fa0; text-decoration: none; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -118,7 +119,7 @@
         <tbody>
           {% for p in by_pub %}
           <tr class="clickable" onclick="location.href='?period={{ period }}&pub={{ p.pub_name|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}'">
-            <td>{{ p.pub_name }}</td>
+            <td>{{ p.pub_name }}{% if p.postcode %}<span style="color:#aaa;font-weight:400;margin-left:6px">{{ p.postcode }}</span>{% endif %}</td>
             <td class="num">{{ p.job_count }}</td>
             <td class="num">£{{ '{:,.2f}'.format(p.total_spend) }}</td>
           </tr>
@@ -131,8 +132,20 @@
     </div>
 
     <div class="section-card">
-      <div class="section-title">🔧 Spend by Trade Type — {{ period_label }}</div>
-      <div class="section-sub">Click a trade to filter the job list below.</div>
+      <div class="section-title">🔧 Spend by Trade Type — {% if by_trade_scoped_to_pub %}{{ pub_filter }}{% else %}{{ period_label }}{% endif %}</div>
+      <div class="section-sub">
+        {% if pub_filter %}
+          {% if by_trade_scoped_to_pub %}
+            Showing trade breakdown for <strong>{{ pub_filter }}</strong> only.
+            <a href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=all" class="btn-link" style="margin-left:4px">View all-pub totals →</a>
+          {% else %}
+            Showing all-pub totals.
+            <a href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=pub" class="btn-link" style="margin-left:4px">Show {{ pub_filter }} only →</a>
+          {% endif %}
+        {% else %}
+          Click a trade to filter the job list below.
+        {% endif %}
+      </div>
       <div class="table-scroll">
       <table>
         <thead><tr><th>Trade</th><th class="num">Jobs</th><th class="num">Total Spend</th></tr></thead>
