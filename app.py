@@ -16,6 +16,7 @@ import psycopg2
 import psycopg2.extras
 from collections import defaultdict
 from datetime import datetime, date, timedelta
+import calendar
 from functools import wraps
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (Mail, Attachment, FileContent,
@@ -4207,6 +4208,150 @@ def admin_margin_paid():
         total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
         by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope,
         period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
+
+
+def _pct_change(this_val, last_val):
+    """% change from last_val to this_val. None if last_val is 0/None —
+    there's no meaningful percentage to show for 'went from nothing to
+    something', that's better labelled 'New' in the template."""
+    if not last_val:
+        return None
+    return (this_val - last_val) / last_val * 100
+
+
+def _yoy_by_pub(cur, this_start, this_end, last_start, last_end, limit=None):
+    """Per-pub totals for two comparable periods, merged and sorted by the
+    size of the absolute £ change — so the pubs that moved the most (up or
+    down) surface first, which is exactly what a 'who's growing, who's
+    declining' view needs."""
+    cur.execute("""
+        SELECT pub_name, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+        GROUP BY pub_name
+    """, (this_start, this_end))
+    this_by_pub = {r["pub_name"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
+
+    cur.execute("""
+        SELECT pub_name, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+        GROUP BY pub_name
+    """, (last_start, last_end))
+    last_by_pub = {r["pub_name"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
+
+    all_pubs = set(this_by_pub.keys()) | set(last_by_pub.keys())
+    out = []
+    for pub in all_pubs:
+        this_total = this_by_pub.get(pub, {}).get("total", 0.0)
+        last_total = last_by_pub.get(pub, {}).get("total", 0.0)
+        out.append({
+            "pub_name": pub,
+            "this_total": this_total, "last_total": last_total,
+            "delta": this_total - last_total,
+            "pct": _pct_change(this_total, last_total),
+            "this_cnt": this_by_pub.get(pub, {}).get("cnt", 0),
+            "last_cnt": last_by_pub.get(pub, {}).get("cnt", 0),
+        })
+    out.sort(key=lambda r: abs(r["delta"]), reverse=True)
+    return out[:limit] if limit else out
+
+
+@app.route("/admin/growth")
+@admin_required
+def admin_growth():
+    """Year-on-year growth reporting — £ and % by pub, by month, by FY, and
+    overall. Anchored permanently on payment_date: Wisdom doesn't expose a
+    genuine 'job raised' date on the billing feed for historic jobs, so
+    using anything else would mean the methodology silently changes
+    partway through the data and comparisons stop being genuinely like-for-like.
+    Payment date is slower than the work itself by a roughly consistent
+    lag, but consistent forever beats accurate-but-shifting."""
+    today = date.today()
+
+    # Selected month (defaults to current month) vs the same calendar
+    # month one year earlier.
+    month_param = request.args.get("month", "").strip()
+    if month_param:
+        try:
+            sel_year, sel_month = [int(x) for x in month_param.split("-")]
+        except (ValueError, IndexError):
+            sel_year, sel_month = today.year, today.month
+    else:
+        sel_year, sel_month = today.year, today.month
+
+    this_month_start = date(sel_year, sel_month, 1)
+    this_month_end = date(sel_year, sel_month, calendar.monthrange(sel_year, sel_month)[1])
+    last_month_start = date(sel_year - 1, sel_month, 1)
+    last_month_end = date(sel_year - 1, sel_month, calendar.monthrange(sel_year - 1, sel_month)[1])
+    month_label = this_month_start.strftime("%B %Y")
+    last_month_label = last_month_start.strftime("%B %Y")
+
+    # This FY vs last FY (same April-March logic used everywhere else).
+    this_fy_start, this_fy_end, this_fy_label = fy_bounds(today)
+    last_fy_start, last_fy_end, last_fy_label = fy_bounds(date(this_fy_start.year - 1, 4, 15))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    def _period_total(start, end):
+        cur.execute("""
+            SELECT COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+            FROM job_wetherspoons_costs WHERE status='paid' AND payment_date BETWEEN %s AND %s
+        """, (start, end))
+        r = cur.fetchone()
+        return float(r["total"] or 0), r["cnt"]
+
+    this_month_total, this_month_cnt = _period_total(this_month_start, this_month_end)
+    last_month_total, last_month_cnt = _period_total(last_month_start, last_month_end)
+    this_fy_total, this_fy_cnt = _period_total(this_fy_start, min(this_fy_end, today))
+    last_fy_total, last_fy_cnt = _period_total(last_fy_start, last_fy_end)
+
+    month_pct = _pct_change(this_month_total, last_month_total)
+    fy_pct = _pct_change(this_fy_total, last_fy_total)
+
+    month_by_pub = _yoy_by_pub(cur, this_month_start, this_month_end, last_month_start, last_month_end, limit=20)
+    fy_by_pub = _yoy_by_pub(cur, this_fy_start, min(this_fy_end, today), last_fy_start, last_fy_end, limit=20)
+
+    # Rolling trend — trailing 24 calendar months, this-year-vs-last-year
+    # paired so the shape of the business is visible at a glance, not just
+    # two isolated snapshot numbers.
+    trend_start = date(today.year - 2, today.month, 1)
+    cur.execute("""
+        SELECT to_char(payment_date, 'YYYY-MM') as ym, COALESCE(SUM(total_agreed),0) as total
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date >= %s
+        GROUP BY ym ORDER BY ym
+    """, (trend_start,))
+    trend_by_month = {r["ym"]: float(r["total"] or 0) for r in cur.fetchall()}
+
+    trend = []
+    cursor_date = date(today.year - 1, today.month, 1)
+    for i in range(12):
+        y, m = cursor_date.year, cursor_date.month
+        this_key = f"{y}-{m:02d}"
+        last_key = f"{y-1}-{m:02d}"
+        trend.append({
+            "label": cursor_date.strftime("%b %y"),
+            "this_total": trend_by_month.get(this_key, 0.0),
+            "last_total": trend_by_month.get(last_key, 0.0),
+        })
+        cursor_date = date(y + 1, m, 1) if m == 12 else date(y, m + 1, 1)
+    trend_max = max([max(t["this_total"], t["last_total"]) for t in trend], default=0) or 1
+
+    cur.close()
+    conn.close()
+
+    return render_template("admin_growth.html",
+        month_label=month_label, last_month_label=last_month_label,
+        this_month_total=this_month_total, last_month_total=last_month_total,
+        this_month_cnt=this_month_cnt, last_month_cnt=last_month_cnt, month_pct=month_pct,
+        this_fy_label=this_fy_label, last_fy_label=last_fy_label,
+        this_fy_total=this_fy_total, last_fy_total=last_fy_total,
+        this_fy_cnt=this_fy_cnt, last_fy_cnt=last_fy_cnt, fy_pct=fy_pct,
+        month_by_pub=month_by_pub, fy_by_pub=fy_by_pub,
+        trend=trend, trend_max=trend_max,
+        selected_month=f"{sel_year}-{sel_month:02d}")
 
 
 
