@@ -91,6 +91,25 @@
 
   .count-pill { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: #eff4ff; color: #1a4fa0; vertical-align: middle; }
 
+  /* Main reporting hub nav tiles */
+  .nav-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 700px) { .nav-tile-grid { grid-template-columns: 1fr; } }
+  .nav-tile {
+    display: block; background: white; border-radius: 14px; padding: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07); border: 1.5px solid #f0f2f5;
+    text-decoration: none; transition: box-shadow .15s, transform .15s;
+  }
+  .nav-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.12); transform: translateY(-1px); }
+  .nav-tile-top { display: flex; align-items: center; justify-content: space-between; }
+  .nav-tile-icon { font-size: 24px; }
+  .nav-tile-arrow { font-size: 18px; font-weight: 800; color: #c7ccd4; }
+  .nav-tile:hover .nav-tile-arrow { color: #1a2332; }
+  .nav-tile-title { font-size: 17px; font-weight: 800; color: #1a2332; margin-top: 10px; }
+  .nav-tile-sub { font-size: 12px; color: #888; margin-top: 5px; line-height: 1.4; }
+  .nav-tile-stat { font-size: 13px; font-weight: 700; margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f2f5; }
+  .nav-tile.paid .nav-tile-stat { color: #1a7a4a; }
+  .nav-tile.growth .nav-tile-stat { color: #1a4fa0; }
+
   .margin-cell.good { color: #1a7a4a; font-weight: 700; }
   .margin-cell.bad  { color: #c0392b; font-weight: 700; }
 
@@ -123,6 +142,28 @@
   </div>
   <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT (as sourced directly from Wisdom).</div>
 
+  <!-- Main reporting hubs — these two get proper, permanent top billing -->
+  <div class="nav-tile-grid">
+    <a href="/admin/margin/paid" class="nav-tile paid">
+      <div class="nav-tile-top">
+        <span class="nav-tile-icon">💰</span>
+        <span class="nav-tile-arrow">→</span>
+      </div>
+      <div class="nav-tile-title">Paid Jobs & Customer Analysis</div>
+      <div class="nav-tile-sub">Full historic revenue by pub and trade, postcode-mapped, every job ever paid.</div>
+      <div class="nav-tile-stat">{{ paid_period_count }} jobs · £{{ '{:,.0f}'.format(paid_period_total) }} ({{ period_label }})</div>
+    </a>
+    <a href="/admin/growth" class="nav-tile growth">
+      <div class="nav-tile-top">
+        <span class="nav-tile-icon">📈</span>
+        <span class="nav-tile-arrow">→</span>
+      </div>
+      <div class="nav-tile-title">Growth — Year on Year</div>
+      <div class="nav-tile-sub">£ and % comparisons by month, by FY, and by pub — who's growing, who's gone quiet.</div>
+      <div class="nav-tile-stat">Month, FY & pub-level comparisons</div>
+    </a>
+  </div>
+
   <!-- Live pipeline overview -->
   <div class="section-card">
     <div class="section-title">💷 Where Everything Stands Right Now</div>
@@ -146,6 +187,24 @@
     </div>
   </div>
 
+  <!-- Type breakdown — moved up here per Dave, right under the live snapshot -->
+  <div class="section-card">
+    <div class="section-title">By Job Type — {{ period_label }}</div>
+    <div class="type-grid">
+      {% for type_key, type_name in [('reactive','Reactive (1000)'), ('miv','MIV (3000)'), ('ppm','PPM (2000)'), ('quoted','Quoted Work (5000)')] %}
+      {% set s = summary[type_key] %}
+      <div class="type-card">
+        <div class="type-title"><span>{{ type_name }}</span><span style="color:#888;font-weight:400">{{ s.count }} job{{ 's' if s.count != 1 }}</span></div>
+        <div class="type-row"><span>Revenue</span><strong>£{{ '{:,.2f}'.format(s.revenue) }}</strong></div>
+        <div class="type-row"><span>Cost</span><strong>£{{ '{:,.2f}'.format(s.cost) }}</strong></div>
+        <div class="type-margin {{ 'good' if s.margin >= 0 else 'bad' }}">
+          £{{ '{:,.2f}'.format(s.margin) }} <span style="font-size:13px;font-weight:600">({{ '%.1f'|format(s.margin_pct) }}%)</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
   <!-- Cash flow -->
   <div class="section-card">
     <div class="section-title">🕒 Cash Flow — Money Wetherspoons Are Sitting On</div>
@@ -162,42 +221,6 @@
         <div class="cf-note">{% if pay_delay_sample_size %}Based on {{ pay_delay_sample_size }} tracked job{{ 's' if pay_delay_sample_size != 1 }}{% else %}Needs a few jobs to complete the full journey while we're watching{% endif %}</div>
       </div>
     </div>
-  </div>
-
-  <!-- Paid Jobs & Customer Analysis — the richest data on this whole page,
-       given a section that actually matches that, not a small text link. -->
-  <div class="section-card" style="border:1.5px solid #b7e4c7">
-    <div class="section-title">💰 Paid Jobs & Customer Analysis — {{ period_label }}</div>
-    <div class="section-sub">Your full historic revenue picture by pub and trade — postcode-mapped, filterable, and going back through every job ever paid. This is the deepest data on the whole platform.</div>
-    <div class="headline-grid" style="margin-bottom:18px">
-      <div class="hl-box" style="background:#effdf4;border-color:#b7e4c7">
-        <div class="hl-label" style="color:#1a7a4a">Jobs Paid</div>
-        <div class="hl-value" style="color:#1a7a4a">{{ paid_period_count }}</div>
-      </div>
-      <div class="hl-box" style="background:#effdf4;border-color:#b7e4c7">
-        <div class="hl-label" style="color:#1a7a4a">Total Paid</div>
-        <div class="hl-value" style="color:#1a7a4a">£{{ '{:,.2f}'.format(paid_period_total) }}</div>
-      </div>
-    </div>
-    <div class="type-grid" style="grid-template-columns:1fr 1fr">
-      <div class="type-card">
-        <div class="type-title"><span>🍺 Top 5 Pubs</span></div>
-        {% for p in paid_top_pubs %}
-        <div class="type-row"><span>{{ p.pub_name }}</span><strong>£{{ '{:,.0f}'.format(p.total_spend) }}</strong></div>
-        {% else %}
-        <div class="type-row" style="color:#aaa">No paid jobs in this period.</div>
-        {% endfor %}
-      </div>
-      <div class="type-card">
-        <div class="type-title"><span>🔧 Top 5 Trades</span></div>
-        {% for t in paid_top_trades %}
-        <div class="type-row"><span>{{ t.trade_type }}</span><strong>£{{ '{:,.0f}'.format(t.total_spend) }}</strong></div>
-        {% else %}
-        <div class="type-row" style="color:#aaa">No paid jobs in this period.</div>
-        {% endfor %}
-      </div>
-    </div>
-    <a href="/admin/margin/paid" style="display:block;text-align:center;margin-top:18px;padding:12px;background:#1a7a4a;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">Open Full Paid Jobs & Customer Report →</a>
   </div>
 
   <!-- Headline -->
@@ -225,24 +248,6 @@
         <div class="hl-value">{{ awaiting_engineer_cost_rows|length }}</div>
         <div class="hl-note">Wisdom confirmed a figure (any stage), no job card logged yet</div>
       </div>
-    </div>
-  </div>
-
-  <!-- Type breakdown -->
-  <div class="section-card">
-    <div class="section-title">By Job Type — {{ period_label }}</div>
-    <div class="type-grid">
-      {% for type_key, type_name in [('reactive','Reactive (1000)'), ('miv','MIV (3000)'), ('ppm','PPM (2000)'), ('quoted','Quoted Work (5000)')] %}
-      {% set s = summary[type_key] %}
-      <div class="type-card">
-        <div class="type-title"><span>{{ type_name }}</span><span style="color:#888;font-weight:400">{{ s.count }} job{{ 's' if s.count != 1 }}</span></div>
-        <div class="type-row"><span>Revenue</span><strong>£{{ '{:,.2f}'.format(s.revenue) }}</strong></div>
-        <div class="type-row"><span>Cost</span><strong>£{{ '{:,.2f}'.format(s.cost) }}</strong></div>
-        <div class="type-margin {{ 'good' if s.margin >= 0 else 'bad' }}">
-          £{{ '{:,.2f}'.format(s.margin) }} <span style="font-size:13px;font-weight:600">({{ '%.1f'|format(s.margin_pct) }}%)</span>
-        </div>
-      </div>
-      {% endfor %}
     </div>
   </div>
 
