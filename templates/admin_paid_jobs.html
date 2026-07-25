@@ -146,7 +146,7 @@
         <thead>
           <tr>
             <th>Trade</th><th class="num">Jobs</th><th class="num">Total Spend</th>
-            {% if by_trade_scoped_to_pub %}<th class="num">% of Pub Spend</th>{% endif %}
+            <th class="num">{% if by_trade_scoped_to_pub %}% of Pub Spend{% else %}% of Total{% endif %}</th>
           </tr>
         </thead>
         <tbody>
@@ -155,10 +155,10 @@
             <td>{{ t.trade_type }}</td>
             <td class="num">{{ t.job_count }}</td>
             <td class="num">£{{ '{:,.2f}'.format(t.total_spend) }}</td>
-            {% if by_trade_scoped_to_pub %}<td class="num">{{ '%.1f'|format(t.pct_of_pub) }}%</td>{% endif %}
+            <td class="num">{{ '%.1f'|format(t.pct_of_pub) }}%</td>
           </tr>
           {% else %}
-          <tr><td colspan="{{ 4 if by_trade_scoped_to_pub else 3 }}" class="empty-state">No paid jobs in this period.</td></tr>
+          <tr><td colspan="4" class="empty-state">No paid jobs in this period.</td></tr>
           {% endfor %}
         </tbody>
       </table>
