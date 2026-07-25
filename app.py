@@ -4107,18 +4107,27 @@ def admin_margin_paid():
     """, (p_start, p_end))
     by_pub = cur.fetchall()
 
-    # Best-effort postcode per pub, pulled from the 'jobs' table (populated
-    # separately during the postcode-enrichment pass). Not every pub will
-    # have one yet — shown as blank rather than guessed.
+    # Postcode per pub, pulled from pub_locations — a permanent table keyed
+    # by pub_name that never gets rows deleted (unlike the 'jobs' table,
+    # which only holds currently-active jobs and drops a pub's row once its
+    # job is paid off). This is what makes postcode show up reliably even
+    # for pubs whose only jobs are long since paid and gone from 'jobs'.
+    #
+    # Wrapped defensively: pub_locations is created by wisdom-sync's
+    # init_db(), a separate service/deploy — if that hasn't run yet, this
+    # page should still load fine with no postcodes shown, not error out.
     pub_names = [r["pub_name"] for r in by_pub]
     pub_postcodes = {}
     if pub_names:
-        cur.execute("""
-            SELECT pub_name, MAX(postcode) as postcode
-            FROM jobs WHERE pub_name = ANY(%s) AND postcode IS NOT NULL AND postcode != ''
-            GROUP BY pub_name
-        """, (pub_names,))
-        pub_postcodes = {r["pub_name"]: r["postcode"] for r in cur.fetchall()}
+        try:
+            cur.execute("""
+                SELECT pub_name, postcode FROM pub_locations
+                WHERE pub_name = ANY(%s) AND postcode IS NOT NULL AND postcode != ''
+            """, (pub_names,))
+            pub_postcodes = {r["pub_name"]: r["postcode"] for r in cur.fetchall()}
+        except Exception as e:
+            app.logger.warning(f"pub_locations lookup failed (table may not exist yet): {e}")
+            conn.rollback()
     by_pub = [dict(r, postcode=pub_postcodes.get(r["pub_name"])) for r in by_pub]
 
     # True count of unique sites in this period — deliberately NOT len(by_pub),
@@ -4147,6 +4156,15 @@ def admin_margin_paid():
     """, trade_params)
     by_trade = cur.fetchall()
     by_trade_scoped_to_pub = bool(pub_filter and trade_scope != "all")
+
+    # % of that pub's total spend each trade accounts for — only meaningful
+    # (and only shown) when scoped to a single pub, not the all-pub view.
+    if by_trade_scoped_to_pub:
+        pub_trade_total = sum(float(t["total_spend"] or 0) for t in by_trade)
+        by_trade = [
+            dict(t, pct_of_pub=(float(t["total_spend"] or 0) / pub_trade_total * 100) if pub_trade_total else 0)
+            for t in by_trade
+        ]
 
     cur.close()
     conn.close()
