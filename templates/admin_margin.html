@@ -163,6 +163,42 @@
     </div>
   </div>
 
+  <!-- Paid Jobs & Customer Analysis — the richest data on this whole page,
+       given a section that actually matches that, not a small text link. -->
+  <div class="section-card" style="border:1.5px solid #b7e4c7">
+    <div class="section-title">💰 Paid Jobs & Customer Analysis — {{ period_label }}</div>
+    <div class="section-sub">Your full historic revenue picture by pub and trade — postcode-mapped, filterable, and going back through every job ever paid. This is the deepest data on the whole platform.</div>
+    <div class="headline-grid" style="margin-bottom:18px">
+      <div class="hl-box" style="background:#effdf4;border-color:#b7e4c7">
+        <div class="hl-label" style="color:#1a7a4a">Jobs Paid</div>
+        <div class="hl-value" style="color:#1a7a4a">{{ paid_period_count }}</div>
+      </div>
+      <div class="hl-box" style="background:#effdf4;border-color:#b7e4c7">
+        <div class="hl-label" style="color:#1a7a4a">Total Paid</div>
+        <div class="hl-value" style="color:#1a7a4a">£{{ '{:,.2f}'.format(paid_period_total) }}</div>
+      </div>
+    </div>
+    <div class="type-grid" style="grid-template-columns:1fr 1fr">
+      <div class="type-card">
+        <div class="type-title"><span>🍺 Top 5 Pubs</span></div>
+        {% for p in paid_top_pubs %}
+        <div class="type-row"><span>{{ p.pub_name }}</span><strong>£{{ '{:,.0f}'.format(p.total_spend) }}</strong></div>
+        {% else %}
+        <div class="type-row" style="color:#aaa">No paid jobs in this period.</div>
+        {% endfor %}
+      </div>
+      <div class="type-card">
+        <div class="type-title"><span>🔧 Top 5 Trades</span></div>
+        {% for t in paid_top_trades %}
+        <div class="type-row"><span>{{ t.trade_type }}</span><strong>£{{ '{:,.0f}'.format(t.total_spend) }}</strong></div>
+        {% else %}
+        <div class="type-row" style="color:#aaa">No paid jobs in this period.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <a href="/admin/margin/paid" style="display:block;text-align:center;margin-top:18px;padding:12px;background:#1a7a4a;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">Open Full Paid Jobs & Customer Report →</a>
+  </div>
+
   <!-- Headline -->
   <div class="section-card">
     <div class="section-title">Business Overview — {{ period_label }}</div>
