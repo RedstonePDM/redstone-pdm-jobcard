@@ -4069,6 +4069,11 @@ def admin_margin_paid():
 
     pub_filter = request.args.get("pub", "").strip()
     trade_filter = request.args.get("trade", "").strip()
+    # Independent toggle for the trade-breakdown panel only: when a pub is
+    # selected, trade spend defaults to that pub's breakdown, but the person
+    # can flip to see all-pub totals without losing their pub selection
+    # (which still drives the job list below and the Spend by Pub panel).
+    trade_scope = request.args.get("trade_scope", "pub")
 
     conn = get_db()
     cur = conn.cursor()
@@ -4102,6 +4107,20 @@ def admin_margin_paid():
     """, (p_start, p_end))
     by_pub = cur.fetchall()
 
+    # Best-effort postcode per pub, pulled from the 'jobs' table (populated
+    # separately during the postcode-enrichment pass). Not every pub will
+    # have one yet — shown as blank rather than guessed.
+    pub_names = [r["pub_name"] for r in by_pub]
+    pub_postcodes = {}
+    if pub_names:
+        cur.execute("""
+            SELECT pub_name, MAX(postcode) as postcode
+            FROM jobs WHERE pub_name = ANY(%s) AND postcode IS NOT NULL AND postcode != ''
+            GROUP BY pub_name
+        """, (pub_names,))
+        pub_postcodes = {r["pub_name"]: r["postcode"] for r in cur.fetchall()}
+    by_pub = [dict(r, postcode=pub_postcodes.get(r["pub_name"])) for r in by_pub]
+
     # True count of unique sites in this period — deliberately NOT len(by_pub),
     # since that list is capped at the top 100 for display and would silently
     # undercount if there are more sites than that.
@@ -4112,19 +4131,28 @@ def admin_margin_paid():
     """, (p_start, p_end))
     site_count = cur.fetchone()["cnt"]
 
-    # Drill-down: spend by trade type
-    cur.execute("""
+    # Drill-down: spend by trade type — filtered to the selected pub by
+    # default (trade_scope='pub'), or all pubs if trade_scope='all'.
+    trade_where = ["status='paid'", "payment_date BETWEEN %s AND %s", "trade_type IS NOT NULL"]
+    trade_params = [p_start, p_end]
+    if pub_filter and trade_scope != "all":
+        trade_where.append("pub_name = %s")
+        trade_params.append(pub_filter)
+    trade_where_sql = " AND ".join(trade_where)
+    cur.execute(f"""
         SELECT trade_type, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
         FROM job_wetherspoons_costs
-        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND trade_type IS NOT NULL
+        WHERE {trade_where_sql}
         GROUP BY trade_type ORDER BY total_spend DESC
-    """, (p_start, p_end))
+    """, trade_params)
     by_trade = cur.fetchall()
+    by_trade_scoped_to_pub = bool(pub_filter and trade_scope != "all")
 
     cur.close()
     conn.close()
     return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
         total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
+        by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope,
         period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
 
 
