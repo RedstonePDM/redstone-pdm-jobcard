@@ -4193,14 +4193,14 @@ def admin_margin_paid():
     by_trade = cur.fetchall()
     by_trade_scoped_to_pub = bool(pub_filter and trade_scope != "all")
 
-    # % of that pub's total spend each trade accounts for — only meaningful
-    # (and only shown) when scoped to a single pub, not the all-pub view.
-    if by_trade_scoped_to_pub:
-        pub_trade_total = sum(float(t["total_spend"] or 0) for t in by_trade)
-        by_trade = [
-            dict(t, pct_of_pub=(float(t["total_spend"] or 0) / pub_trade_total * 100) if pub_trade_total else 0)
-            for t in by_trade
-        ]
+    # % of the relevant total (that pub's spend, or all-pub spend) each
+    # trade accounts for — calculated either way now for uniformity, not
+    # just when scoped to a single pub.
+    trade_total = sum(float(t["total_spend"] or 0) for t in by_trade)
+    by_trade = [
+        dict(t, pct_of_pub=(float(t["total_spend"] or 0) / trade_total * 100) if trade_total else 0)
+        for t in by_trade
+    ]
 
     cur.close()
     conn.close()
@@ -4219,58 +4219,80 @@ def _pct_change(this_val, last_val):
     return (this_val - last_val) / last_val * 100
 
 
-def _yoy_by_pub(cur, this_start, this_end, last_start, last_end, limit=None):
-    """Per-pub totals for two comparable periods, merged and sorted by the
-    size of the absolute £ change — so the pubs that moved the most (up or
-    down) surface first, which is exactly what a 'who's growing, who's
-    declining' view needs."""
+def _period_total(cur, start, end):
     cur.execute("""
-        SELECT pub_name, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
-        FROM job_wetherspoons_costs
-        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
-        GROUP BY pub_name
-    """, (this_start, this_end))
-    this_by_pub = {r["pub_name"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
+        SELECT COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+        FROM job_wetherspoons_costs WHERE status='paid' AND payment_date BETWEEN %s AND %s
+    """, (start, end))
+    r = cur.fetchone()
+    return float(r["total"] or 0), r["cnt"]
 
-    cur.execute("""
-        SELECT pub_name, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
-        FROM job_wetherspoons_costs
-        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
-        GROUP BY pub_name
-    """, (last_start, last_end))
-    last_by_pub = {r["pub_name"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
 
-    all_pubs = set(this_by_pub.keys()) | set(last_by_pub.keys())
+def _period_series(cur, periods):
+    """periods: list of (label, start, end) tuples, OLDEST FIRST. Returns a
+    list of dicts each with total/cnt for that period plus delta/pct vs the
+    period immediately before it — the 'list view' building block for both
+    the month and FY summary tables."""
     out = []
-    for pub in all_pubs:
-        this_total = this_by_pub.get(pub, {}).get("total", 0.0)
-        last_total = last_by_pub.get(pub, {}).get("total", 0.0)
+    prev_total = None
+    for label, start, end in periods:
+        total, cnt = _period_total(cur, start, end)
         out.append({
-            "pub_name": pub,
-            "this_total": this_total, "last_total": last_total,
-            "delta": this_total - last_total,
-            "pct": _pct_change(this_total, last_total),
-            "this_cnt": this_by_pub.get(pub, {}).get("cnt", 0),
-            "last_cnt": last_by_pub.get(pub, {}).get("cnt", 0),
+            "label": label, "total": total, "cnt": cnt,
+            "delta": (total - prev_total) if prev_total is not None else None,
+            "pct": _pct_change(total, prev_total) if prev_total is not None else None,
         })
-    out.sort(key=lambda r: abs(r["delta"]), reverse=True)
-    return out[:limit] if limit else out
+        prev_total = total
+    return out
+
+
+def _period_series_by_pub(cur, periods):
+    """Same idea as _period_series but broken out per pub — periods: list
+    of (label, start, end), OLDEST FIRST. Returns EVERY pub that appears in
+    any period (no top-N cutoff — Dave wants full visibility), sorted by
+    the size of the most recent change so the biggest movers surface
+    first."""
+    per_period_pub_totals = []
+    all_pubs = set()
+    for label, start, end in periods:
+        cur.execute("""
+            SELECT pub_name, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+            FROM job_wetherspoons_costs
+            WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+            GROUP BY pub_name
+        """, (start, end))
+        totals = {r["pub_name"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
+        per_period_pub_totals.append(totals)
+        all_pubs |= set(totals.keys())
+
+    rows = []
+    for pub in all_pubs:
+        values = [p.get(pub, {}).get("total", 0.0) for p in per_period_pub_totals]
+        cnts = [p.get(pub, {}).get("cnt", 0) for p in per_period_pub_totals]
+        delta = values[-1] - values[-2] if len(values) >= 2 else None
+        pct = _pct_change(values[-1], values[-2]) if len(values) >= 2 else None
+        rows.append({"pub_name": pub, "amounts": values, "cnts": cnts, "delta": delta, "pct": pct})
+    rows.sort(key=lambda r: abs(r["delta"] or 0), reverse=True)
+    return rows
 
 
 @app.route("/admin/growth")
 @admin_required
 def admin_growth():
-    """Year-on-year growth reporting — £ and % by pub, by month, by FY, and
-    overall. Anchored permanently on payment_date: Wisdom doesn't expose a
-    genuine 'job raised' date on the billing feed for historic jobs, so
-    using anything else would mean the methodology silently changes
-    partway through the data and comparisons stop being genuinely like-for-like.
-    Payment date is slower than the work itself by a roughly consistent
-    lag, but consistent forever beats accurate-but-shifting."""
+    """Year-on-year growth reporting — £ and % by pub, by month, and by FY,
+    across the last 3 years. Anchored permanently on payment_date: Wisdom
+    doesn't expose a genuine 'job raised' date on the billing feed for
+    historic jobs, so using anything else would mean the methodology
+    silently changes partway through the data and comparisons stop being
+    genuinely like-for-like. Payment date is slower than the work itself by
+    a roughly consistent lag, but consistent forever beats accurate-but-shifting.
+
+    FY-to-date comparisons deliberately compare the SAME NUMBER OF DAYS
+    into each financial year, not partial-year-vs-full-year — comparing 4
+    months of this year against 12 months of last year would flatter
+    'last year' every single time regardless of actual performance."""
     today = date.today()
 
-    # Selected month (defaults to current month) vs the same calendar
-    # month one year earlier.
     month_param = request.args.get("month", "").strip()
     if month_param:
         try:
@@ -4279,43 +4301,36 @@ def admin_growth():
             sel_year, sel_month = today.year, today.month
     else:
         sel_year, sel_month = today.year, today.month
-
-    this_month_start = date(sel_year, sel_month, 1)
-    this_month_end = date(sel_year, sel_month, calendar.monthrange(sel_year, sel_month)[1])
-    last_month_start = date(sel_year - 1, sel_month, 1)
-    last_month_end = date(sel_year - 1, sel_month, calendar.monthrange(sel_year - 1, sel_month)[1])
-    month_label = this_month_start.strftime("%B %Y")
-    last_month_label = last_month_start.strftime("%B %Y")
-
-    # This FY vs last FY (same April-March logic used everywhere else).
-    this_fy_start, this_fy_end, this_fy_label = fy_bounds(today)
-    last_fy_start, last_fy_end, last_fy_label = fy_bounds(date(this_fy_start.year - 1, 4, 15))
+    selected_month = f"{sel_year}-{sel_month:02d}"
 
     conn = get_db()
     cur = conn.cursor()
 
-    def _period_total(start, end):
-        cur.execute("""
-            SELECT COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
-            FROM job_wetherspoons_costs WHERE status='paid' AND payment_date BETWEEN %s AND %s
-        """, (start, end))
-        r = cur.fetchone()
-        return float(r["total"] or 0), r["cnt"]
+    # --- Month comparison: 3 years, oldest first ---
+    month_periods = []
+    for offset in (2, 1, 0):
+        y = sel_year - offset
+        start = date(y, sel_month, 1)
+        end = date(y, sel_month, calendar.monthrange(y, sel_month)[1])
+        month_periods.append((start.strftime("%b %Y"), start, end))
+    month_series = _period_series(cur, month_periods)
+    month_by_pub = _period_series_by_pub(cur, month_periods)
+    month_col_labels = [p[0] for p in month_periods]
 
-    this_month_total, this_month_cnt = _period_total(this_month_start, this_month_end)
-    last_month_total, last_month_cnt = _period_total(last_month_start, last_month_end)
-    this_fy_total, this_fy_cnt = _period_total(this_fy_start, min(this_fy_end, today))
-    last_fy_total, last_fy_cnt = _period_total(last_fy_start, last_fy_end)
+    # --- FY-to-date comparison: 3 years, same days-into-year cutoff ---
+    this_fy_start, this_fy_end, this_fy_label = fy_bounds(today)
+    days_into_fy = (today - this_fy_start).days
+    fy_periods = []
+    for offset in (2, 1, 0):
+        fy_start_n = date(this_fy_start.year - offset, 4, 1)
+        fy_end_n = min(fy_start_n + timedelta(days=days_into_fy), date(this_fy_start.year - offset + 1, 3, 31))
+        label = f"FY{fy_start_n.year}/{str(fy_start_n.year+1)[2:]} (to {fy_end_n.strftime('%d %b')})"
+        fy_periods.append((label, fy_start_n, fy_end_n))
+    fy_series = _period_series(cur, fy_periods)
+    fy_by_pub = _period_series_by_pub(cur, fy_periods)
+    fy_col_labels = [p[0] for p in fy_periods]
 
-    month_pct = _pct_change(this_month_total, last_month_total)
-    fy_pct = _pct_change(this_fy_total, last_fy_total)
-
-    month_by_pub = _yoy_by_pub(cur, this_month_start, this_month_end, last_month_start, last_month_end, limit=20)
-    fy_by_pub = _yoy_by_pub(cur, this_fy_start, min(this_fy_end, today), last_fy_start, last_fy_end, limit=20)
-
-    # Rolling trend — trailing 24 calendar months, this-year-vs-last-year
-    # paired so the shape of the business is visible at a glance, not just
-    # two isolated snapshot numbers.
+    # --- 12-month rolling trend (2-year, kept simple per Dave's steer) ---
     trend_start = date(today.year - 2, today.month, 1)
     cur.execute("""
         SELECT to_char(payment_date, 'YYYY-MM') as ym, COALESCE(SUM(total_agreed),0) as total
@@ -4343,15 +4358,10 @@ def admin_growth():
     conn.close()
 
     return render_template("admin_growth.html",
-        month_label=month_label, last_month_label=last_month_label,
-        this_month_total=this_month_total, last_month_total=last_month_total,
-        this_month_cnt=this_month_cnt, last_month_cnt=last_month_cnt, month_pct=month_pct,
-        this_fy_label=this_fy_label, last_fy_label=last_fy_label,
-        this_fy_total=this_fy_total, last_fy_total=last_fy_total,
-        this_fy_cnt=this_fy_cnt, last_fy_cnt=last_fy_cnt, fy_pct=fy_pct,
-        month_by_pub=month_by_pub, fy_by_pub=fy_by_pub,
-        trend=trend, trend_max=trend_max,
-        selected_month=f"{sel_year}-{sel_month:02d}")
+        selected_month=selected_month,
+        month_series=month_series, month_col_labels=month_col_labels, month_by_pub=month_by_pub,
+        fy_series=fy_series, fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
+        trend=trend, trend_max=trend_max)
 
 
 
