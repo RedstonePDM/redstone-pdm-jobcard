@@ -3870,22 +3870,36 @@ def admin_margin():
     """, (p_start, p_end))
     cost_rows = {r["job_id"]: r for r in cur.fetchall()}
 
-    # Revenue side, reactive/MIV/PPM: scraped Wisdom "agreed" totals
-    cur.execute("SELECT job_id, display_id, job_type, total_agreed, status, payment_date, pub_name, trade_type FROM job_wetherspoons_costs")
+    # Live pipeline snapshot — every job Wisdom currently has anywhere in the
+    # billing pipeline (not period-filtered; this is "where things stand
+    # right now", not "what happened this period").
+    cur.execute("""
+        SELECT job_id, display_id, job_type, total_agreed, status, payment_date,
+               pub_name, pub_id, trade_type, wisdom_status_change_date, due_date, first_seen_at
+        FROM job_wetherspoons_costs WHERE status != 'paid'
+    """)
     wisdom_costs = {r["job_id"]: r for r in cur.fetchall()}
 
-    # Revenue side, quoted (5000): what was actually quoted and won
+    # Revenue side, quoted (5000): what was actually quoted and won. If a
+    # quote has *also* progressed into Wisdom's payment pipeline, the real
+    # wisdom_costs row (above) takes precedence — it's more granular.
     cur.execute("""
         SELECT job_id, quote_total, outcome, pub_name, trade_type
         FROM survey_forms WHERE outcome = 'won'
     """)
     won_quotes = {r["job_id"]: r for r in cur.fetchall()}
 
-    # Job metadata (pub name, trade) for jobs not already covered above
     all_job_ids = set(cost_rows.keys()) | set(wisdom_costs.keys()) | set(won_quotes.keys())
     cur.execute("SELECT job_id, pub_name, trade_type, sub_trade_type FROM jobs WHERE job_id = ANY(%s)",
                 (list(all_job_ids),) if all_job_ids else ([],))
     job_meta = {r["job_id"]: r for r in cur.fetchall()}
+
+    STATUS_LABELS = {
+        "awaiting_costs": "Awaiting Costs (Wisdom)",
+        "ready_for_payment": "Ready for Payment",
+        "approved_to_invoice": "Approved to Invoice",
+        "invoiced": "Invoiced",
+    }
 
     rows = []
     for job_id in all_job_ids:
@@ -3901,46 +3915,39 @@ def admin_margin():
             total_cost = (float(cost["labour_cost"] or 0) + float(cost["materials_cost"] or 0) +
                           float(cost["admin_materials_cost"] or 0) + float(cost["parking_cost"] or 0))
 
-        if prefix == "5" and wq:
+        if wc:
+            # Real Wisdom pipeline data takes precedence for any job type —
+            # this is the most granular, most current source of truth.
+            job_type = wc["job_type"]
+            revenue = float(wc["total_agreed"] or 0) if wc["status"] != "awaiting_costs" else None
+            wisdom_status = wc["status"]
+            pub_name = wc.get("pub_name") or meta.get("pub_name")
+            trade_type = wc.get("trade_type") or meta.get("trade_type") or meta.get("sub_trade_type")
+            days_in_stage = (today - wc["wisdom_status_change_date"]).days if wc["wisdom_status_change_date"] else None
+        elif prefix == "5" and wq:
             job_type = "quoted"
             revenue = float(wq["quote_total"] or 0)
-            rev_status = "confirmed"  # a won quote is an agreed price
+            wisdom_status = "won_quote"
             pub_name = wq.get("pub_name") or meta.get("pub_name")
             trade_type = wq.get("trade_type") or meta.get("trade_type")
-        elif prefix == "2" and wc:
-            job_type = "ppm"
-            revenue = float(wc["total_agreed"] or 0)
-            rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
-            pub_name = wc.get("pub_name") or meta.get("pub_name")
-            trade_type = wc.get("trade_type") or meta.get("trade_type") or meta.get("sub_trade_type")
-        elif prefix in ("1", "3") and wc:
-            job_type = "reactive"
-            revenue = float(wc["total_agreed"] or 0)
-            rev_status = "confirmed" if wc["status"] == "approved_to_invoice" else "estimated"
-            pub_name = wc.get("pub_name") or meta.get("pub_name")
-            trade_type = wc.get("trade_type") or meta.get("trade_type") or meta.get("sub_trade_type")
+            days_in_stage = None
         elif not has_cost:
-            # Has Wisdom revenue but doesn't match any known prefix rule —
-            # skip rather than guess at job type.
-            continue
+            continue  # nothing to show — no cost, no revenue, no known job type
         else:
-            # Job cards exist but Wisdom hasn't returned a cost yet (still
-            # open, or hasn't reached Ready for Payment) — show as pending
-            # rather than guessing at revenue.
             job_type = "ppm" if prefix == "2" else ("quoted" if prefix == "5" else "reactive")
             revenue = None
-            rev_status = "pending"
+            wisdom_status = None
             pub_name = meta.get("pub_name")
             trade_type = meta.get("trade_type") or meta.get("sub_trade_type")
+            days_in_stage = None
 
-        # Margin only makes sense once BOTH sides are known — never fabricate
-        # a 100% margin just because the cost side hasn't been logged yet.
         margin = (revenue - total_cost) if (revenue is not None and has_cost) else None
         margin_pct = (margin / revenue * 100) if margin is not None and revenue else None
 
         rows.append({
             "job_id": job_id, "job_type": job_type, "pub_name": pub_name, "trade_type": trade_type,
-            "revenue": revenue, "rev_status": rev_status, "has_cost": has_cost,
+            "revenue": revenue, "wisdom_status": wisdom_status, "has_cost": has_cost,
+            "days_in_stage": days_in_stage,
             "labour_cost": float(cost["labour_cost"] or 0) if has_cost else 0.0,
             "materials_cost": (float(cost["materials_cost"] or 0) + float(cost["admin_materials_cost"] or 0)) if has_cost else 0.0,
             "parking_cost": float(cost["parking_cost"] or 0) if has_cost else 0.0,
@@ -3951,18 +3958,17 @@ def admin_margin():
 
     rows.sort(key=lambda r: (r["last_card_date"] or date.min), reverse=True)
 
-    # Type-level summary — only rows with both revenue AND cost known count
-    # towards totals; anything still missing one side is shown but excluded
-    # from the maths so the numbers stay honest.
+    # The 4 requested report sections
+    ready_for_payment_rows = [r for r in rows if r["wisdom_status"] == "ready_for_payment"]
+    approved_invoiced_rows = [r for r in rows if r["wisdom_status"] in ("approved_to_invoice", "invoiced", "won_quote")]
+    awaiting_engineer_cost_rows = [r for r in rows if not r["has_cost"]]
+
+    # Type-level summary — confirmed revenue only (approved/invoiced/won),
+    # both sides known. Ready for Payment is real but not yet locked by
+    # Wisdom, so it's shown separately rather than counted as final.
     summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0} for t in ("reactive", "ppm", "quoted")}
-    awaiting_wisdom = 0     # job card logged, no Wisdom revenue yet
-    awaiting_costs = 0      # Wisdom revenue confirmed, no job card yet
     for r in rows:
-        if r["margin"] is None:
-            if r["revenue"] is None:
-                awaiting_wisdom += 1
-            if not r["has_cost"]:
-                awaiting_costs += 1
+        if r["margin"] is None or r["wisdom_status"] not in ("approved_to_invoice", "invoiced", "won_quote"):
             continue
         summary[r["job_type"]]["revenue"] += r["revenue"]
         summary[r["job_type"]]["cost"] += r["total_cost"]
@@ -3972,21 +3978,139 @@ def admin_margin():
     total_cost_all = sum(s["cost"] for s in summary.values())
     total_margin = total_revenue - total_cost_all
     total_margin_pct = (total_margin / total_revenue * 100) if total_revenue else 0
-
     for t in summary:
         s = summary[t]
         s["margin"] = s["revenue"] - s["cost"]
         s["margin_pct"] = (s["margin"] / s["revenue"] * 100) if s["revenue"] else 0
 
+    # Live pipeline overview — every non-paid job currently sitting
+    # somewhere in Wisdom's billing pipeline, right now, with how many days
+    # it's been sat in its current stage.
+    cur.execute("""
+        SELECT status, COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total,
+               COALESCE(AVG(EXTRACT(DAY FROM NOW() - wisdom_status_change_date)),0) as avg_days
+        FROM job_wetherspoons_costs WHERE status != 'paid'
+        GROUP BY status
+    """)
+    pipeline_overview = []
+    pipeline_by_status = {r["status"]: r for r in cur.fetchall()}
+    for status_key, label in STATUS_LABELS.items():
+        r = pipeline_by_status.get(status_key)
+        pipeline_overview.append({
+            "status": status_key, "label": label,
+            "count": r["cnt"] if r else 0,
+            "total": float(r["total"] or 0) if r else 0.0,
+            "avg_days": round(float(r["avg_days"] or 0)) if r else 0,
+        })
+
+    # Cash flow: total currently unpaid (stuck in the pipeline), and how long
+    # jobs actually take from Approved to Invoice through to being Paid —
+    # this builds up in accuracy over time as job_status_history accumulates.
+    total_stuck = sum(p["total"] for p in pipeline_overview)
+
+    cur.execute("""
+        SELECT jwc.job_id, jwc.payment_date,
+               (SELECT MIN(h.wisdom_status_change_date) FROM job_status_history h
+                WHERE h.job_id = jwc.job_id AND h.status = 'approved_to_invoice') as approved_date
+        FROM job_wetherspoons_costs jwc
+        WHERE jwc.status = 'paid' AND jwc.payment_date IS NOT NULL
+    """)
+    pay_delays = []
+    for r in cur.fetchall():
+        if r["approved_date"] and r["payment_date"]:
+            days = (r["payment_date"] - r["approved_date"]).days
+            if 0 <= days <= 365:
+                pay_delays.append(days)
+    avg_payment_delay = round(sum(pay_delays) / len(pay_delays)) if pay_delays else None
+
+    cur.execute("SELECT COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total FROM job_wetherspoons_costs WHERE status='paid'")
+    paid_summary = cur.fetchone()
+
     cur.close()
     conn.close()
-    return render_template("admin_margin.html", rows=rows, summary=summary,
-        total_revenue=total_revenue, total_cost=total_cost_all, total_margin=total_margin,
-        total_margin_pct=total_margin_pct, awaiting_wisdom=awaiting_wisdom, awaiting_costs=awaiting_costs,
-        period=period, period_label=period_label, fy_label=fy_label)
+    return render_template("admin_margin.html",
+        rows=rows, ready_for_payment_rows=ready_for_payment_rows,
+        approved_invoiced_rows=approved_invoiced_rows, awaiting_engineer_cost_rows=awaiting_engineer_cost_rows,
+        summary=summary, total_revenue=total_revenue, total_cost=total_cost_all, total_margin=total_margin,
+        total_margin_pct=total_margin_pct, period=period, period_label=period_label, fy_label=fy_label,
+        pipeline_overview=pipeline_overview, total_stuck=total_stuck,
+        avg_payment_delay=avg_payment_delay, pay_delay_sample_size=len(pay_delays),
+        paid_count=paid_summary["cnt"], paid_total=float(paid_summary["total"] or 0))
+
+
+@app.route("/admin/margin/paid")
+@admin_required
+def admin_margin_paid():
+    """Full Paid Jobs history — the final resting place of every job, per
+    Wisdom. Supports pub / trade-type drill-down for customer and location
+    analysis, since 'paid' can run into the thousands of rows."""
+    period = request.args.get("period", "fy")
+    fy_start, fy_end, fy_label = fy_bounds()
+    today = date.today()
+    if period == "month":
+        p_start = date(today.year, today.month, 1)
+        p_end = today
+        period_label = today.strftime("%B %Y")
+    elif period == "all":
+        p_start = date(2000, 1, 1)
+        p_end = today
+        period_label = "All Time"
+    else:
+        p_start, p_end, period_label = fy_start, fy_end, fy_label
+
+    pub_filter = request.args.get("pub", "").strip()
+    trade_filter = request.args.get("trade", "").strip()
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    where = ["status = 'paid'", "payment_date BETWEEN %s AND %s"]
+    params = [p_start, p_end]
+    if pub_filter:
+        where.append("pub_name = %s")
+        params.append(pub_filter)
+    if trade_filter:
+        where.append("trade_type = %s")
+        params.append(trade_filter)
+    where_sql = " AND ".join(where)
+
+    cur.execute(f"""
+        SELECT job_id, display_id, job_type, pub_name, trade_type, total_agreed, payment_date
+        FROM job_wetherspoons_costs WHERE {where_sql}
+        ORDER BY payment_date DESC LIMIT 500
+    """, params)
+    paid_jobs = cur.fetchall()
+
+    cur.execute(f"SELECT COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total FROM job_wetherspoons_costs WHERE {where_sql}", params)
+    totals = cur.fetchone()
+
+    # Drill-down: spend by pub
+    cur.execute("""
+        SELECT pub_name, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+        GROUP BY pub_name ORDER BY total_spend DESC LIMIT 100
+    """, (p_start, p_end))
+    by_pub = cur.fetchall()
+
+    # Drill-down: spend by trade type
+    cur.execute("""
+        SELECT trade_type, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND trade_type IS NOT NULL
+        GROUP BY trade_type ORDER BY total_spend DESC
+    """, (p_start, p_end))
+    by_trade = cur.fetchall()
+
+    cur.close()
+    conn.close()
+    return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
+        total_count=totals["cnt"], total_spend=float(totals["total"] or 0),
+        period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
 
 
 
+@app.route("/admin/reports")
 @admin_required
 def admin_reports():
     return render_template("admin_reports.html")
