@@ -4249,9 +4249,11 @@ def _period_series(cur, periods):
 def _period_series_by_pub(cur, periods):
     """Same idea as _period_series but broken out per pub — periods: list
     of (label, start, end), OLDEST FIRST. Returns EVERY pub that appears in
-    any period (no top-N cutoff — Dave wants full visibility), sorted by
-    the size of the most recent change so the biggest movers surface
-    first."""
+    any period (no top-N cutoff — Dave wants full visibility). Computes a
+    delta/pct for EVERY consecutive step (e.g. 2024→2025 AND 2025→2026,
+    not just the most recent one) so the full trajectory is visible, not
+    just the latest snapshot. Sorted by the size of the most recent change
+    so the biggest current movers surface first."""
     per_period_pub_totals = []
     all_pubs = set()
     for label, start, end in periods:
@@ -4267,11 +4269,16 @@ def _period_series_by_pub(cur, periods):
 
     rows = []
     for pub in all_pubs:
-        values = [p.get(pub, {}).get("total", 0.0) for p in per_period_pub_totals]
+        amounts = [p.get(pub, {}).get("total", 0.0) for p in per_period_pub_totals]
         cnts = [p.get(pub, {}).get("cnt", 0) for p in per_period_pub_totals]
-        delta = values[-1] - values[-2] if len(values) >= 2 else None
-        pct = _pct_change(values[-1], values[-2]) if len(values) >= 2 else None
-        rows.append({"pub_name": pub, "amounts": values, "cnts": cnts, "delta": delta, "pct": pct})
+        steps = []
+        for i in range(1, len(amounts)):
+            steps.append({
+                "delta": amounts[i] - amounts[i - 1],
+                "pct": _pct_change(amounts[i], amounts[i - 1]),
+            })
+        latest_delta = steps[-1]["delta"] if steps else None
+        rows.append({"pub_name": pub, "amounts": amounts, "cnts": cnts, "steps": steps, "delta": latest_delta})
     rows.sort(key=lambda r: abs(r["delta"] or 0), reverse=True)
     return rows
 
@@ -4330,8 +4337,10 @@ def admin_growth():
     fy_by_pub = _period_series_by_pub(cur, fy_periods)
     fy_col_labels = [p[0] for p in fy_periods]
 
-    # --- 12-month rolling trend (2-year, kept simple per Dave's steer) ---
-    trend_start = date(today.year - 2, today.month, 1)
+    # --- Monthly data source (3 years back, April-aligned) — feeds BOTH
+    # the trend chart below (2-year) and the full monthly matrix table
+    # (3-year, every month visible at once) from one query. ---
+    trend_start = date(this_fy_start.year - 2, 4, 1)
     cur.execute("""
         SELECT to_char(payment_date, 'YYYY-MM') as ym, COALESCE(SUM(total_agreed),0) as total
         FROM job_wetherspoons_costs
@@ -4340,8 +4349,12 @@ def admin_growth():
     """, (trend_start,))
     trend_by_month = {r["ym"]: float(r["total"] or 0) for r in cur.fetchall()}
 
+    # Trend chart: aligned to the financial year (April-March), not a
+    # rolling window from today — so the shape of the chart always matches
+    # how the business actually plans and reports, and doesn't shift
+    # position every month.
     trend = []
-    cursor_date = date(today.year - 1, today.month, 1)
+    cursor_date = this_fy_start
     for i in range(12):
         y, m = cursor_date.year, cursor_date.month
         this_key = f"{y}-{m:02d}"
@@ -4351,8 +4364,29 @@ def admin_growth():
             "this_total": trend_by_month.get(this_key, 0.0),
             "last_total": trend_by_month.get(last_key, 0.0),
         })
-        cursor_date = date(y + 1, m, 1) if m == 12 else date(y, m + 1, 1)
+        # Bump the month, rolling the year over correctly at December —
+        # a prior version of this reset the year but left the month at 12,
+        # producing 'Dec 26, Dec 27, Dec 28...' instead of moving into Jan.
+        cursor_date = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
     trend_max = max([max(t["this_total"], t["last_total"]) for t in trend], default=0) or 1
+
+    # Full monthly matrix — every month of the financial year (April to
+    # March) visible in one table, 3 years side by side. This is the 'all
+    # months on one view' Dave asked for, rather than picking one month at
+    # a time.
+    matrix_fy_years = [this_fy_start.year - 2, this_fy_start.year - 1, this_fy_start.year]
+    matrix_col_labels = [f"FY{y}/{str(y+1)[2:]}" for y in matrix_fy_years]
+    fy_month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+    monthly_matrix = []
+    for cal_month in fy_month_order:
+        row_amounts = []
+        for fy_year in matrix_fy_years:
+            cal_year = fy_year if cal_month >= 4 else fy_year + 1
+            row_amounts.append(trend_by_month.get(f"{cal_year}-{cal_month:02d}", 0.0))
+        monthly_matrix.append({
+            "month_name": calendar.month_name[cal_month],
+            "amounts": row_amounts,
+        })
 
     cur.close()
     conn.close()
@@ -4361,7 +4395,8 @@ def admin_growth():
         selected_month=selected_month,
         month_series=month_series, month_col_labels=month_col_labels, month_by_pub=month_by_pub,
         fy_series=fy_series, fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
-        trend=trend, trend_max=trend_max)
+        trend=trend, trend_max=trend_max,
+        monthly_matrix=monthly_matrix, matrix_col_labels=matrix_col_labels)
 
 
 
