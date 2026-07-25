@@ -132,32 +132,32 @@
     </div>
 
     <div class="section-card">
-      <div class="section-title">🔧 Spend by Trade Type — {% if by_trade_scoped_to_pub %}{{ pub_filter }}{% else %}{{ period_label }}{% endif %}</div>
-      <div class="section-sub">
-        {% if pub_filter %}
-          {% if by_trade_scoped_to_pub %}
-            Showing trade breakdown for <strong>{{ pub_filter }}</strong> only.
-            <a href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=all" class="btn-link" style="margin-left:4px">View all-pub totals →</a>
-          {% else %}
-            Showing all-pub totals.
-            <a href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=pub" class="btn-link" style="margin-left:4px">Show {{ pub_filter }} only →</a>
-          {% endif %}
-        {% else %}
-          Click a trade to filter the job list below.
-        {% endif %}
+      {% if pub_filter %}
+      <div class="period-tabs" style="margin-bottom:12px">
+        <a class="period-tab {{ 'active' if by_trade_scoped_to_pub }}" href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=pub">{{ pub_filter }} Only</a>
+        <a class="period-tab {{ 'active' if not by_trade_scoped_to_pub }}" href="?period={{ period }}&pub={{ pub_filter|urlencode }}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}&trade_scope=all">All Pubs</a>
       </div>
+      {% endif %}
+      <div class="section-title">🔧 Spend by Trade Type — {% if by_trade_scoped_to_pub %}{{ pub_filter }}{% else %}{{ period_label }}{% endif %}</div>
+      <div class="section-sub">Click a trade to filter the job list below.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Trade</th><th class="num">Jobs</th><th class="num">Total Spend</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Trade</th><th class="num">Jobs</th><th class="num">Total Spend</th>
+            {% if by_trade_scoped_to_pub %}<th class="num">% of Pub Spend</th>{% endif %}
+          </tr>
+        </thead>
         <tbody>
           {% for t in by_trade %}
-          <tr class="clickable" onclick="location.href='?period={{ period }}&trade={{ t.trade_type|urlencode }}{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}'">
+          <tr class="clickable" onclick="location.href='?period={{ period }}&trade={{ t.trade_type|urlencode }}{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}&trade_scope={{ trade_scope }}'">
             <td>{{ t.trade_type }}</td>
             <td class="num">{{ t.job_count }}</td>
             <td class="num">£{{ '{:,.2f}'.format(t.total_spend) }}</td>
+            {% if by_trade_scoped_to_pub %}<td class="num">{{ '%.1f'|format(t.pct_of_pub) }}%</td>{% endif %}
           </tr>
           {% else %}
-          <tr><td colspan="3" class="empty-state">No paid jobs in this period.</td></tr>
+          <tr><td colspan="{{ 4 if by_trade_scoped_to_pub else 3 }}" class="empty-state">No paid jobs in this period.</td></tr>
           {% endfor %}
         </tbody>
       </table>
