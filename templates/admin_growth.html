@@ -19,51 +19,41 @@
   .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
 
   .page { max-width: 1350px; margin: 0 auto; padding: 28px 20px; }
-  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; gap: 12px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
   h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
-  .subnote { font-size: 11px; color: #aaa; margin-bottom: 22px; }
 
   .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
   .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
   .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
 
-  .month-form { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .month-form { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
   .month-form input[type="month"] { padding: 8px 12px; border-radius: 8px; border: 1.5px solid #e5e7eb; font-size: 14px; font-family: inherit; }
-  .month-form button { padding: 8px 18px; border-radius: 8px; border: none; background: #1a2332; color: white; font-weight: 600; font-size: 13px; cursor: pointer; }
-
-  .compare-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; margin-top: 10px; }
-  @media (max-width: 700px) { .compare-grid { grid-template-columns: 1fr; } }
-  .compare-side { text-align: center; }
-  .compare-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
-  .compare-value { font-size: 30px; font-weight: 800; color: #1a2332; margin-top: 6px; }
-  .compare-sub { font-size: 12px; color: #aaa; margin-top: 3px; }
-  .compare-arrow { text-align: center; }
-  .delta-pill { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 15px; font-weight: 800; }
-  .delta-pill.up { background: #effdf4; color: #1a7a4a; }
-  .delta-pill.down { background: #fdf0ef; color: #c0392b; }
-  .delta-pill.flat { background: #f3f4f6; color: #666; }
-  .delta-sub { font-size: 11px; color: #aaa; margin-top: 6px; text-align: center; }
+  .month-form button {
+    padding: 8px 18px; border-radius: 20px; border: none; background: #1a2332;
+    color: white; font-weight: 600; font-size: 13px; cursor: pointer;
+  }
 
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
   td { font-size: 13px; padding: 9px 10px; border-bottom: 1px solid #f5f5f5; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr:hover { background: #fafbfc; }
+  tr.total-row td { font-weight: 700; background: #fafbfc; }
   .pct-up { color: #1a7a4a; font-weight: 700; }
   .pct-down { color: #c0392b; font-weight: 700; }
   .pct-new { color: #1a4fa0; font-weight: 700; font-size: 11px; }
-  .table-scroll { max-height: 480px; overflow-y: auto; }
+  .table-scroll { max-height: 520px; overflow-y: auto; }
 
-  .trend-wrap { display: flex; align-items: flex-end; gap: 14px; height: 180px; padding: 10px 4px 0; overflow-x: auto; }
-  .trend-group { display: flex; flex-direction: column; align-items: center; min-width: 46px; flex-shrink: 0; }
-  .trend-bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; }
-  .trend-bar { width: 16px; border-radius: 3px 3px 0 0; position: relative; }
-  .trend-bar.this-year { background: #1a2332; }
-  .trend-bar.last-year { background: #d5d9e0; }
-  .trend-label { font-size: 10px; color: #888; margin-top: 6px; text-align: center; }
   .trend-legend { display: flex; gap: 18px; margin-bottom: 12px; font-size: 12px; color: #555; }
   .trend-legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .trend-wrap { display: flex; align-items: flex-end; gap: 14px; height: 180px; padding: 10px 4px 0; overflow-x: auto; }
+  .trend-group { display: flex; flex-direction: column; align-items: center; min-width: 46px; flex-shrink: 0; }
+  .trend-bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; }
+  .trend-bar { width: 16px; border-radius: 3px 3px 0 0; }
+  .trend-bar.this-year { background: #1a2332; }
+  .trend-bar.last-year { background: #d5d9e0; }
+  .trend-label { font-size: 10px; color: #888; margin-top: 6px; text-align: center; }
 </style>
 </head>
 <body>
@@ -82,63 +72,62 @@
   <div class="page-header">
     <h2>📈 Growth — Year on Year</h2>
   </div>
-  <div class="subnote">All figures shown are net of VAT. Every comparison here is anchored on Payment Date — chosen deliberately so historic and future jobs are measured the exact same way, permanently (see note on the Reports & Margin page for why).</div>
+  <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT. Anchored on Payment Date, permanently — see the Reports & Margin page for why. FY comparisons below compare the exact same number of days into each year, not partial-year-vs-full-year, so they're genuinely like-for-like.</div>
 
-  <!-- Month picker -->
+  <!-- Month comparison -->
   <div class="section-card">
-    <div class="section-title">🗓️ Pick a Month</div>
-    <div class="section-sub">Compare any single month against the same month one year earlier.</div>
+    <div class="section-title">🗓️ Month Comparison</div>
+    <div class="section-sub">Pick a month — compared against the same month in each of the last 2 years.</div>
     <form class="month-form" method="get">
       <input type="month" name="month" value="{{ selected_month }}">
       <button type="submit">Compare</button>
     </form>
-
-    <div class="compare-grid">
-      <div class="compare-side">
-        <div class="compare-label">{{ last_month_label }}</div>
-        <div class="compare-value">£{{ '{:,.0f}'.format(last_month_total) }}</div>
-        <div class="compare-sub">{{ last_month_cnt }} job{{ 's' if last_month_cnt != 1 }} paid</div>
-      </div>
-      <div class="compare-arrow">
-        {% if month_pct is not none %}
-          <span class="delta-pill {{ 'up' if month_pct >= 0 else 'down' }}">{{ '+' if month_pct >= 0 }}{{ '%.1f'|format(month_pct) }}%</span>
-        {% else %}
-          <span class="delta-pill flat">New</span>
-        {% endif %}
-        <div class="delta-sub">{{ '+' if (this_month_total - last_month_total) >= 0 }}£{{ '{:,.0f}'.format(this_month_total - last_month_total) }}</div>
-      </div>
-      <div class="compare-side">
-        <div class="compare-label">{{ month_label }}</div>
-        <div class="compare-value">£{{ '{:,.0f}'.format(this_month_total) }}</div>
-        <div class="compare-sub">{{ this_month_cnt }} job{{ 's' if this_month_cnt != 1 }} paid</div>
-      </div>
-    </div>
+    <table>
+      <thead>
+        <tr><th>Period</th><th class="num">Total Paid</th><th class="num">Jobs</th><th class="num">Change</th><th class="num">%</th></tr>
+      </thead>
+      <tbody>
+        {% for s in month_series %}
+        <tr class="{{ 'total-row' if loop.last }}">
+          <td>{{ s.label }}</td>
+          <td class="num">£{{ '{:,.2f}'.format(s.total) }}</td>
+          <td class="num">{{ s.cnt }}</td>
+          <td class="num">
+            {% if s.delta is not none %}<span class="{{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="num">
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.1f'|format(s.pct) }}%</span>{% elif s.delta is not none %}<span class="pct-new">New</span>{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
   <!-- FY comparison -->
   <div class="section-card">
-    <div class="section-title">📅 This Year vs Last Year</div>
-    <div class="section-sub">Full financial year (April–March) comparison. The current year is partial (up to today) — compared fairly against the same number of months last year isn't shown here yet, this is straight year-to-date.</div>
-    <div class="compare-grid">
-      <div class="compare-side">
-        <div class="compare-label">{{ last_fy_label }}</div>
-        <div class="compare-value">£{{ '{:,.0f}'.format(last_fy_total) }}</div>
-        <div class="compare-sub">{{ last_fy_cnt }} job{{ 's' if last_fy_cnt != 1 }} paid</div>
-      </div>
-      <div class="compare-arrow">
-        {% if fy_pct is not none %}
-          <span class="delta-pill {{ 'up' if fy_pct >= 0 else 'down' }}">{{ '+' if fy_pct >= 0 }}{{ '%.1f'|format(fy_pct) }}%</span>
-        {% else %}
-          <span class="delta-pill flat">New</span>
-        {% endif %}
-        <div class="delta-sub">{{ '+' if (this_fy_total - last_fy_total) >= 0 }}£{{ '{:,.0f}'.format(this_fy_total - last_fy_total) }}</div>
-      </div>
-      <div class="compare-side">
-        <div class="compare-label">{{ this_fy_label }} (to date)</div>
-        <div class="compare-value">£{{ '{:,.0f}'.format(this_fy_total) }}</div>
-        <div class="compare-sub">{{ this_fy_cnt }} job{{ 's' if this_fy_cnt != 1 }} paid</div>
-      </div>
-    </div>
+    <div class="section-title">📅 Financial Year Comparison — Like for Like</div>
+    <div class="section-sub">Each row covers the same number of days into the financial year (April 1st onwards), so a partial current year is never unfairly compared against a full prior year.</div>
+    <table>
+      <thead>
+        <tr><th>Financial Year</th><th class="num">Total Paid</th><th class="num">Jobs</th><th class="num">Change</th><th class="num">%</th></tr>
+      </thead>
+      <tbody>
+        {% for s in fy_series %}
+        <tr class="{{ 'total-row' if loop.last }}">
+          <td>{{ s.label }}</td>
+          <td class="num">£{{ '{:,.2f}'.format(s.total) }}</td>
+          <td class="num">{{ s.cnt }}</td>
+          <td class="num">
+            {% if s.delta is not none %}<span class="{{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="num">
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.1f'|format(s.pct) }}%</span>{% elif s.delta is not none %}<span class="pct-new">New</span>{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
   <!-- Rolling trend -->
@@ -164,26 +153,29 @@
 
   <!-- By pub: month -->
   <div class="section-card">
-    <div class="section-title">🍺 By Pub — {{ month_label }} vs {{ last_month_label }}</div>
-    <div class="section-sub">Sorted by size of change — biggest movers (up or down) first. Top 20 shown.</div>
+    <div class="section-title">🍺 By Pub — Month Comparison</div>
+    <div class="section-sub">Every pub shown, sorted by size of change — biggest movers (up or down) first.</div>
     <div class="table-scroll">
     <table>
       <thead>
-        <tr><th>Pub</th><th class="num">{{ last_month_label }}</th><th class="num">{{ month_label }}</th><th class="num">Change</th><th class="num">%</th></tr>
+        <tr>
+          <th>Pub</th>
+          {% for label in month_col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          <th class="num">Change</th><th class="num">%</th>
+        </tr>
       </thead>
       <tbody>
         {% for p in month_by_pub %}
         <tr>
           <td>{{ p.pub_name }}</td>
-          <td class="num">£{{ '{:,.0f}'.format(p.last_total) }}</td>
-          <td class="num">£{{ '{:,.0f}'.format(p.this_total) }}</td>
+          {% for v in p.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
           <td class="num {{ 'pct-up' if p.delta >= 0 else 'pct-down' }}">{{ '+' if p.delta >= 0 }}£{{ '{:,.0f}'.format(p.delta) }}</td>
           <td class="num">
             {% if p.pct is not none %}<span class="{{ 'pct-up' if p.pct >= 0 else 'pct-down' }}">{{ '+' if p.pct >= 0 }}{{ '%.0f'|format(p.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px">No paid jobs in either period.</td></tr>
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -192,26 +184,29 @@
 
   <!-- By pub: FY -->
   <div class="section-card">
-    <div class="section-title">🍺 By Pub — {{ this_fy_label }} vs {{ last_fy_label }}</div>
-    <div class="section-sub">Sorted by size of change — biggest movers (up or down) first. Top 20 shown. Good for spotting who's using you more (worth a call to grow) and who's gone quiet (worth checking in on).</div>
+    <div class="section-title">🍺 By Pub — Financial Year Comparison (Like for Like)</div>
+    <div class="section-sub">Every pub shown, sorted by size of change — good for spotting who's using you more (worth a call to grow) and who's gone quiet (worth checking in on).</div>
     <div class="table-scroll">
     <table>
       <thead>
-        <tr><th>Pub</th><th class="num">{{ last_fy_label }}</th><th class="num">{{ this_fy_label }}</th><th class="num">Change</th><th class="num">%</th></tr>
+        <tr>
+          <th>Pub</th>
+          {% for label in fy_col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          <th class="num">Change</th><th class="num">%</th>
+        </tr>
       </thead>
       <tbody>
         {% for p in fy_by_pub %}
         <tr>
           <td>{{ p.pub_name }}</td>
-          <td class="num">£{{ '{:,.0f}'.format(p.last_total) }}</td>
-          <td class="num">£{{ '{:,.0f}'.format(p.this_total) }}</td>
+          {% for v in p.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
           <td class="num {{ 'pct-up' if p.delta >= 0 else 'pct-down' }}">{{ '+' if p.delta >= 0 }}£{{ '{:,.0f}'.format(p.delta) }}</td>
           <td class="num">
             {% if p.pct is not none %}<span class="{{ 'pct-up' if p.pct >= 0 else 'pct-down' }}">{{ '+' if p.pct >= 0 }}{{ '%.0f'|format(p.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px">No paid jobs in either period.</td></tr>
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
         {% endfor %}
       </tbody>
     </table>
