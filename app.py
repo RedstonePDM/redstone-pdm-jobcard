@@ -3935,7 +3935,14 @@ def admin_margin():
         elif not has_cost:
             continue  # nothing to show — no cost, no revenue, no known job type
         else:
-            job_type = "ppm" if prefix == "2" else ("quoted" if prefix == "5" else "reactive")
+            if prefix == "2":
+                job_type = "ppm"
+            elif prefix == "5":
+                job_type = "quoted"
+            elif prefix == "3":
+                job_type = "miv"
+            else:
+                job_type = "reactive"
             revenue = None
             wisdom_status = None
             pub_name = meta.get("pub_name")
@@ -3970,7 +3977,7 @@ def admin_margin():
     # margin is genuinely partial until job cards catch up with Wisdom's
     # confirmed jobs, and we track that coverage explicitly rather than
     # silently dropping revenue for jobs with no cost data yet.
-    summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0, "cost_known_count": 0} for t in ("reactive", "ppm", "quoted")}
+    summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0, "cost_known_count": 0} for t in ("reactive", "miv", "ppm", "quoted")}
     for r in rows:
         if r["wisdom_status"] not in ("approved_to_invoice", "invoiced", "won_quote"):
             continue
