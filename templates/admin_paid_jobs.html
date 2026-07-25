@@ -57,6 +57,8 @@
   .filter-chip { font-size: 12px; background: #eff4ff; color: #1a4fa0; padding: 5px 12px; border-radius: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
   .filter-chip a { color: #1a4fa0; text-decoration: none; font-weight: 800; }
 
+  .count-pill { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: #eff4ff; color: #1a4fa0; vertical-align: middle; }
+
   .empty-state { text-align: center; padding: 24px; color: #aaa; font-size: 13px; }
   .table-scroll { max-height: 500px; overflow-y: auto; }
 </style>
@@ -81,6 +83,7 @@
       <a class="period-tab {% if period=='all' %}active{% endif %}" href="?period=all{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}">All Time</a>
     </div>
   </div>
+  <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT (as sourced directly from Wisdom).</div>
 
   <div class="section-card">
     <div class="section-title">Paid — {{ period_label }}</div>
@@ -107,7 +110,7 @@
   <!-- Drill-down: by pub, by trade -->
   <div class="drill-grid">
     <div class="section-card">
-      <div class="section-title">💰 Spend by Pub — {{ period_label }}</div>
+      <div class="section-title">💰 Spend by Pub — {{ period_label }}<span class="count-pill">{{ site_count }} site{{ 's' if site_count != 1 }}</span></div>
       <div class="section-sub">Click a pub to filter the job list below.</div>
       <div class="table-scroll">
       <table>
