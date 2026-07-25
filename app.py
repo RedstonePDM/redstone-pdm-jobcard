@@ -3896,6 +3896,7 @@ def admin_margin():
 
     STATUS_LABELS = {
         "awaiting_costs": "Awaiting Costs (Wisdom)",
+        "hov_query": "HOV Query",
         "ready_for_payment": "Ready for Payment",
         "approved_to_invoice": "Approved to Invoice",
         "invoiced": "Invoiced",
@@ -3963,19 +3964,26 @@ def admin_margin():
     approved_invoiced_rows = [r for r in rows if r["wisdom_status"] in ("approved_to_invoice", "invoiced", "won_quote")]
     awaiting_engineer_cost_rows = [r for r in rows if not r["has_cost"]]
 
-    # Type-level summary — confirmed revenue only (approved/invoiced/won),
-    # both sides known. Ready for Payment is real but not yet locked by
-    # Wisdom, so it's shown separately rather than counted as final.
-    summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0} for t in ("reactive", "ppm", "quoted")}
+    # Type-level summary — confirmed revenue (approved/invoiced/won) counts
+    # EVERY confirmed job, whether or not a job card cost has been logged
+    # against it yet. Cost only adds up what's actually known so far — so
+    # margin is genuinely partial until job cards catch up with Wisdom's
+    # confirmed jobs, and we track that coverage explicitly rather than
+    # silently dropping revenue for jobs with no cost data yet.
+    summary = {t: {"revenue": 0.0, "cost": 0.0, "count": 0, "cost_known_count": 0} for t in ("reactive", "ppm", "quoted")}
     for r in rows:
-        if r["margin"] is None or r["wisdom_status"] not in ("approved_to_invoice", "invoiced", "won_quote"):
+        if r["wisdom_status"] not in ("approved_to_invoice", "invoiced", "won_quote"):
             continue
-        summary[r["job_type"]]["revenue"] += r["revenue"]
-        summary[r["job_type"]]["cost"] += r["total_cost"]
+        summary[r["job_type"]]["revenue"] += (r["revenue"] or 0)
         summary[r["job_type"]]["count"] += 1
+        if r["has_cost"]:
+            summary[r["job_type"]]["cost"] += r["total_cost"]
+            summary[r["job_type"]]["cost_known_count"] += 1
 
     total_revenue = sum(s["revenue"] for s in summary.values())
     total_cost_all = sum(s["cost"] for s in summary.values())
+    total_confirmed_count = sum(s["count"] for s in summary.values())
+    total_cost_known_count = sum(s["cost_known_count"] for s in summary.values())
     total_margin = total_revenue - total_cost_all
     total_margin_pct = (total_margin / total_revenue * 100) if total_revenue else 0
     for t in summary:
@@ -4032,7 +4040,8 @@ def admin_margin():
         rows=rows, ready_for_payment_rows=ready_for_payment_rows,
         approved_invoiced_rows=approved_invoiced_rows, awaiting_engineer_cost_rows=awaiting_engineer_cost_rows,
         summary=summary, total_revenue=total_revenue, total_cost=total_cost_all, total_margin=total_margin,
-        total_margin_pct=total_margin_pct, period=period, period_label=period_label, fy_label=fy_label,
+        total_margin_pct=total_margin_pct, total_confirmed_count=total_confirmed_count,
+        total_cost_known_count=total_cost_known_count, period=period, period_label=period_label, fy_label=fy_label,
         pipeline_overview=pipeline_overview, total_stuck=total_stuck,
         avg_payment_delay=avg_payment_delay, pay_delay_sample_size=len(pay_delays),
         paid_count=paid_summary["cnt"], paid_total=float(paid_summary["total"] or 0))
@@ -4093,6 +4102,16 @@ def admin_margin_paid():
     """, (p_start, p_end))
     by_pub = cur.fetchall()
 
+    # True count of unique sites in this period — deliberately NOT len(by_pub),
+    # since that list is capped at the top 100 for display and would silently
+    # undercount if there are more sites than that.
+    cur.execute("""
+        SELECT COUNT(DISTINCT pub_name) as cnt
+        FROM job_wetherspoons_costs
+        WHERE status='paid' AND payment_date BETWEEN %s AND %s AND pub_name IS NOT NULL
+    """, (p_start, p_end))
+    site_count = cur.fetchone()["cnt"]
+
     # Drill-down: spend by trade type
     cur.execute("""
         SELECT trade_type, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
@@ -4105,7 +4124,7 @@ def admin_margin_paid():
     cur.close()
     conn.close()
     return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
-        total_count=totals["cnt"], total_spend=float(totals["total"] or 0),
+        total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
         period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
 
 
