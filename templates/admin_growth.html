@@ -36,7 +36,7 @@
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
   td { font-size: 13px; padding: 9px 10px; border-bottom: 1px solid #f5f5f5; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
   tr:hover { background: #fafbfc; }
   tr.total-row td { font-weight: 700; background: #fafbfc; }
   .pct-up { color: #1a7a4a; font-weight: 700; }
@@ -151,66 +151,72 @@
     </div>
   </div>
 
-  <!-- By pub: month -->
+  <!-- Full monthly breakdown -->
   <div class="section-card">
-    <div class="section-title">🍺 By Pub — Month Comparison</div>
-    <div class="section-sub">Every pub shown, sorted by size of change — biggest movers (up or down) first.</div>
+    <div class="section-title">🗓️ Full Monthly Breakdown — April to March</div>
+    <div class="section-sub">Every month of the financial year in one view, 3 years side by side — no need to pick one month at a time.</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Month</th>
+          {% for label in matrix_col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in monthly_matrix %}
+        <tr>
+          <td>{{ m.month_name }}</td>
+          {% for v in m.amounts %}<td class="num">{% if v %}£{{ '{:,.0f}'.format(v) }}{% else %}—{% endif %}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% macro pub_growth_table(rows, col_labels) %}
     <div class="table-scroll">
     <table>
       <thead>
         <tr>
           <th>Pub</th>
-          {% for label in month_col_labels %}<th class="num">{{ label }}</th>{% endfor %}
-          <th class="num">Change</th><th class="num">%</th>
+          {% for label in col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          {% for i in range(col_labels|length - 1) %}
+          <th class="num">Δ {{ col_labels[i] }} → {{ col_labels[i+1] }}</th><th class="num">%</th>
+          {% endfor %}
         </tr>
       </thead>
       <tbody>
-        {% for p in month_by_pub %}
+        {% for p in rows %}
         <tr>
           <td>{{ p.pub_name }}</td>
           {% for v in p.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
-          <td class="num {{ 'pct-up' if p.delta >= 0 else 'pct-down' }}">{{ '+' if p.delta >= 0 }}£{{ '{:,.0f}'.format(p.delta) }}</td>
+          {% for s in p.steps %}
+          <td class="num {{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</td>
           <td class="num">
-            {% if p.pct is not none %}<span class="{{ 'pct-up' if p.pct >= 0 else 'pct-down' }}">{{ '+' if p.pct >= 0 }}{{ '%.0f'|format(p.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.0f'|format(s.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
           </td>
+          {% endfor %}
         </tr>
         {% else %}
-        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
+        <tr><td colspan="{{ 1 + (col_labels|length) + 2 * (col_labels|length - 1) }}" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
         {% endfor %}
       </tbody>
     </table>
     </div>
+  {% endmacro %}
+
+  <!-- By pub: month -->
+  <div class="section-card">
+    <div class="section-title">🍺 By Pub — Month Comparison</div>
+    <div class="section-sub">Every pub shown, sorted by size of most recent change. Both year-over-year steps shown, not just the latest.</div>
+    {{ pub_growth_table(month_by_pub, month_col_labels) }}
   </div>
 
   <!-- By pub: FY -->
   <div class="section-card">
     <div class="section-title">🍺 By Pub — Financial Year Comparison (Like for Like)</div>
-    <div class="section-sub">Every pub shown, sorted by size of change — good for spotting who's using you more (worth a call to grow) and who's gone quiet (worth checking in on).</div>
-    <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Pub</th>
-          {% for label in fy_col_labels %}<th class="num">{{ label }}</th>{% endfor %}
-          <th class="num">Change</th><th class="num">%</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in fy_by_pub %}
-        <tr>
-          <td>{{ p.pub_name }}</td>
-          {% for v in p.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
-          <td class="num {{ 'pct-up' if p.delta >= 0 else 'pct-down' }}">{{ '+' if p.delta >= 0 }}£{{ '{:,.0f}'.format(p.delta) }}</td>
-          <td class="num">
-            {% if p.pct is not none %}<span class="{{ 'pct-up' if p.pct >= 0 else 'pct-down' }}">{{ '+' if p.pct >= 0 }}{{ '%.0f'|format(p.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
+    <div class="section-sub">Every pub shown, sorted by size of most recent change — good for spotting who's using you more (worth a call to grow) and who's gone quiet (worth checking in on). Both year-over-year steps shown.</div>
+    {{ pub_growth_table(fy_by_pub, fy_col_labels) }}
   </div>
 </div>
 </body>
