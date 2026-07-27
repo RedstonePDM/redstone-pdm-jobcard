@@ -4134,6 +4134,25 @@ def admin_margin_paid():
     cur.execute(f"SELECT COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total FROM job_wetherspoons_costs WHERE {where_sql}", params)
     totals = cur.fetchone()
 
+    # Breakdown by job type (Reactive/MIV/PPM/Quoted) — respects the same
+    # filters as everything else on this page (period, and pub if one is
+    # selected), so this naturally becomes a per-pub breakdown when
+    # someone's clicked into a specific pub, or an all-pub breakdown
+    # otherwise.
+    cur.execute(f"""
+        SELECT job_type, COUNT(*) as cnt, COALESCE(SUM(total_agreed),0) as total
+        FROM job_wetherspoons_costs WHERE {where_sql}
+        GROUP BY job_type
+    """, params)
+    by_job_type_raw = {r["job_type"]: {"cnt": r["cnt"], "total": float(r["total"] or 0)} for r in cur.fetchall()}
+    by_job_type = [
+        {"key": key, "label": label,
+         "cnt": by_job_type_raw.get(key, {}).get("cnt", 0),
+         "total": by_job_type_raw.get(key, {}).get("total", 0.0)}
+        for key, label in [("reactive", "Reactive (1000)"), ("miv", "MIV (3000)"),
+                            ("ppm", "PPM (2000)"), ("quoted", "Quoted (5000)")]
+    ]
+
     # Drill-down: spend by pub
     cur.execute("""
         SELECT pub_name, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
@@ -4206,7 +4225,7 @@ def admin_margin_paid():
     conn.close()
     return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
         total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
-        by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope,
+        by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope, by_job_type=by_job_type,
         period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
 
 
