@@ -34,6 +34,14 @@
   .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
 
   .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 4px; }
+
+  .type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 1000px) { .type-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .type-grid { grid-template-columns: 1fr; } }
+  .type-card { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
+  .type-title { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 10px; display:flex; justify-content:space-between; }
+  .type-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: #555; }
+  .type-row strong { color: #1a2332; }
   .hl-box { background: #effdf4; border: 1.5px solid #b7e4c7; border-radius: 10px; padding: 16px 18px; }
   .hl-label { font-size: 11px; color: #1a7a4a; font-weight: 700; text-transform: uppercase; }
   .hl-value { font-size: 24px; color: #1a7a4a; font-weight: 800; margin-top: 5px; }
@@ -99,6 +107,22 @@
         <div class="hl-label">Total Paid</div>
         <div class="hl-value">£{{ '{:,.2f}'.format(total_spend) }}</div>
       </div>
+    </div>
+  </div>
+
+  <!-- By job type — automatically becomes a per-pub breakdown once a pub
+       is selected below, since it shares the same filters as everything
+       else on this page. -->
+  <div class="section-card">
+    <div class="section-title">By Job Type — {% if pub_filter %}{{ pub_filter }}{% else %}{{ period_label }}{% endif %}</div>
+    <div class="section-sub">{% if pub_filter %}Job type breakdown for {{ pub_filter }} only.{% else %}All pubs combined — click a pub below to see this broken down for just that site.{% endif %}</div>
+    <div class="type-grid">
+      {% for t in by_job_type %}
+      <div class="type-card">
+        <div class="type-title"><span>{{ t.label }}</span><span style="color:#888;font-weight:400">{{ t.cnt }} job{{ 's' if t.cnt != 1 }}</span></div>
+        <div class="type-row"><span>Total Spend</span><strong>£{{ '{:,.2f}'.format(t.total) }}</strong></div>
+      </div>
+      {% endfor %}
     </div>
   </div>
 
