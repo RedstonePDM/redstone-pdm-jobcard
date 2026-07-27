@@ -4145,13 +4145,15 @@ def admin_margin_paid():
         GROUP BY job_type
     """, params)
     by_job_type_raw = {r["job_type"]: {"cnt": r["cnt"], "total": float(r["total"] or 0)} for r in cur.fetchall()}
-    by_job_type = [
-        {"key": key, "label": label,
-         "cnt": by_job_type_raw.get(key, {}).get("cnt", 0),
-         "total": by_job_type_raw.get(key, {}).get("total", 0.0)}
-        for key, label in [("reactive", "Reactive (1000)"), ("miv", "MIV (3000)"),
-                            ("ppm", "PPM (2000)"), ("quoted", "Quoted (5000)")]
-    ]
+    by_job_type = []
+    for key, label in [("reactive", "Reactive (1000)"), ("miv", "MIV (3000)"),
+                        ("ppm", "PPM (2000)"), ("quoted", "Quoted (5000)")]:
+        cnt = by_job_type_raw.get(key, {}).get("cnt", 0)
+        total = by_job_type_raw.get(key, {}).get("total", 0.0)
+        by_job_type.append({
+            "key": key, "label": label, "cnt": cnt, "total": total,
+            "avg": (total / cnt) if cnt else 0.0,
+        })
 
     # Drill-down: spend by pub
     cur.execute("""
