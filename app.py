@@ -4215,11 +4215,13 @@ def admin_margin_paid():
     by_trade_scoped_to_pub = bool(pub_filter and trade_scope != "all")
 
     # % of the relevant total (that pub's spend, or all-pub spend) each
-    # trade accounts for — calculated either way now for uniformity, not
-    # just when scoped to a single pub.
+    # trade accounts for, plus average spend per job — calculated either
+    # way now for uniformity, not just when scoped to a single pub.
     trade_total = sum(float(t["total_spend"] or 0) for t in by_trade)
     by_trade = [
-        dict(t, pct_of_pub=(float(t["total_spend"] or 0) / trade_total * 100) if trade_total else 0)
+        dict(t,
+             pct_of_pub=(float(t["total_spend"] or 0) / trade_total * 100) if trade_total else 0,
+             avg_spend=(float(t["total_spend"] or 0) / t["job_count"]) if t["job_count"] else 0)
         for t in by_trade
     ]
 
