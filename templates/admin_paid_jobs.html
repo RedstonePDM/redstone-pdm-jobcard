@@ -122,6 +122,15 @@
         <div class="type-title"><span>{{ t.label }}</span><span style="color:#888;font-weight:400">{{ t.cnt }} job{{ 's' if t.cnt != 1 }}</span></div>
         <div class="type-row"><span>Total Spend</span><strong>£{{ '{:,.2f}'.format(t.total) }}</strong></div>
         <div class="type-row"><span>Avg per Job</span><strong>£{{ '{:,.2f}'.format(t.avg) }}</strong></div>
+        {% if t.key == 'quoted' %}
+        <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:8px">
+          <div class="type-row"><span>Quoted & Won</span><strong style="color:#1a7a4a">{{ quote_won }}</strong></div>
+          <div class="type-row"><span>Quoted & Lost</span><strong style="color:#c0392b">{{ quote_lost }}</strong></div>
+          <div class="type-row"><span>Cancelled</span><strong style="color:#888">{{ quote_cancelled }}</strong></div>
+          <div class="type-row"><span>Win Rate</span><strong>{% if quote_win_rate is not none %}{{ '%.0f'|format(quote_win_rate) }}%{% else %}—{% endif %}</strong></div>
+        </div>
+        <div style="font-size:10px;color:#aaa;margin-top:6px">Job count above is quotes actually Paid; Won includes quotes still working through the pipeline.</div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
