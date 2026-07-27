@@ -121,6 +121,7 @@
       <div class="type-card">
         <div class="type-title"><span>{{ t.label }}</span><span style="color:#888;font-weight:400">{{ t.cnt }} job{{ 's' if t.cnt != 1 }}</span></div>
         <div class="type-row"><span>Total Spend</span><strong>£{{ '{:,.2f}'.format(t.total) }}</strong></div>
+        <div class="type-row"><span>Avg per Job</span><strong>£{{ '{:,.2f}'.format(t.avg) }}</strong></div>
       </div>
       {% endfor %}
     </div>
