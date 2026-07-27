@@ -4155,6 +4155,30 @@ def admin_margin_paid():
             "avg": (total / cnt) if cnt else 0.0,
         })
 
+    # Quote win rate — deliberately sourced from quote_outcomes, NOT the
+    # job_wetherspoons_costs data above. This page only ever sees jobs that
+    # reached Paid — a lost quote never gets paid, so it can never appear
+    # here at all. quote_outcomes is the one place that tracks every quote
+    # submitted, win or lose, which is what a genuine win-rate needs.
+    quote_where = ["COALESCE(t3_decision, detected_at) BETWEEN %s AND %s"]
+    quote_params = [p_start, p_end]
+    if pub_filter:
+        quote_where.append("pub_name = %s")
+        quote_params.append(pub_filter)
+    cur.execute(f"""
+        SELECT
+            SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as won,
+            SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as lost,
+            SUM(CASE WHEN outcome='cancelled' THEN 1 ELSE 0 END) as cancelled
+        FROM quote_outcomes WHERE {" AND ".join(quote_where)}
+    """, quote_params)
+    qr = cur.fetchone()
+    quote_won = qr["won"] or 0
+    quote_lost = qr["lost"] or 0
+    quote_cancelled = qr["cancelled"] or 0
+    quote_decided = quote_won + quote_lost  # cancelled excluded — not a competitive loss
+    quote_win_rate = (quote_won / quote_decided * 100) if quote_decided else None
+
     # Drill-down: spend by pub
     cur.execute("""
         SELECT pub_name, COUNT(*) as job_count, COALESCE(SUM(total_agreed),0) as total_spend
@@ -4230,6 +4254,7 @@ def admin_margin_paid():
     return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
         total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
         by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope, by_job_type=by_job_type,
+        quote_won=quote_won, quote_lost=quote_lost, quote_cancelled=quote_cancelled, quote_win_rate=quote_win_rate,
         period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
 
 
