@@ -4577,6 +4577,11 @@ def api_reports_outcomes():
         rows = []
         for r in cur.fetchall():
             row = dict(r)
+            # One clean 'value' field regardless of source — live-tracked
+            # quotes get their £ from the linked survey form, email-backfilled
+            # historic ones (no survey form exists for those) get it from
+            # the approval email we captured it from.
+            row["value"] = float(row.get("quote_total") or row.get("email_approved_value") or 0)
             for k in ["t0_released","t1_surveyed","t2_quote_uploaded",
                       "t3_decision","t4_completed","detected_at","created_at",
                       "updated_at","survey_date"]:
