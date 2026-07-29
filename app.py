@@ -4427,7 +4427,15 @@ def admin_growth():
 @app.route("/admin/reports")
 @admin_required
 def admin_reports():
-    return render_template("admin_reports.html")
+    # Renamed to Quote Analytics — keep the old URL alive as a redirect
+    # rather than a dead link for anything bookmarked or linked elsewhere.
+    return redirect(url_for("admin_quote_analytics"))
+
+
+@app.route("/admin/quote-analytics")
+@admin_required
+def admin_quote_analytics():
+    return render_template("admin_quote_analytics.html")
 
 
 @app.route("/api/reports/summary")
@@ -4637,6 +4645,295 @@ def api_outcome_notes_post(outcome_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ── Quote Analytics (Stage 2) ─────────────────────────────────────────────────
+
+def _qa_period_bounds(period, month_str, year_str):
+    """Turn the period/month/year filter selection into a [start, end) date
+    range. Returns (None, None) for 'all' — meaning no date restriction."""
+    try:
+        if period == "month" and month_str:
+            y, m = map(int, month_str.split("-"))
+            start = date(y, m, 1)
+            end = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+            return start, end
+        if period == "year" and year_str:
+            y = int(year_str)
+            return date(y, 1, 1), date(y + 1, 1, 1)
+    except (ValueError, TypeError):
+        pass
+    return None, None
+
+
+def _qa_hours_between(t_arrived, t_departed):
+    """Parse two free-text time-of-day strings (e.g. '09:30', '9:30 AM')
+    and return hours worked as a float, or None if either is unusable.
+    Survey time fields are plain TEXT with no enforced format, so this is
+    deliberately tolerant rather than assuming one exact pattern."""
+    if not t_arrived or not t_departed:
+        return None
+    for fmt in ("%H:%M", "%I:%M %p", "%H.%M", "%I:%M%p"):
+        try:
+            a = datetime.strptime(t_arrived.strip(), fmt)
+            d = datetime.strptime(t_departed.strip(), fmt)
+            hours = (d - a).total_seconds() / 3600
+            if 0 < hours < 16:  # sanity bound — discard obvious bad data
+                return hours
+            return None
+        except ValueError:
+            continue
+    return None
+
+
+@app.route("/api/quote-analytics/data")
+@admin_required
+def api_quote_analytics_data():
+    """Single consolidated payload for the Quote Analytics page — both tile
+    rows plus the by-pub / by-trade / by-period reporting tables, all
+    respecting the same period (month/year/all-time) and pub filters."""
+    period = request.args.get("period", "all")       # 'month' | 'year' | 'all'
+    month_str = request.args.get("month", "")          # 'YYYY-MM'
+    year_str = request.args.get("year", "")             # 'YYYY'
+    pub_filter = request.args.get("pub", "").strip()
+
+    start, end = _qa_period_bounds(period, month_str, year_str)
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # ── Reusable filter fragments ───────────────────────────────────
+        def date_clause(column):
+            if start and end:
+                return f" AND {column} >= %s AND {column} < %s", [start, end]
+            return "", []
+
+        def pub_clause(column):
+            if pub_filter:
+                return f" AND {column} = %s", [pub_filter]
+            return "", []
+
+        # ── Row 1: Pipeline ──────────────────────────────────────────────
+        dc, dp = date_clause("submitted_at")
+        pc, pp = pub_clause("pub_name")
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(quote_total),0) AS value
+            FROM survey_forms
+            WHERE status = 'quote-submitted' {dc} {pc}
+        """, dp + pp)
+        pipeline = cur.fetchone()
+
+        # ── Row 1: Won / Lost / Cancelled / Declined ────────────────────
+        dc, dp = date_clause("qo.detected_at")
+        pc, pp = pub_clause("qo.pub_name")
+        cur.execute(f"""
+            SELECT qo.outcome,
+                   COUNT(*) AS cnt,
+                   COALESCE(SUM(COALESCE(sf.quote_total, qo.email_approved_value, 0)),0) AS value
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE 1=1 {dc} {pc}
+            GROUP BY qo.outcome
+        """, dp + pp)
+        outcome_rows = {r["outcome"]: r for r in cur.fetchall()}
+
+        won_row      = outcome_rows.get("won", {"cnt": 0, "value": 0})
+        lost_row     = outcome_rows.get("lost", {"cnt": 0, "value": 0})
+        declined_row = outcome_rows.get("declined_to_quote", {"cnt": 0, "value": 0})
+        cancelled_cnt = (outcome_rows.get("won_then_cancelled", {}).get("cnt", 0) +
+                          outcome_rows.get("cancelled", {}).get("cnt", 0))
+        cancelled_val = (float(outcome_rows.get("won_then_cancelled", {}).get("value", 0) or 0) +
+                          float(outcome_rows.get("cancelled", {}).get("value", 0) or 0))
+
+        won_cnt  = won_row["cnt"]
+        lost_cnt = lost_row["cnt"]
+        decided_total = won_cnt + lost_cnt + cancelled_cnt
+        win_rate = round((won_cnt / decided_total) * 100, 1) if decided_total else 0
+
+        # ── Row 2: Quotes Awaiting Submission ───────────────────────────
+        dc, dp = date_clause("first_seen")
+        pc, pp = pub_clause("pub_name")
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt FROM jobs
+            WHERE tab='QUOTEREQUEST' AND sub_tab='AWAITINGSUBMISSION' {dc} {pc}
+        """, dp + pp)
+        awaiting_submission = cur.fetchone()
+
+        # ── Row 2: Avg time Released -> Quote Submitted ─────────────────
+        # T0/T1 come from quoterequest_status_history (the new tracking
+        # table), not Wisdom's own date_released field — that field is
+        # free-text with no confirmed consistent format, so it isn't safe
+        # to parse/filter on directly. T0 here means 'first time we saw
+        # this job in Awaiting Submission', which in practice is at most a
+        # couple of hours after Wisdom's actual release (our sync interval).
+        dc, dp = date_clause("t0.released_at")
+        pc, pp = pub_clause("j.pub_name")
+        cur.execute(f"""
+            WITH t0 AS (
+                SELECT job_id, MIN(detected_at) AS released_at
+                FROM quoterequest_status_history
+                WHERE sub_tab = 'AWAITINGSUBMISSION'
+                GROUP BY job_id
+            ), t1 AS (
+                SELECT job_id, MIN(detected_at) AS submitted_at
+                FROM quoterequest_status_history
+                WHERE sub_tab = 'AWAITINGAPPROVAL'
+                GROUP BY job_id
+            )
+            SELECT AVG(EXTRACT(EPOCH FROM (t1.submitted_at - t0.released_at)) / 86400) AS avg_days,
+                   COUNT(*) AS sample_size
+            FROM t0
+            JOIN t1 ON t1.job_id = t0.job_id AND t1.submitted_at > t0.released_at
+            LEFT JOIN jobs j ON j.job_id = t0.job_id
+            WHERE 1=1 {dc} {pc}
+        """, dp + pp)
+        timing = cur.fetchone()
+
+        # ── Row 2: Survey Travel Cost ────────────────────────────────────
+        dc, dp = date_clause("visit_date")
+        pc, pp = pub_clause("pub_name")
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(survey_mileage * 0.45),0) AS value
+            FROM survey_forms
+            WHERE survey_mileage IS NOT NULL AND survey_mileage > 0 {dc} {pc}
+        """, dp + pp)
+        travel_cost = cur.fetchone()
+
+        # ── Row 2: Parking Cost ──────────────────────────────────────────
+        dc, dp = date_clause("visit_date")
+        pc, pp = pub_clause("pub_name")
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(parking_cost),0) AS value
+            FROM survey_forms
+            WHERE parking_cost IS NOT NULL AND parking_cost > 0 {dc} {pc}
+        """, dp + pp)
+        parking_cost = cur.fetchone()
+
+        # ── Row 2: Labour Cost ────────────────────────────────────────────
+        # time_arrived/time_departed are free-text, so this is computed in
+        # Python rather than SQL. Rate convention matches the rest of the
+        # platform: hourly_rate = contractor day_rate / 10 (see job card
+        # costing) — used here too for consistency rather than a different
+        # guess.
+        dc, dp = date_clause("visit_date")
+        pc, pp = pub_clause("pub_name")
+        cur.execute(f"""
+            SELECT time_arrived, time_departed, contractor_key
+            FROM survey_forms
+            WHERE time_arrived IS NOT NULL AND time_departed IS NOT NULL
+              AND time_arrived != '' AND time_departed != '' {dc} {pc}
+        """, dp + pp)
+        survey_time_rows = cur.fetchall()
+
+        cur.execute("SELECT contractor_key, day_rate FROM contractors_db")
+        day_rates = {r["contractor_key"]: float(r["day_rate"] or 0) for r in cur.fetchall()}
+
+        labour_cost_total = 0.0
+        labour_survey_count = 0
+        for r in survey_time_rows:
+            hrs = _qa_hours_between(r["time_arrived"], r["time_departed"])
+            if hrs is None:
+                continue
+            rate = day_rates.get(r["contractor_key"], 0) / 10
+            labour_cost_total += hrs * rate
+            labour_survey_count += 1
+
+        tiles = {
+            "pipeline":  {"count": pipeline["cnt"], "value": float(pipeline["value"])},
+            "won":       {"count": won_cnt, "value": float(won_row.get("value", 0) or 0)},
+            "lost":      {"count": lost_cnt, "value": float(lost_row.get("value", 0) or 0)},
+            "cancelled": {"count": cancelled_cnt, "value": cancelled_val},
+            "declined":  {"count": declined_row["cnt"], "value": float(declined_row.get("value", 0) or 0)},
+            "win_rate":  win_rate,
+            "awaiting_submission": {"count": awaiting_submission["cnt"]},
+            "avg_release_to_submit_days": round(float(timing["avg_days"]), 1) if timing and timing["avg_days"] is not None else None,
+            "avg_release_to_submit_sample": timing["sample_size"] if timing else 0,
+            "survey_travel_cost": {"count": travel_cost["cnt"], "value": float(travel_cost["value"])},
+            "labour_cost": {"count": labour_survey_count, "value": round(labour_cost_total, 2)},
+            "parking_cost": {"count": parking_cost["cnt"], "value": float(parking_cost["value"])},
+        }
+
+        # ── By pub ────────────────────────────────────────────────────────
+        dc, dp = date_clause("qo.detected_at")
+        cur.execute(f"""
+            SELECT qo.pub_name,
+                   COUNT(*) AS total_quotes,
+                   SUM(CASE WHEN qo.outcome='won' THEN 1 ELSE 0 END) AS won_count,
+                   SUM(CASE WHEN qo.outcome='won' THEN COALESCE(sf.quote_total, qo.email_approved_value,0) ELSE 0 END) AS won_value,
+                   SUM(CASE WHEN qo.outcome='lost' THEN 1 ELSE 0 END) AS lost_count,
+                   SUM(CASE WHEN qo.outcome='lost' THEN COALESCE(sf.quote_total,0) ELSE 0 END) AS lost_value,
+                   SUM(CASE WHEN qo.outcome IN ('won_then_cancelled','cancelled') THEN 1 ELSE 0 END) AS cancelled_count,
+                   SUM(CASE WHEN qo.outcome IN ('won_then_cancelled','cancelled') THEN COALESCE(sf.quote_total, qo.email_approved_value,0) ELSE 0 END) AS cancelled_value,
+                   SUM(CASE WHEN qo.outcome='declined_to_quote' THEN 1 ELSE 0 END) AS declined_count
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE qo.pub_name IS NOT NULL AND qo.pub_name != '' {dc}
+            GROUP BY qo.pub_name
+            ORDER BY total_quotes DESC
+        """, dp)
+        by_pub = [dict(r) for r in cur.fetchall()]
+        for r in by_pub:
+            for k in ("won_value", "lost_value", "cancelled_value"):
+                r[k] = float(r[k] or 0)
+
+        # ── By trade type ────────────────────────────────────────────────
+        cur.execute(f"""
+            SELECT qo.trade_type,
+                   COUNT(*) AS total_quotes,
+                   SUM(CASE WHEN qo.outcome='won' THEN 1 ELSE 0 END) AS won_count,
+                   SUM(CASE WHEN qo.outcome='won' THEN COALESCE(sf.quote_total, qo.email_approved_value,0) ELSE 0 END) AS won_value,
+                   SUM(CASE WHEN qo.outcome='lost' THEN 1 ELSE 0 END) AS lost_count,
+                   SUM(CASE WHEN qo.outcome='lost' THEN COALESCE(sf.quote_total,0) ELSE 0 END) AS lost_value,
+                   SUM(CASE WHEN qo.outcome IN ('won_then_cancelled','cancelled') THEN 1 ELSE 0 END) AS cancelled_count,
+                   SUM(CASE WHEN qo.outcome IN ('won_then_cancelled','cancelled') THEN COALESCE(sf.quote_total, qo.email_approved_value,0) ELSE 0 END) AS cancelled_value,
+                   SUM(CASE WHEN qo.outcome='declined_to_quote' THEN 1 ELSE 0 END) AS declined_count
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE qo.trade_type IS NOT NULL AND qo.trade_type != '' {dc}
+            GROUP BY qo.trade_type
+            ORDER BY total_quotes DESC
+        """, dp)
+        by_trade = [dict(r) for r in cur.fetchall()]
+        for r in by_trade:
+            for k in ("won_value", "lost_value", "cancelled_value"):
+                r[k] = float(r[k] or 0)
+
+        # ── By period (last 12 months, ignores the period filter itself —
+        # this is the trend view, always shows the same trailing window) ──
+        cur.execute("""
+            SELECT TO_CHAR(qo.detected_at,'YYYY-MM') AS month,
+                   COUNT(*) AS total_quotes,
+                   SUM(CASE WHEN qo.outcome='won' THEN 1 ELSE 0 END) AS won_count,
+                   SUM(CASE WHEN qo.outcome='lost' THEN 1 ELSE 0 END) AS lost_count,
+                   SUM(CASE WHEN qo.outcome IN ('won_then_cancelled','cancelled') THEN 1 ELSE 0 END) AS cancelled_count,
+                   SUM(CASE WHEN qo.outcome='declined_to_quote' THEN 1 ELSE 0 END) AS declined_count
+            FROM quote_outcomes qo
+            WHERE qo.detected_at >= NOW() - INTERVAL '12 months'
+            GROUP BY month ORDER BY month
+        """)
+        by_period = [dict(r) for r in cur.fetchall()]
+
+        # ── Pub list for the filter dropdown ────────────────────────────
+        cur.execute("""
+            SELECT DISTINCT pub_name FROM quote_outcomes
+            WHERE pub_name IS NOT NULL AND pub_name != ''
+            ORDER BY pub_name
+        """)
+        pub_list = [r["pub_name"] for r in cur.fetchall()]
+
+        return jsonify({
+            "tiles": tiles,
+            "by_pub": by_pub,
+            "by_trade": by_trade,
+            "by_period": by_period,
+            "pub_list": pub_list,
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
