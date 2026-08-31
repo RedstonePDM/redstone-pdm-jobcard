@@ -117,7 +117,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
       <h2>📊 Quote Analytics</h2>
       <div class="sub">Quote pipeline, win/loss, cancellations and survey efficiency</div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <a href="/admin/survey-queue" class="btn btn-outline">🗺️ Survey Queue</a>
+      <a href="/admin/awaiting-approval" class="btn btn-outline">🕒 Awaiting Approval</a>
+      <a href="/admin/pub-history" class="btn btn-outline">🏠 Pub History</a>
       <a id="btn-cancel-pdf" href="/admin/reports/cancellations/pdf?year=2026" target="_blank" class="btn btn-red">📄 Cancellation Register PDF</a>
     </div>
   </div>
