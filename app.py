@@ -2134,6 +2134,7 @@ def admin_pub_history():
         total_awaiting_approval_value += p["awaiting_approval_value"]
         pub_list.append({
             "pub_name": p["pub_name"] or pkey.title(),
+            "pub_key": pkey,
             "total_quotes": total_quotes,
             "wins": p["wins"], "losses": p["losses"],
             "cancellations": p["cancellations"], "declined": p["declined"],
@@ -2153,6 +2154,53 @@ def admin_pub_history():
                            pubs=pub_list,
                            total_pubs=len(pub_list),
                            total_awaiting_approval_value=total_awaiting_approval_value)
+
+
+@app.route("/admin/pub-detail/<pkey>")
+@admin_required
+def admin_pub_detail(pkey):
+    """Job-level drill-down for a single pub — every decided outcome
+    (won/lost/cancelled/declined) with the reason, trade, value and date,
+    so a high quote-machine flag can actually be understood rather than
+    just seen. Matched via quote_outcomes.survey_form_id, a proper foreign
+    key to survey_forms — much more reliable than matching on job_id text,
+    which is inconsistent across historic rows."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    pub_name_display = pkey.title()
+    outcomes = []
+    try:
+        cur.execute("""
+            SELECT qo.id, qo.job_id, qo.display_id, qo.pub_name, qo.outcome,
+                   qo.wisdom_status, qo.wisdom_reason, qo.reason_heading, qo.trade_type,
+                   qo.t3_decision, qo.detected_at, sf.quote_total, sf.scope_of_works
+            FROM quote_outcomes qo
+            LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE UPPER(REGEXP_REPLACE(qo.pub_name, '[^A-Za-z0-9]', '', 'g')) = %s
+            ORDER BY COALESCE(qo.t3_decision, qo.detected_at) DESC
+        """, (pkey.upper(),))
+        outcomes = [dict(r) for r in cur.fetchall()]
+        for o in outcomes:
+            if o.get("pub_name"):
+                pub_name_display = o["pub_name"]
+            o["quote_total"] = float(o["quote_total"]) if o.get("quote_total") else None
+            for k in ("t3_decision", "detected_at"):
+                if o.get(k):
+                    o[k] = o[k].strftime("%d/%m/%Y")
+    except Exception as e:
+        print(f"pub detail query failed: {e}")
+        conn.rollback()
+
+    cur.close()
+    conn.close()
+
+    lost_cancelled_value = sum(o["quote_total"] or 0 for o in outcomes if o["outcome"] in ("lost", "cancelled", "won_then_cancelled"))
+
+    return render_template("pub_detail.html",
+                           pub_name=pub_name_display,
+                           outcomes=outcomes,
+                           lost_cancelled_value=lost_cancelled_value)
 
 
 @app.route("/admin/dashboard")
