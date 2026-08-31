@@ -1668,26 +1668,38 @@ def admin_home():
         week_status = sched["status"] if sched else "draft"
     except Exception: conn.rollback()
 
-    # Sync health — flags if Wisdom login has been failing (most likely a
-    # forced password reset) or if the last successful sync is older than
-    # expected (normal cadence is every 2 hours), so this is spotted here
-    # rather than discovered days later when the data's gone stale.
-    sync_warning = None
+    # Wisdom sync/login health — shown as a persistent pill alongside job
+    # cards / MOTs, always visible (green when fine, amber/red when not),
+    # not just a hidden banner that only appears on failure. Catches
+    # Wisdom's periodic forced password resets before they go unnoticed
+    # for days.
+    sync_status_ok = True
+    sync_status_text = "Wisdom sync: checking..."
     try:
         cur.execute("SELECT last_success_at, last_error, looks_like_credentials, consecutive_failures FROM sync_health WHERE id=1")
         health = cur.fetchone()
         if health:
             if health["consecutive_failures"] and health["consecutive_failures"] >= 2:
+                sync_status_ok = False
                 if health["looks_like_credentials"]:
-                    sync_warning = "⚠️ Wisdom sync has failed to log in for the last {} attempt(s) — this looks like Wisdom may have forced a password reset. Check the wisdom-sync credentials.".format(health["consecutive_failures"])
+                    sync_status_text = f"Wisdom login failing ({health['consecutive_failures']}x) — likely a password reset"
                 else:
-                    sync_warning = "⚠️ Wisdom sync has failed {} time(s) in a row. Last error: {}".format(health["consecutive_failures"], (health["last_error"] or "")[:200])
+                    sync_status_text = f"Wisdom sync failing ({health['consecutive_failures']}x)"
             elif health["last_success_at"] and (datetime.now(health["last_success_at"].tzinfo) - health["last_success_at"]) > timedelta(hours=4):
-                sync_warning = "⚠️ Wisdom sync hasn't completed successfully in over 4 hours (last success: {}). Data may be stale.".format(health["last_success_at"].strftime("%d %b %H:%M"))
+                sync_status_ok = False
+                sync_status_text = f"Wisdom sync stale — last success {health['last_success_at'].strftime('%d %b %H:%M')}"
+            elif health["last_success_at"]:
+                sync_status_text = f"Wisdom sync OK — last success {health['last_success_at'].strftime('%d %b %H:%M')}"
+            else:
+                sync_status_text = "Wisdom sync: no successful run recorded yet"
+                sync_status_ok = False
         else:
-            sync_warning = None  # table exists but no row yet — first run hasn't happened
+            sync_status_text = "Wisdom sync: not yet reporting (deploy pending?)"
+            sync_status_ok = False
     except Exception:
         conn.rollback()  # sync_health table may not exist yet if wisdom-sync hasn't deployed the update
+        sync_status_text = "Wisdom sync: status unavailable"
+        sync_status_ok = False
 
     cur.close()
     conn.close()
@@ -1696,7 +1708,8 @@ def admin_home():
                            pending_changes=pending_changes,
                            mot_alerts=mot_alerts,
                            week_status=week_status,
-                           sync_warning=sync_warning,
+                           sync_status_ok=sync_status_ok,
+                           sync_status_text=sync_status_text,
                            planner_url=PLANNER_URL)
 
 
