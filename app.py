@@ -1675,13 +1675,10 @@ def admin_home():
     live_quotes_by_trade = []
     try:
         cur.execute("""
-            SELECT j.trade_type
-            FROM jobs j
-            LEFT JOIN survey_forms sf
-                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
-                AND sf.status NOT IN ('queried')
-            WHERE j.tab IN ('QUOTEREQUEST', 'QUOTE')
-            AND sf.id IS NULL
+            SELECT trade_type
+            FROM jobs
+            WHERE tab = 'QUOTEREQUEST'
+            AND sub_tab = 'AWAITINGSUBMISSION'
         """)
         trade_rows = cur.fetchall()
         live_quotes_count = len(trade_rows)
@@ -1769,11 +1766,8 @@ def admin_survey_queue():
                    j.trade_type, j.sub_trade_type, j.due_date, j.tab_label,
                    j.location_code
             FROM jobs j
-            LEFT JOIN survey_forms sf
-                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
-                AND sf.status NOT IN ('queried')
-            WHERE j.tab IN ('QUOTEREQUEST', 'QUOTE')
-            AND sf.id IS NULL
+            WHERE j.tab = 'QUOTEREQUEST'
+            AND j.sub_tab = 'AWAITINGSUBMISSION'
             ORDER BY j.due_date ASC NULLS LAST
         """)
         rows = cur.fetchall()
@@ -1857,6 +1851,58 @@ def admin_survey_queue():
     return render_template("survey_queue.html",
                            area_groups=area_groups,
                            total_count=len(queue))
+
+
+@app.route("/admin/awaiting-approval")
+@admin_required
+def admin_awaiting_approval():
+    conn = get_db()
+    cur = conn.cursor()
+
+    rows = []
+    try:
+        cur.execute("""
+            SELECT j.job_id, j.display_id, j.pub_name, j.postcode, j.description,
+                   j.trade_type, j.sub_trade_type,
+                   sf.submitted_at, sf.quote_total
+            FROM jobs j
+            LEFT JOIN survey_forms sf
+                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+            WHERE j.tab = 'QUOTEREQUEST'
+            AND j.sub_tab = 'AWAITINGAPPROVAL'
+            ORDER BY sf.submitted_at ASC NULLS LAST
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        print(f"awaiting approval query failed: {e}")
+        conn.rollback()
+
+    cur.close()
+    conn.close()
+
+    today = date.today()
+    queue = []
+    total_value = 0
+    for r in rows:
+        d = dict(r)
+        days_waiting = None
+        submitted = d.get("submitted_at")
+        if submitted:
+            submitted_date = submitted.date() if hasattr(submitted, "date") else submitted
+            days_waiting = (today - submitted_date).days
+        d["days_waiting"] = days_waiting
+        d["quote_total"] = float(d["quote_total"]) if d.get("quote_total") else None
+        if d["quote_total"]:
+            total_value += d["quote_total"]
+        queue.append(d)
+
+    # Longest-waiting first — these are the ones most worth chasing.
+    queue.sort(key=lambda x: x["days_waiting"] if x["days_waiting"] is not None else -1, reverse=True)
+
+    return render_template("awaiting_approval.html",
+                           queue=queue,
+                           total_count=len(queue),
+                           total_value=total_value)
 
 
 @app.route("/admin/dashboard")
