@@ -332,6 +332,7 @@ def init_db():
       "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS journey_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
+        "ALTER TABLE contractors_db ADD COLUMN IF NOT EXISTS show_in_planner BOOLEAN DEFAULT TRUE",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_annual NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mot_cost NUMERIC(6,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false",
@@ -1756,6 +1757,16 @@ def postcode_area(postcode):
     return pc.split(" ")[0] if pc else "Unknown"
 
 
+def pub_key(name):
+    """Normalise a pub name for matching across tables — strips every
+    character that isn't a letter or digit and uppercases what's left, so
+    'The Anchor, Bedford' / 'THE ANCHOR BEDFORD' / 'the anchor  bedford'
+    all resolve to the same key. Used everywhere a pub needs to be matched
+    between the live Wisdom feed and the historic outcomes register, since
+    the two don't reliably agree on exact spelling, spacing or punctuation."""
+    return re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
+
+
 @app.route("/admin/survey-queue")
 @admin_required
 def admin_survey_queue():
@@ -1779,21 +1790,21 @@ def admin_survey_queue():
         conn.rollback()
 
     # Per-pub win rate, from quote_outcomes — won / (won + lost + cancelled),
-    # matching the definition already used on Quote Analytics (declined excluded).
-    # Matched on a normalised (trimmed, uppercased) pub name — the live jobs
-    # feed and the historic outcomes register don't always agree on exact
-    # casing/spacing for the same pub, which was silently breaking the
-    # lookup and showing 0%/undercounted samples.
+    # matching the definition already used on Quote Analytics (declined
+    # excluded). Matched on a fully normalised pub name (letters/digits only,
+    # uppercased) — the live jobs feed and the historic outcomes register
+    # don't reliably agree on exact spelling, spacing or punctuation for the
+    # same pub, which was silently breaking the lookup.
     win_rates = {}
     try:
         cur.execute("""
-            SELECT TRIM(UPPER(pub_name)) as pub_key,
+            SELECT UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
                    SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
                    SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses,
                    SUM(CASE WHEN outcome IN ('cancelled','won_then_cancelled') THEN 1 ELSE 0 END) as cancellations
             FROM quote_outcomes
             WHERE pub_name IS NOT NULL AND TRIM(pub_name) != ''
-            GROUP BY TRIM(UPPER(pub_name))
+            GROUP BY UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g'))
         """)
         for r in cur.fetchall():
             total = (r["wins"] or 0) + (r["losses"] or 0) + (r["cancellations"] or 0)
@@ -1805,11 +1816,35 @@ def admin_survey_queue():
         print(f"win rate query failed: {e}")
         conn.rollback()
 
+    # Historic average won-quote value per trade type — used to give the
+    # trade-type summary tiles a rough sense of what's typically at stake,
+    # since these jobs haven't been quoted yet so have no live value of
+    # their own.
+    trade_avg_values = {}
+    try:
+        cur.execute("""
+            SELECT qo.trade_type, AVG(sf.quote_total) as avg_value, COUNT(*) as won_count
+            FROM quote_outcomes qo
+            JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            WHERE qo.outcome = 'won' AND qo.trade_type IS NOT NULL AND sf.quote_total > 0
+            GROUP BY qo.trade_type
+        """)
+        for r in cur.fetchall():
+            trade_avg_values[r["trade_type"]] = {
+                "avg_value": float(r["avg_value"]) if r["avg_value"] else None,
+                "won_count": r["won_count"],
+            }
+    except Exception as e:
+        print(f"trade avg value query failed: {e}")
+        conn.rollback()
+
     cur.close()
     conn.close()
 
     today = date.today()
     queue = []
+    pub_counts = defaultdict(int)
+    trade_counts = defaultdict(int)
     for r in rows:
         d = dict(r)
         # Wisdom's own "Date Released" field is unreliable/blank on live quote
@@ -1838,11 +1873,14 @@ def admin_survey_queue():
             days_elapsed = (today - released).days
         d["days_elapsed"] = days_elapsed
         d["area"] = postcode_area(d.get("postcode"))
-        pub_key = (d.get("pub_name") or "").strip().upper()
-        wr = win_rates.get(pub_key) if pub_key else None
+        key = pub_key(d.get("pub_name"))
+        wr = win_rates.get(key) if key else None
         d["win_rate_pct"] = wr["pct"] if wr else None
         d["win_rate_sample"] = wr["sample"] if wr else 0
         queue.append(d)
+        if d.get("pub_name"):
+            pub_counts[d["pub_name"]] += 1
+        trade_counts[d.get("trade_type") or "Unspecified"] += 1
 
     # Group by postcode area, areas sorted by job count (busiest first) so
     # the biggest batching opportunities surface at the top; jobs within an
@@ -1856,9 +1894,23 @@ def admin_survey_queue():
         key=lambda g: len(g["jobs"]), reverse=True
     )
 
+    pub_pills = sorted(
+        [{"pub_name": k, "count": v} for k, v in pub_counts.items()],
+        key=lambda x: x["count"], reverse=True
+    )
+    trade_tiles = sorted(
+        [{"trade_type": k, "count": v,
+          "avg_value": trade_avg_values.get(k, {}).get("avg_value"),
+          "won_count": trade_avg_values.get(k, {}).get("won_count", 0)}
+         for k, v in trade_counts.items()],
+        key=lambda x: x["count"], reverse=True
+    )
+
     return render_template("survey_queue.html",
                            area_groups=area_groups,
-                           total_count=len(queue))
+                           total_count=len(queue),
+                           pub_pills=pub_pills,
+                           trade_tiles=trade_tiles)
 
 
 @app.route("/admin/awaiting-approval")
@@ -1869,16 +1921,31 @@ def admin_awaiting_approval():
 
     rows = []
     try:
+        # LATERAL join to the single most-recently-updated survey_forms row
+        # per job — a job can pick up more than one survey_forms row over
+        # time (queried, then resubmitted), and the previous plain LEFT JOIN
+        # had no way to pick the right one, silently grabbing whichever row
+        # came back first (often an old draft with no total). Also falls
+        # back to job_wetherspoons_costs.total_agreed, which is Wisdom's own
+        # figure synced directly from Wisdom, for any job where our own
+        # quoting tool doesn't have a total recorded.
         cur.execute("""
             SELECT j.job_id, j.display_id, j.pub_name, j.postcode, j.description,
                    j.trade_type, j.sub_trade_type,
-                   sf.submitted_at, sf.quote_total
+                   sf.updated_at as quote_updated_at, sf.quote_total as sf_quote_total,
+                   jwc.total_agreed as wisdom_total_agreed
             FROM jobs j
-            LEFT JOIN survey_forms sf
-                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+            LEFT JOIN LATERAL (
+                SELECT quote_total, updated_at
+                FROM survey_forms sf2
+                WHERE (sf2.job_id = j.job_id OR sf2.job_id = j.display_id)
+                ORDER BY sf2.updated_at DESC
+                LIMIT 1
+            ) sf ON true
+            LEFT JOIN job_wetherspoons_costs jwc ON jwc.job_id = j.job_id
             WHERE j.tab = 'QUOTEREQUEST'
             AND j.sub_tab = 'AWAITINGAPPROVAL'
-            ORDER BY sf.submitted_at ASC NULLS LAST
+            ORDER BY sf.updated_at ASC NULLS LAST
         """)
         rows = cur.fetchall()
     except Exception as e:
@@ -1891,26 +1958,54 @@ def admin_awaiting_approval():
     today = date.today()
     queue = []
     total_value = 0
+    trade_totals = defaultdict(lambda: {"count": 0, "value": 0.0})
+    pub_totals = defaultdict(lambda: {"count": 0, "value": 0.0})
     for r in rows:
         d = dict(r)
         days_waiting = None
-        submitted = d.get("submitted_at")
-        if submitted:
-            submitted_date = submitted.date() if hasattr(submitted, "date") else submitted
-            days_waiting = (today - submitted_date).days
+        updated = d.get("quote_updated_at")
+        if updated:
+            updated_date = updated.date() if hasattr(updated, "date") else updated
+            days_waiting = (today - updated_date).days
         d["days_waiting"] = days_waiting
-        d["quote_total"] = float(d["quote_total"]) if d.get("quote_total") else None
-        if d["quote_total"]:
-            total_value += d["quote_total"]
+
+        # Value: prefer our own quoting tool's total; fall back to Wisdom's
+        # own agreed figure if ours is missing or zero.
+        sf_total = float(d["sf_quote_total"]) if d.get("sf_quote_total") else 0.0
+        wisdom_total = float(d["wisdom_total_agreed"]) if d.get("wisdom_total_agreed") else 0.0
+        value = sf_total if sf_total > 0 else (wisdom_total if wisdom_total > 0 else None)
+        d["quote_total"] = value
+        if value:
+            total_value += value
+
+        trade_key = d.get("trade_type") or "Unspecified"
+        trade_totals[trade_key]["count"] += 1
+        trade_totals[trade_key]["value"] += value or 0.0
+
+        if d.get("pub_name"):
+            pub_totals[d["pub_name"]]["count"] += 1
+            pub_totals[d["pub_name"]]["value"] += value or 0.0
+
         queue.append(d)
 
     # Longest-waiting first — these are the ones most worth chasing.
     queue.sort(key=lambda x: x["days_waiting"] if x["days_waiting"] is not None else -1, reverse=True)
 
+    trade_tiles = sorted(
+        [{"trade_type": k, "count": v["count"], "value": v["value"]} for k, v in trade_totals.items()],
+        key=lambda x: x["value"], reverse=True
+    )
+    pub_pills = sorted(
+        [{"pub_name": k, "count": v["count"], "value": v["value"]} for k, v in pub_totals.items()],
+        key=lambda x: x["value"], reverse=True
+    )
+
     return render_template("awaiting_approval.html",
                            queue=queue,
                            total_count=len(queue),
-                           total_value=total_value)
+                           total_value=total_value,
+                           trade_tiles=trade_tiles,
+                           pub_pills=pub_pills)
 
 
 @app.route("/admin/pub-history")
@@ -1920,31 +2015,36 @@ def admin_pub_history():
     win/loss/cancelled/declined history, and what's currently sitting live
     (awaiting submission and awaiting approval, with value). Built to answer
     'is this pub a genuine quote machine, or does it actually go ahead?'
-    All matching is done on a normalised (trimmed, uppercased) pub name,
-    since the live Wisdom feed and the historic outcomes register don't
-    always agree on exact spelling/casing for the same site."""
+    All matching is done on a fully normalised pub name (letters/digits only,
+    uppercased), since the live Wisdom feed and the historic outcomes
+    register don't reliably agree on exact spelling, spacing or punctuation
+    for the same site.
+    Note: the outcomes register only started being tracked/backfilled
+    recently, so historic totals will keep filling in and become more
+    representative over time — they are not incomplete by mistake."""
     conn = get_db()
     cur = conn.cursor()
 
-    pubs = {}  # pub_key -> accumulated stats
+    pubs = {}  # normalised pub key -> accumulated stats
 
-    def get_pub(pub_key, display_name):
-        if pub_key not in pubs:
-            pubs[pub_key] = {
+    def get_pub(pkey, display_name):
+        if pkey not in pubs:
+            pubs[pkey] = {
                 "pub_name": display_name,
                 "wins": 0, "losses": 0, "cancellations": 0, "declined": 0,
                 "awaiting_submission": 0, "awaiting_approval": 0,
                 "awaiting_approval_value": 0.0,
                 "trades": defaultdict(int),
             }
-        elif display_name and not pubs[pub_key]["pub_name"]:
-            pubs[pub_key]["pub_name"] = display_name
-        return pubs[pub_key]
+        elif display_name and not pubs[pkey]["pub_name"]:
+            pubs[pkey]["pub_name"] = display_name
+        return pubs[pkey]
 
     # Historic decided outcomes — the permanent record.
     try:
         cur.execute("""
-            SELECT TRIM(UPPER(pub_name)) as pub_key, pub_name, outcome, trade_type
+            SELECT UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
+                   pub_name, outcome, trade_type
             FROM quote_outcomes
             WHERE pub_name IS NOT NULL AND TRIM(pub_name) != ''
         """)
@@ -1967,7 +2067,8 @@ def admin_pub_history():
     # Currently live — awaiting submission.
     try:
         cur.execute("""
-            SELECT TRIM(UPPER(pub_name)) as pub_key, pub_name, trade_type
+            SELECT UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
+                   pub_name, trade_type
             FROM jobs
             WHERE tab = 'QUOTEREQUEST' AND sub_tab = 'AWAITINGSUBMISSION'
             AND pub_name IS NOT NULL AND TRIM(pub_name) != ''
@@ -1981,22 +2082,32 @@ def admin_pub_history():
         print(f"pub history awaiting-submission query failed: {e}")
         conn.rollback()
 
-    # Currently live — awaiting approval, with quoted value.
+    # Currently live — awaiting approval, with quoted value. Same LATERAL +
+    # Wisdom-fallback approach as the Awaiting Approval page, so the two
+    # pages always agree on value.
     try:
         cur.execute("""
-            SELECT TRIM(UPPER(j.pub_name)) as pub_key, j.pub_name, j.trade_type,
-                   sf.quote_total
+            SELECT UPPER(REGEXP_REPLACE(j.pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
+                   j.pub_name, j.trade_type,
+                   sf.quote_total as sf_quote_total, jwc.total_agreed as wisdom_total_agreed
             FROM jobs j
-            LEFT JOIN survey_forms sf
-                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
-                AND sf.status NOT IN ('queried')
+            LEFT JOIN LATERAL (
+                SELECT quote_total
+                FROM survey_forms sf2
+                WHERE (sf2.job_id = j.job_id OR sf2.job_id = j.display_id)
+                ORDER BY sf2.updated_at DESC
+                LIMIT 1
+            ) sf ON true
+            LEFT JOIN job_wetherspoons_costs jwc ON jwc.job_id = j.job_id
             WHERE j.tab = 'QUOTEREQUEST' AND j.sub_tab = 'AWAITINGAPPROVAL'
             AND j.pub_name IS NOT NULL AND TRIM(j.pub_name) != ''
         """)
         for r in cur.fetchall():
             p = get_pub(r["pub_key"], r["pub_name"])
             p["awaiting_approval"] += 1
-            p["awaiting_approval_value"] += float(r["quote_total"]) if r["quote_total"] else 0.0
+            sf_total = float(r["sf_quote_total"]) if r["sf_quote_total"] else 0.0
+            wisdom_total = float(r["wisdom_total_agreed"]) if r["wisdom_total_agreed"] else 0.0
+            p["awaiting_approval_value"] += sf_total if sf_total > 0 else wisdom_total
             if r["trade_type"]:
                 p["trades"][r["trade_type"]] += 1
     except Exception as e:
@@ -2008,19 +2119,26 @@ def admin_pub_history():
 
     pub_list = []
     total_awaiting_approval_value = 0.0
-    for pub_key, p in pubs.items():
+    for pkey, p in pubs.items():
         decided = p["wins"] + p["losses"] + p["cancellations"]
         total_quotes = decided + p["declined"] + p["awaiting_submission"] + p["awaiting_approval"]
         win_rate_pct = round((p["wins"] / decided) * 100, 1) if decided else None
-        is_quote_machine = total_quotes >= 3 and (win_rate_pct is None or win_rate_pct <= 20)
+        # "Quote machine" flags time-wasting, not busyness — a pub that sends
+        # a lot of quotes but mostly goes ahead is a good customer, not a
+        # problem. What matters is how many of the DECIDED quotes ended in a
+        # loss or cancellation rather than a win.
+        waste = p["losses"] + p["cancellations"]
+        waste_rate = (waste / decided) if decided else None
+        is_quote_machine = decided >= 3 and waste_rate is not None and waste_rate >= 0.6
         top_trades = sorted(p["trades"].items(), key=lambda x: x[1], reverse=True)
         total_awaiting_approval_value += p["awaiting_approval_value"]
         pub_list.append({
-            "pub_name": p["pub_name"] or pub_key.title(),
+            "pub_name": p["pub_name"] or pkey.title(),
             "total_quotes": total_quotes,
             "wins": p["wins"], "losses": p["losses"],
             "cancellations": p["cancellations"], "declined": p["declined"],
             "win_rate_pct": win_rate_pct,
+            "waste_rate_pct": round(waste_rate * 100, 1) if waste_rate is not None else None,
             "decided_sample": decided,
             "awaiting_submission": p["awaiting_submission"],
             "awaiting_approval": p["awaiting_approval"],
@@ -2465,15 +2583,16 @@ def admin_add_contractor():
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO contractors_db (contractor_key,name,email,phone,address,utr,ni,sort_code,account_no,
-            day_rate,overtime_rate,redstone_vehicle,van_reg,mileage_rate,redstone_card,cis_rate,password,status)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active')
+            day_rate,overtime_rate,redstone_vehicle,van_reg,mileage_rate,redstone_card,cis_rate,password,status,show_in_planner)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s)
         ON CONFLICT (contractor_key) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, updated_at=NOW()
     """, (key, data.get("name"), data.get("email"), data.get("phone"), data.get("address"),
           data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
           float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
           data.get("redstone_vehicle")=="yes", data.get("van_reg"),
           float(data.get("mileage_rate") or 0),
-          data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20), data.get("password")))
+          data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20), data.get("password"),
+          data.get("show_in_planner", "yes")=="yes"))
     conn.commit()
     cur.close()
     conn.close()
@@ -2490,7 +2609,7 @@ def admin_edit_contractor(key):
         UPDATE contractors_db SET name=%s,email=%s,phone=%s,address=%s,utr=%s,ni=%s,
             sort_code=%s,account_no=%s,day_rate=%s,overtime_rate=%s,
             redstone_vehicle=%s,van_reg=%s,mileage_rate=%s,redstone_card=%s,
-            cis_rate=%s,password=%s,updated_at=NOW()
+            cis_rate=%s,password=%s,show_in_planner=%s,updated_at=NOW()
         WHERE contractor_key=%s
     """, (data.get("name"), data.get("email"), data.get("phone"), data.get("address"),
           data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
@@ -2498,7 +2617,7 @@ def admin_edit_contractor(key):
           data.get("redstone_vehicle")=="yes", data.get("van_reg"),
           float(data.get("mileage_rate") or 0),
           data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20),
-          data.get("password"), key))
+          data.get("password"), data.get("show_in_planner", "yes")=="yes", key))
     conn.commit()
     cur.close()
     conn.close()
@@ -2527,6 +2646,31 @@ def admin_restore_contractor(key):
     cur.close()
     conn.close()
     return jsonify({"ok": True})
+
+
+@app.route("/admin/contractors/<key>/toggle-planner", methods=["POST"])
+@admin_required
+def admin_toggle_planner_visibility(key):
+    """Quick toggle for hiding a rarely-used contractor from the Weekly
+    Planner without archiving them entirely — they stay active everywhere
+    else (job cards, payroll, etc), just don't clutter the planner grid."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE contractors_db SET show_in_planner = NOT COALESCE(show_in_planner, TRUE), updated_at=NOW()
+            WHERE contractor_key=%s
+            RETURNING show_in_planner
+        """, (key,))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({"ok": True, "show_in_planner": row["show_in_planner"] if row else None})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        cur.close()
+        conn.close()
 
 
 # ── Routes: Admin Profile Changes ─────────────────────────────────────────────
