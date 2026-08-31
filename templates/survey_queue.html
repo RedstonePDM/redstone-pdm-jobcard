@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Survey Queue — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+
+  .page { max-width: 1350px; margin: 0 auto; padding: 28px 20px 100px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+  .page-sub { font-size: 13px; color: #888; margin-top: 4px; }
+
+  .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+
+  .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .hl-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
+  .hl-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .hl-value { font-size: 24px; color: #1a2332; font-weight: 800; margin-top: 5px; }
+  .hl-note { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+  .count-pill { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: #eff4ff; color: #1a4fa0; vertical-align: middle; }
+
+  .days-pill { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .days-pill.green { background: #effdf4; color: #1a7a4a; }
+  .days-pill.amber { background: #fff8ef; color: #c77a10; }
+  .days-pill.red   { background: #fdf0ef; color: #c0392b; }
+
+  .win-pill { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .win-pill.high { background: #effdf4; color: #1a7a4a; }
+  .win-pill.mid  { background: #fff8ef; color: #c77a10; }
+  .win-pill.low  { background: #fdf0ef; color: #c0392b; }
+  .win-pill.none { background: #f0f2f5; color: #888; }
+
+  .job-type-pill { padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #f4efff; color: #6c3fc5; white-space: nowrap; }
+
+  .area-header {
+    display: flex; align-items: center; gap: 10px; padding: 12px 4px;
+    font-size: 14px; font-weight: 800; color: #1a2332;
+  }
+  .area-header .count-pill { margin-left: 0; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
+  td { font-size: 13px; padding: 10px; border-bottom: 1px solid #f5f5f5; vertical-align: top; }
+  tr:hover { background: #fafbfc; }
+  tr.checked-row { background: #eff4ff; }
+  tr.checked-row:hover { background: #eff4ff; }
+
+  .job-id { font-weight: 700; color: #1a2332; }
+  .display-id { font-size: 11px; color: #aaa; }
+  .pub-name { font-weight: 600; color: #1a2332; }
+  .postcode-text { font-size: 11px; color: #aaa; }
+  .desc-text { font-size: 12px; color: #555; line-height: 1.4; max-width: 320px; }
+
+  input[type="checkbox"].survey-check { width: 18px; height: 18px; cursor: pointer; accent-color: #c0392b; }
+
+  .empty-state { text-align: center; padding: 30px; color: #aaa; font-size: 14px; }
+
+  /* Floating to-do bar */
+  .todo-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #1a2332; color: white; padding: 14px 24px;
+    display: none; align-items: center; justify-content: space-between;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.25); z-index: 200; flex-wrap: wrap; gap: 10px;
+  }
+  .todo-bar.visible { display: flex; }
+  .todo-bar-left { font-size: 14px; font-weight: 700; }
+  .todo-bar-left span { color: #ff8a75; }
+  .todo-bar-right { display: flex; gap: 10px; }
+  .todo-btn {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    border: none; cursor: pointer;
+  }
+  .todo-btn.copy { background: #c0392b; color: white; }
+  .todo-btn.copy:hover { background: #a5311f; }
+  .todo-btn.clear { background: rgba(255,255,255,0.12); color: white; }
+  .todo-btn.clear:hover { background: rgba(255,255,255,0.22); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/reports">Quote Analytics</a>
+    <a href="/admin/margin">Reports & Margin</a>
+    <a href="/admin/jobcards">Job Cards</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h2>Survey Queue</h2>
+      <div class="page-sub">Live quote requests awaiting a site survey — grouped by postcode area for efficient batching.</div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="headline-grid">
+      <div class="hl-box">
+        <div class="hl-label">Awaiting Submission</div>
+        <div class="hl-value">{{ total_count }}</div>
+        <div class="hl-note">Live quote requests, no survey submitted yet</div>
+      </div>
+      <div class="hl-box">
+        <div class="hl-label">Postcode Areas</div>
+        <div class="hl-value">{{ area_groups|length }}</div>
+        <div class="hl-note">Distinct areas represented in the queue</div>
+      </div>
+    </div>
+  </div>
+
+  {% if area_groups %}
+    {% for group in area_groups %}
+    <div class="section-card">
+      <div class="area-header">
+        📍 {{ group.area }}
+        <span class="count-pill">{{ group.jobs|length }} job{{ 's' if group.jobs|length != 1 }}</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px"></th>
+            <th>Job</th>
+            <th>Pub</th>
+            <th>Trade</th>
+            <th>Description</th>
+            <th>Days Elapsed</th>
+            <th>Due Date</th>
+            <th>Pub Win Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in group.jobs %}
+          <tr id="row-{{ j.job_id }}">
+            <td>
+              <input type="checkbox" class="survey-check" data-job="{{ j.job_id }}"
+                     onchange="toggleJob('{{ j.job_id }}', '{{ (j.display_id or j.job_id)|string }}', this.checked)">
+            </td>
+            <td>
+              <div class="job-id">{{ j.display_id or j.job_id }}</div>
+              <div class="display-id">{{ j.postcode or '—' }}</div>
+            </td>
+            <td>
+              <div class="pub-name">{{ j.pub_name or '—' }}</div>
+              <div class="postcode-text">{{ j.location_code or '' }}</div>
+            </td>
+            <td><span class="job-type-pill">{{ j.trade_type or j.sub_trade_type or '—' }}</span></td>
+            <td class="desc-text">{{ j.description or '—' }}</td>
+            <td>
+              {% if j.days_elapsed is not none %}
+              <span class="days-pill {{ 'red' if j.days_elapsed >= 8 else ('amber' if j.days_elapsed >= 4 else 'green') }}">{{ j.days_elapsed }}d</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ j.due_date.strftime('%d %b %Y') if j.due_date else '—' }}</td>
+            <td>
+              {% if j.win_rate_pct is not none %}
+              <span class="win-pill {{ 'high' if j.win_rate_pct >= 60 else ('mid' if j.win_rate_pct >= 30 else 'low') }}">{{ j.win_rate_pct }}% ({{ j.win_rate_sample }})</span>
+              {% else %}
+              <span class="win-pill none">No history</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="section-card">
+      <div class="empty-state">Nothing awaiting submission right now — queue is clear.</div>
+    </div>
+  {% endif %}
+
+</div>
+
+<!-- Floating to-do bar for today's picked surveys -->
+<div class="todo-bar" id="todoBar">
+  <div class="todo-bar-left"><span id="todoCount">0</span> job(s) selected for today's list</div>
+  <div class="todo-bar-right">
+    <button class="todo-btn copy" onclick="copyList()">Copy List</button>
+    <button class="todo-btn clear" onclick="clearList()">Clear</button>
+  </div>
+</div>
+
+<script>
+  // Selected jobs persist in this browser via localStorage, so the list
+  // survives a page refresh. This is just a visual to-do aid — allocation
+  // to engineers still happens manually in the Weekly Planner.
+  const STORAGE_KEY = 'redstone_survey_queue_selection';
+
+  function loadSelection() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function saveSelection(sel) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sel));
+  }
+  function refreshBar() {
+    const sel = loadSelection();
+    const ids = Object.keys(sel);
+    const bar = document.getElementById('todoBar');
+    document.getElementById('todoCount').textContent = ids.length;
+    bar.classList.toggle('visible', ids.length > 0);
+  }
+  function toggleJob(jobId, displayId, checked) {
+    const sel = loadSelection();
+    if (checked) { sel[jobId] = displayId; }
+    else { delete sel[jobId]; }
+    saveSelection(sel);
+    const row = document.getElementById('row-' + jobId);
+    if (row) row.classList.toggle('checked-row', checked);
+    refreshBar();
+  }
+  function copyList() {
+    const sel = loadSelection();
+    const text = Object.values(sel).join('\n');
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Copied ' + Object.keys(sel).length + ' job reference(s) to clipboard.');
+    }).catch(() => {
+      alert('Could not copy automatically — select and copy manually:\n\n' + text);
+    });
+  }
+  function clearList() {
+    if (!confirm('Clear today\'s selected list?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('.survey-check').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('tr.checked-row').forEach(r => r.classList.remove('checked-row'));
+    refreshBar();
+  }
+
+  // On load, tick + highlight any boxes still selected from before
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = loadSelection();
+    Object.keys(sel).forEach(jobId => {
+      const cb = document.querySelector('.survey-check[data-job="' + jobId + '"]');
+      if (cb) {
+        cb.checked = true;
+        const row = document.getElementById('row-' + jobId);
+        if (row) row.classList.add('checked-row');
+      }
+    });
+    refreshBar();
+  });
+</script>
+
+</body>
+</html>
