@@ -125,6 +125,7 @@
       data-account="{{ c.account_no or '' }}"
       data-card="{{ 'yes' if c.redstone_card else 'no' }}"
       data-password="{{ c.password or '' }}"
+      data-show-planner="{{ 'no' if c.show_in_planner == false else 'yes' }}"
     >
       <div class="cc-header">
         <div class="cc-avatar">{{ c.name[0] }}</div>
@@ -140,6 +141,7 @@
         {% else %}<span class="cc-badge badge-reimb">💵 Reimburse</span>{% endif %}
         {% if c.cis_rate == 0 %}<span class="cc-badge badge-cis">CIS Exempt</span>
         {% else %}<span class="cc-badge badge-cis">CIS {{ (c.cis_rate * 100)|int }}%</span>{% endif %}
+        {% if c.show_in_planner == false %}<span class="cc-badge badge-arch">🗓️ Hidden from Planner</span>{% endif %}
       </div>
       <div class="cc-details">
         <div>
@@ -161,6 +163,7 @@
       </div>
       <div class="cc-actions">
         <button class="btn btn-edit btn-sm" onclick="openEditModal(this.closest('.contractor-card'))">Edit</button>
+        <button class="btn btn-edit btn-sm" onclick="togglePlannerVisibility('{{ c.contractor_key }}', this)">{{ 'Show in Planner' if c.show_in_planner == false else 'Hide from Planner' }}</button>
         <button class="btn btn-danger btn-sm" onclick="archiveContractor('{{ c.contractor_key }}', '{{ c.name }}')">Archive</button>
       </div>
     </div>
@@ -266,6 +269,15 @@
     <div class="modal-section">Login</div>
     <div class="form-group"><label>Password</label><input type="text" id="add-password" placeholder="Surname2024!"></div>
 
+    <div class="modal-section">Planner</div>
+    <div class="form-group"><label>Show in Weekly Planner?</label>
+      <select id="add-show-planner">
+        <option value="yes">Yes — shown by default</option>
+        <option value="no">No — hide (occasional use only)</option>
+      </select>
+      <div class="field-hint">Hidden contractors stay fully active everywhere else — job cards, payroll, etc. This only declutters the planner grid.</div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
       <button class="btn btn-primary" onclick="addContractor()">Add Contractor</button>
@@ -333,6 +345,15 @@
     <div class="modal-section">Login</div>
     <div class="form-group"><label>Password</label><input type="text" id="edit-password"></div>
 
+    <div class="modal-section">Planner</div>
+    <div class="form-group"><label>Show in Weekly Planner?</label>
+      <select id="edit-show-planner">
+        <option value="yes">Yes — shown by default</option>
+        <option value="no">No — hide (occasional use only)</option>
+      </select>
+      <div class="field-hint">Hidden contractors stay fully active everywhere else — job cards, payroll, etc. This only declutters the planner grid.</div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModals()">Cancel</button>
       <button class="btn btn-primary" onclick="saveContractor()">Save Changes</button>
@@ -383,6 +404,7 @@
     document.getElementById('edit-account').value      = d.account;
     document.getElementById('edit-card').value         = d.card;
     document.getElementById('edit-password').value     = d.password;
+    document.getElementById('edit-show-planner').value = d.showPlanner || 'yes';
 
     // Mileage rate — stored as decimal (0.25), display as pence (25)
     const mileageDecimal = parseFloat(d.mileageRate || 0);
@@ -416,6 +438,7 @@
     form.append('account_no',       document.getElementById('add-account').value);
     form.append('redstone_card',    document.getElementById('add-card').value);
     form.append('password',         document.getElementById('add-password').value);
+    form.append('show_in_planner',  document.getElementById('add-show-planner').value);
     const res = await fetch('/admin/contractors/add', { method: 'POST', body: form });
     if (res.ok || res.redirected) { closeModals(); location.reload(); }
   }
@@ -439,10 +462,18 @@
     form.append('account_no',       document.getElementById('edit-account').value);
     form.append('redstone_card',    document.getElementById('edit-card').value);
     form.append('password',         document.getElementById('edit-password').value);
+    form.append('show_in_planner',  document.getElementById('edit-show-planner').value);
     const res = await fetch(`/admin/contractors/${key}/edit`, { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) { closeModals(); location.reload(); }
     else alert('Save failed');
+  }
+
+  async function togglePlannerVisibility(key, btn) {
+    const res = await fetch(`/admin/contractors/${key}/toggle-planner`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) location.reload();
+    else alert('Could not update planner visibility');
   }
 
   async function archiveContractor(key, name) {
