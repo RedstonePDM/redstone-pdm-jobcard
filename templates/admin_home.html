@@ -131,6 +131,8 @@
     {% endif %}
 
     <div class="alert-chip info"><div class="chip-dot"></div>Week schedule: <strong style="margin-left:3px">{{ week_status|upper }}</strong></div>
+
+    <div class="alert-chip {{ 'ok' if sync_status_ok else 'warn' }}"><div class="chip-dot"></div>{{ sync_status_text }}</div>
   </div>
 
   <!-- Tiles -->
