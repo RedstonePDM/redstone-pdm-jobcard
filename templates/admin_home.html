@@ -208,6 +208,22 @@
       <div class="tile-arrow">→</div>
     </a>
 
+    <a href="/admin/survey-queue" class="tile">
+      <div class="tile-icon" style="background:#fdf0ef">🗺️</div>
+      <div class="tile-title">Live Quote Requests</div>
+      <div class="tile-desc">
+        {% if live_quotes_by_trade %}
+        {% for t in live_quotes_by_trade[:3] %}{{ t.trade_type }} ({{ t.count }}, {{ t.pct }}%){% if not loop.last %} · {% endif %}{% endfor %}{% if live_quotes_by_trade|length > 3 %} · +{{ live_quotes_by_trade|length - 3 }} more{% endif %}
+        {% else %}
+        Grouped by postcode area for efficient batched surveying.
+        {% endif %}
+      </div>
+      <div class="tile-badge {{ 'badge-red' if live_quotes_count > 0 else 'badge-grey' }}">
+        {{ live_quotes_count }} awaiting submission
+      </div>
+      <div class="tile-arrow">→</div>
+    </a>
+
     <a href="/admin/reports" class="tile">
       <div class="tile-icon teal">📊</div>
       <div class="tile-title">Quote Analytics</div>
