@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ pub_name }} — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+
+  .page { max-width: 1200px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { margin-bottom: 20px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+  .page-sub { font-size: 13px; color: #888; margin-top: 4px; }
+
+  .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
+
+  .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .hl-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
+  .hl-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .hl-value { font-size: 24px; color: #1a2332; font-weight: 800; margin-top: 5px; }
+  .hl-note { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: white; color: #555; border: 1.5px solid #e0e0e0; cursor: pointer;
+  }
+  .filter-btn.active { background: #1a2332; color: white; border-color: #1a2332; }
+
+  .outcome-pill { padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .outcome-pill.won { background: #effdf4; color: #1a7a4a; }
+  .outcome-pill.lost { background: #fdf0ef; color: #c0392b; }
+  .outcome-pill.cancelled, .outcome-pill.won_then_cancelled { background: #fff8ef; color: #c77a10; }
+  .outcome-pill.declined_to_quote { background: #f0f2f5; color: #888; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
+  td { font-size: 13px; padding: 10px; border-bottom: 1px solid #f5f5f5; vertical-align: top; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover { background: #fafbfc; }
+  .job-id { font-weight: 700; color: #1a2332; }
+  .reason-text { font-size: 12px; color: #555; max-width: 280px; }
+  .empty-state { text-align: center; padding: 30px; color: #aaa; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/pub-history">← Pub History</a>
+    <a href="/admin/reports">Quote Analytics</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="page-header">
+    <h2>{{ pub_name }}</h2>
+    <div class="page-sub">Full quote outcome history for this pub, most recent decision first.</div>
+  </div>
+
+  <div class="section-card">
+    <div class="headline-grid">
+      <div class="hl-box">
+        <div class="hl-label">Total Decisions</div>
+        <div class="hl-value">{{ outcomes|length }}</div>
+        <div class="hl-note">Won, lost, cancelled or declined</div>
+      </div>
+      <div class="hl-box">
+        <div class="hl-label">Value Lost to Lost/Cancelled</div>
+        <div class="hl-value">£{{ '{:,.2f}'.format(lost_cancelled_value) }}</div>
+        <div class="hl-note">Quoted value that didn't convert</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Outcome History</div>
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="lostcancelled" onclick="setFilter('lostcancelled', this)">Lost &amp; Cancelled</button>
+      <button class="filter-btn" data-filter="all" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" data-filter="won" onclick="setFilter('won', this)">Won</button>
+      <button class="filter-btn" data-filter="declined_to_quote" onclick="setFilter('declined_to_quote', this)">Declined</button>
+    </div>
+    {% if outcomes %}
+    <table id="outcomeTable">
+      <thead>
+        <tr>
+          <th>Job</th>
+          <th>Trade</th>
+          <th>Outcome</th>
+          <th>Reason</th>
+          <th class="num">Value</th>
+          <th>Decided</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in outcomes %}
+        <tr class="outcome-row" data-outcome="{{ o.outcome }}">
+          <td><div class="job-id">{{ o.display_id or o.job_id or '—' }}</div></td>
+          <td>{{ o.trade_type or '—' }}</td>
+          <td><span class="outcome-pill {{ o.outcome }}">{{ (o.outcome or '—')|replace('_',' ')|title }}</span></td>
+          <td class="reason-text">{{ o.reason_heading or o.wisdom_reason or '—' }}</td>
+          <td class="num">{% if o.quote_total %}£{{ '{:,.2f}'.format(o.quote_total) }}{% else %}—{% endif %}</td>
+          <td>{{ o.t3_decision or o.detected_at or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No decided outcomes recorded for this pub yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  function setFilter(filter, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.outcome-row').forEach(row => {
+      const o = row.dataset.outcome;
+      let show = true;
+      if (filter === 'lostcancelled') show = (o === 'lost' || o === 'cancelled' || o === 'won_then_cancelled');
+      else if (filter === 'won') show = (o === 'won');
+      else if (filter === 'declined_to_quote') show = (o === 'declined_to_quote');
+      row.style.display = show ? '' : 'none';
+    });
+  }
+  document.addEventListener('DOMContentLoaded', () => setFilter('lostcancelled', document.querySelector('.filter-btn.active')));
+</script>
+
+</body>
+</html>
