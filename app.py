@@ -1813,10 +1813,27 @@ def admin_survey_queue():
         d = dict(r)
         # Wisdom's own "Date Released" field is unreliable/blank on live quote
         # requests — Due Date minus the standard 10-day turnaround gives the
-        # real release date instead.
+        # real release date instead. due_date can come back from the database
+        # as a proper date OR as plain text depending on how it was stored,
+        # so handle both rather than assuming.
         days_elapsed = None
-        if d.get("due_date"):
-            released = d["due_date"] - timedelta(days=10)
+        due_date_val = d.get("due_date")
+        due_date_parsed = None
+        if due_date_val:
+            if isinstance(due_date_val, str):
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"):
+                    try:
+                        due_date_parsed = datetime.strptime(due_date_val[:19], fmt).date()
+                        break
+                    except ValueError:
+                        continue
+            elif hasattr(due_date_val, "date"):
+                due_date_parsed = due_date_val.date()
+            else:
+                due_date_parsed = due_date_val
+        d["due_date"] = due_date_parsed
+        if due_date_parsed:
+            released = due_date_parsed - timedelta(days=10)
             days_elapsed = (today - released).days
         d["days_elapsed"] = days_elapsed
         d["area"] = postcode_area(d.get("postcode"))
