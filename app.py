@@ -1741,15 +1741,18 @@ def admin_home():
 
 
 def postcode_area(postcode):
-    """Extract the outward/area code from a UK postcode, e.g. 'MK40 3XY' -> 'MK40'.
-    Falls back to whatever's there if it doesn't look like a normal postcode."""
+    """Extract the broad postcode area (letters only) from a UK postcode,
+    e.g. 'MK40 3XY' -> 'MK', 'LU1 2AB' -> 'LU'. Deliberately dropped the
+    district number (which gave dozens of tiny groups like MK40/MK41/MK42
+    all separately) in favour of just the area code, which lines up closely
+    enough with a county/region for sensible survey-batching without needing
+    a full postcode-to-county lookup table."""
     if not postcode:
         return "Unknown"
     pc = postcode.strip().upper()
-    m = re.match(r"^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$", pc)
+    m = re.match(r"^([A-Z]{1,2})\d", pc)
     if m:
         return m.group(1)
-    # No recognisable inward code — just take the first chunk before a space
     return pc.split(" ")[0] if pc else "Unknown"
 
 
@@ -1777,20 +1780,24 @@ def admin_survey_queue():
 
     # Per-pub win rate, from quote_outcomes — won / (won + lost + cancelled),
     # matching the definition already used on Quote Analytics (declined excluded).
+    # Matched on a normalised (trimmed, uppercased) pub name — the live jobs
+    # feed and the historic outcomes register don't always agree on exact
+    # casing/spacing for the same pub, which was silently breaking the
+    # lookup and showing 0%/undercounted samples.
     win_rates = {}
     try:
         cur.execute("""
-            SELECT pub_name,
+            SELECT TRIM(UPPER(pub_name)) as pub_key,
                    SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
                    SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses,
                    SUM(CASE WHEN outcome IN ('cancelled','won_then_cancelled') THEN 1 ELSE 0 END) as cancellations
             FROM quote_outcomes
-            WHERE pub_name IS NOT NULL
-            GROUP BY pub_name
+            WHERE pub_name IS NOT NULL AND TRIM(pub_name) != ''
+            GROUP BY TRIM(UPPER(pub_name))
         """)
         for r in cur.fetchall():
             total = (r["wins"] or 0) + (r["losses"] or 0) + (r["cancellations"] or 0)
-            win_rates[r["pub_name"]] = {
+            win_rates[r["pub_key"]] = {
                 "pct": round((r["wins"] / total) * 100, 1) if total else None,
                 "sample": total,
             }
@@ -1831,7 +1838,8 @@ def admin_survey_queue():
             days_elapsed = (today - released).days
         d["days_elapsed"] = days_elapsed
         d["area"] = postcode_area(d.get("postcode"))
-        wr = win_rates.get(d.get("pub_name"))
+        pub_key = (d.get("pub_name") or "").strip().upper()
+        wr = win_rates.get(pub_key) if pub_key else None
         d["win_rate_pct"] = wr["pct"] if wr else None
         d["win_rate_sample"] = wr["sample"] if wr else 0
         queue.append(d)
@@ -1903,6 +1911,130 @@ def admin_awaiting_approval():
                            queue=queue,
                            total_count=len(queue),
                            total_value=total_value)
+
+
+@app.route("/admin/pub-history")
+@admin_required
+def admin_pub_history():
+    """Every pub Redstone has ever quoted for, tracked forever — total quotes,
+    win/loss/cancelled/declined history, and what's currently sitting live
+    (awaiting submission and awaiting approval, with value). Built to answer
+    'is this pub a genuine quote machine, or does it actually go ahead?'
+    All matching is done on a normalised (trimmed, uppercased) pub name,
+    since the live Wisdom feed and the historic outcomes register don't
+    always agree on exact spelling/casing for the same site."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    pubs = {}  # pub_key -> accumulated stats
+
+    def get_pub(pub_key, display_name):
+        if pub_key not in pubs:
+            pubs[pub_key] = {
+                "pub_name": display_name,
+                "wins": 0, "losses": 0, "cancellations": 0, "declined": 0,
+                "awaiting_submission": 0, "awaiting_approval": 0,
+                "awaiting_approval_value": 0.0,
+                "trades": defaultdict(int),
+            }
+        elif display_name and not pubs[pub_key]["pub_name"]:
+            pubs[pub_key]["pub_name"] = display_name
+        return pubs[pub_key]
+
+    # Historic decided outcomes — the permanent record.
+    try:
+        cur.execute("""
+            SELECT TRIM(UPPER(pub_name)) as pub_key, pub_name, outcome, trade_type
+            FROM quote_outcomes
+            WHERE pub_name IS NOT NULL AND TRIM(pub_name) != ''
+        """)
+        for r in cur.fetchall():
+            p = get_pub(r["pub_key"], r["pub_name"])
+            if r["outcome"] == "won":
+                p["wins"] += 1
+            elif r["outcome"] == "lost":
+                p["losses"] += 1
+            elif r["outcome"] in ("cancelled", "won_then_cancelled"):
+                p["cancellations"] += 1
+            elif r["outcome"] == "declined_to_quote":
+                p["declined"] += 1
+            if r["trade_type"]:
+                p["trades"][r["trade_type"]] += 1
+    except Exception as e:
+        print(f"pub history outcomes query failed: {e}")
+        conn.rollback()
+
+    # Currently live — awaiting submission.
+    try:
+        cur.execute("""
+            SELECT TRIM(UPPER(pub_name)) as pub_key, pub_name, trade_type
+            FROM jobs
+            WHERE tab = 'QUOTEREQUEST' AND sub_tab = 'AWAITINGSUBMISSION'
+            AND pub_name IS NOT NULL AND TRIM(pub_name) != ''
+        """)
+        for r in cur.fetchall():
+            p = get_pub(r["pub_key"], r["pub_name"])
+            p["awaiting_submission"] += 1
+            if r["trade_type"]:
+                p["trades"][r["trade_type"]] += 1
+    except Exception as e:
+        print(f"pub history awaiting-submission query failed: {e}")
+        conn.rollback()
+
+    # Currently live — awaiting approval, with quoted value.
+    try:
+        cur.execute("""
+            SELECT TRIM(UPPER(j.pub_name)) as pub_key, j.pub_name, j.trade_type,
+                   sf.quote_total
+            FROM jobs j
+            LEFT JOIN survey_forms sf
+                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+                AND sf.status NOT IN ('queried')
+            WHERE j.tab = 'QUOTEREQUEST' AND j.sub_tab = 'AWAITINGAPPROVAL'
+            AND j.pub_name IS NOT NULL AND TRIM(j.pub_name) != ''
+        """)
+        for r in cur.fetchall():
+            p = get_pub(r["pub_key"], r["pub_name"])
+            p["awaiting_approval"] += 1
+            p["awaiting_approval_value"] += float(r["quote_total"]) if r["quote_total"] else 0.0
+            if r["trade_type"]:
+                p["trades"][r["trade_type"]] += 1
+    except Exception as e:
+        print(f"pub history awaiting-approval query failed: {e}")
+        conn.rollback()
+
+    cur.close()
+    conn.close()
+
+    pub_list = []
+    total_awaiting_approval_value = 0.0
+    for pub_key, p in pubs.items():
+        decided = p["wins"] + p["losses"] + p["cancellations"]
+        total_quotes = decided + p["declined"] + p["awaiting_submission"] + p["awaiting_approval"]
+        win_rate_pct = round((p["wins"] / decided) * 100, 1) if decided else None
+        is_quote_machine = total_quotes >= 3 and (win_rate_pct is None or win_rate_pct <= 20)
+        top_trades = sorted(p["trades"].items(), key=lambda x: x[1], reverse=True)
+        total_awaiting_approval_value += p["awaiting_approval_value"]
+        pub_list.append({
+            "pub_name": p["pub_name"] or pub_key.title(),
+            "total_quotes": total_quotes,
+            "wins": p["wins"], "losses": p["losses"],
+            "cancellations": p["cancellations"], "declined": p["declined"],
+            "win_rate_pct": win_rate_pct,
+            "decided_sample": decided,
+            "awaiting_submission": p["awaiting_submission"],
+            "awaiting_approval": p["awaiting_approval"],
+            "awaiting_approval_value": p["awaiting_approval_value"],
+            "is_quote_machine": is_quote_machine,
+            "top_trades": top_trades,
+        })
+
+    pub_list.sort(key=lambda x: x["total_quotes"], reverse=True)
+
+    return render_template("pub_history.html",
+                           pubs=pub_list,
+                           total_pubs=len(pub_list),
+                           total_awaiting_approval_value=total_awaiting_approval_value)
 
 
 @app.route("/admin/dashboard")
