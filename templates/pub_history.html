@@ -123,7 +123,7 @@
         {% for p in pubs %}
         <tr class="pub-row" data-name="{{ p.pub_name|lower }}">
           <td>
-            <div class="pub-name">{{ p.pub_name }}</div>
+            <a href="/admin/pub-detail/{{ p.pub_key }}" class="pub-name" style="text-decoration:none">{{ p.pub_name }} →</a>
             {% if p.is_quote_machine %}<span class="qm-pill">⚠ Quote Machine — {{ p.waste_rate_pct }}% lost/cancelled</span>{% endif %}
           </td>
           <td>{{ p.total_quotes }}</td>
