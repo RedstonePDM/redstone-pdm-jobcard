@@ -46,6 +46,23 @@
   .win-pill.low  { background: #fdf0ef; color: #c0392b; }
   .win-pill.none { background: #f0f2f5; color: #888; }
 
+  .pub-pill-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pub-pill {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 20px; font-size: 12px;
+  }
+  .pub-pill .pub-pill-name { font-weight: 700; color: #1a2332; }
+  .pub-pill .pub-pill-count {
+    background: #eff4ff; color: #1a4fa0; font-weight: 700; font-size: 11px;
+    padding: 1px 8px; border-radius: 10px;
+  }
+
+  .trade-tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .trade-tile { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 14px 16px; }
+  .trade-tile-name { font-size: 12px; font-weight: 700; color: #1a2332; }
+  .trade-tile-count { font-size: 20px; font-weight: 800; color: #1a2332; margin-top: 4px; }
+  .trade-tile-value { font-size: 11px; color: #888; margin-top: 3px; }
+
   .job-type-pill { padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #f4efff; color: #6c3fc5; white-space: nowrap; }
 
   .area-header {
@@ -129,6 +146,34 @@
       </div>
     </div>
   </div>
+
+  {% if pub_pills %}
+  <div class="section-card">
+    <div class="section-title">By Pub</div>
+    <div class="section-sub">How many quotes each pub currently has sitting in the survey queue.</div>
+    <div class="pub-pill-grid">
+      {% for p in pub_pills %}
+      <div class="pub-pill"><span class="pub-pill-name">{{ p.pub_name }}</span><span class="pub-pill-count">{{ p.count }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if trade_tiles %}
+  <div class="section-card">
+    <div class="section-title">By Trade Type</div>
+    <div class="section-sub">Count in the queue, with the average value of past won quotes for that trade — these jobs aren't quoted yet, so this is a historic guide, not a live figure.</div>
+    <div class="trade-tile-grid">
+      {% for t in trade_tiles %}
+      <div class="trade-tile">
+        <div class="trade-tile-name">{{ t.trade_type }}</div>
+        <div class="trade-tile-count">{{ t.count }}</div>
+        <div class="trade-tile-value">{% if t.avg_value %}avg £{{ '{:,.0f}'.format(t.avg_value) }} won ({{ t.won_count }}){% else %}no won history yet{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   {% if area_groups %}
     {% for group in area_groups %}
