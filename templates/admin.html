@@ -26,6 +26,16 @@
   .welcome h1 { font-size: 26px; color: #1a2332; font-weight: 700; }
   .welcome p { color: #666; margin-top: 4px; font-size: 15px; }
 
+  /* Sync warning banner */
+  .sync-warning-bar {
+    background: #fff3cd; border: 1.5px solid #ffc107; color: #856404;
+    border-radius: 10px; padding: 14px 20px; margin-bottom: 20px;
+    font-size: 14px; font-weight: 600; display: flex; align-items: flex-start; gap: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .sync-warning-bar .icon { font-size: 18px; line-height: 1.3; }
+  .sync-warning-bar .text { line-height: 1.5; }
+
   /* Alert bar */
   .alert-bar {
     background: white; border-radius: 10px; padding: 14px 20px;
@@ -138,6 +148,13 @@
     <h1>Admin Dashboard</h1>
     <p>Redstone PDM — Operations Platform</p>
   </div>
+
+  {% if sync_warning %}
+  <div class="sync-warning-bar">
+    <div class="icon">⚠️</div>
+    <div class="text">{{ sync_warning }}</div>
+  </div>
+  {% endif %}
 
   <!-- Alert bar -->
   <div class="alert-bar">
