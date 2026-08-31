@@ -1668,6 +1668,34 @@ def admin_home():
         week_status = sched["status"] if sched else "draft"
     except Exception: conn.rollback()
 
+    # Live quote requests — awaiting a survey/quote to be submitted.
+    # Same "tab IN (QUOTEREQUEST, QUOTE), no matching survey_forms row yet"
+    # pattern already used on the contractor dashboard's survey_jobs query.
+    live_quotes_count = 0
+    live_quotes_by_trade = []
+    try:
+        cur.execute("""
+            SELECT j.trade_type
+            FROM jobs j
+            LEFT JOIN survey_forms sf
+                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+                AND sf.status NOT IN ('queried')
+            WHERE j.tab IN ('QUOTEREQUEST', 'QUOTE')
+            AND sf.id IS NULL
+        """)
+        trade_rows = cur.fetchall()
+        live_quotes_count = len(trade_rows)
+        trade_counts = defaultdict(int)
+        for r in trade_rows:
+            trade_counts[r["trade_type"] or "Unspecified"] += 1
+        live_quotes_by_trade = sorted(
+            [{"trade_type": k, "count": v,
+              "pct": round((v / live_quotes_count) * 100, 1) if live_quotes_count else 0}
+             for k, v in trade_counts.items()],
+            key=lambda x: x["count"], reverse=True
+        )
+    except Exception: conn.rollback()
+
     # Wisdom sync/login health — shown as a persistent pill alongside job
     # cards / MOTs, always visible (green when fine, amber/red when not),
     # not just a hidden banner that only appears on failure. Catches
@@ -1710,7 +1738,108 @@ def admin_home():
                            week_status=week_status,
                            sync_status_ok=sync_status_ok,
                            sync_status_text=sync_status_text,
-                           planner_url=PLANNER_URL)
+                           planner_url=PLANNER_URL,
+                           live_quotes_count=live_quotes_count,
+                           live_quotes_by_trade=live_quotes_by_trade)
+
+
+def postcode_area(postcode):
+    """Extract the outward/area code from a UK postcode, e.g. 'MK40 3XY' -> 'MK40'.
+    Falls back to whatever's there if it doesn't look like a normal postcode."""
+    if not postcode:
+        return "Unknown"
+    pc = postcode.strip().upper()
+    m = re.match(r"^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$", pc)
+    if m:
+        return m.group(1)
+    # No recognisable inward code — just take the first chunk before a space
+    return pc.split(" ")[0] if pc else "Unknown"
+
+
+@app.route("/admin/survey-queue")
+@admin_required
+def admin_survey_queue():
+    conn = get_db()
+    cur = conn.cursor()
+
+    rows = []
+    try:
+        cur.execute("""
+            SELECT j.job_id, j.display_id, j.pub_name, j.postcode, j.description,
+                   j.trade_type, j.sub_trade_type, j.due_date, j.tab_label,
+                   j.location_code
+            FROM jobs j
+            LEFT JOIN survey_forms sf
+                ON (sf.job_id = j.job_id OR sf.job_id = j.display_id)
+                AND sf.status NOT IN ('queried')
+            WHERE j.tab IN ('QUOTEREQUEST', 'QUOTE')
+            AND sf.id IS NULL
+            ORDER BY j.due_date ASC NULLS LAST
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        print(f"survey queue query failed: {e}")
+        conn.rollback()
+
+    # Per-pub win rate, from quote_outcomes — won / (won + lost + cancelled),
+    # matching the definition already used on Quote Analytics (declined excluded).
+    win_rates = {}
+    try:
+        cur.execute("""
+            SELECT pub_name,
+                   SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses,
+                   SUM(CASE WHEN outcome IN ('cancelled','won_then_cancelled') THEN 1 ELSE 0 END) as cancellations
+            FROM quote_outcomes
+            WHERE pub_name IS NOT NULL
+            GROUP BY pub_name
+        """)
+        for r in cur.fetchall():
+            total = (r["wins"] or 0) + (r["losses"] or 0) + (r["cancellations"] or 0)
+            win_rates[r["pub_name"]] = {
+                "pct": round((r["wins"] / total) * 100, 1) if total else None,
+                "sample": total,
+            }
+    except Exception as e:
+        print(f"win rate query failed: {e}")
+        conn.rollback()
+
+    cur.close()
+    conn.close()
+
+    today = date.today()
+    queue = []
+    for r in rows:
+        d = dict(r)
+        # Wisdom's own "Date Released" field is unreliable/blank on live quote
+        # requests — Due Date minus the standard 10-day turnaround gives the
+        # real release date instead.
+        days_elapsed = None
+        if d.get("due_date"):
+            released = d["due_date"] - timedelta(days=10)
+            days_elapsed = (today - released).days
+        d["days_elapsed"] = days_elapsed
+        d["area"] = postcode_area(d.get("postcode"))
+        wr = win_rates.get(d.get("pub_name"))
+        d["win_rate_pct"] = wr["pct"] if wr else None
+        d["win_rate_sample"] = wr["sample"] if wr else 0
+        queue.append(d)
+
+    # Group by postcode area, areas sorted by job count (busiest first) so
+    # the biggest batching opportunities surface at the top; jobs within an
+    # area sorted oldest-first so the most overdue surveys are seen first.
+    grouped = defaultdict(list)
+    for j in queue:
+        grouped[j["area"]].append(j)
+    area_groups = sorted(
+        [{"area": area, "jobs": sorted(jobs, key=lambda x: x["days_elapsed"] or 0, reverse=True)}
+         for area, jobs in grouped.items()],
+        key=lambda g: len(g["jobs"]), reverse=True
+    )
+
+    return render_template("survey_queue.html",
+                           area_groups=area_groups,
+                           total_count=len(queue))
 
 
 @app.route("/admin/dashboard")
