@@ -80,7 +80,7 @@
   <div class="page-header">
     <div>
       <h2>Pub History</h2>
-      <div class="page-sub">Every pub Redstone has ever quoted for — total quotes, win/loss record, and what's currently live. Spot the genuine quote machines.</div>
+      <div class="page-sub">Every pub Redstone has ever quoted for — total quotes, win/loss record, and what's currently live. "Quote Machine" flags a high rate of lost/cancelled quotes, not just a high volume — a busy pub that mostly goes ahead isn't a problem. Historic totals will keep filling in as more decisions get logged over time.</div>
     </div>
     <input type="text" class="search-box" id="searchBox" placeholder="Search pub name..." onkeyup="filterPubs()">
   </div>
@@ -124,7 +124,7 @@
         <tr class="pub-row" data-name="{{ p.pub_name|lower }}">
           <td>
             <div class="pub-name">{{ p.pub_name }}</div>
-            {% if p.is_quote_machine %}<span class="qm-pill">⚠ Quote Machine</span>{% endif %}
+            {% if p.is_quote_machine %}<span class="qm-pill">⚠ Quote Machine — {{ p.waste_rate_pct }}% lost/cancelled</span>{% endif %}
           </td>
           <td>{{ p.total_quotes }}</td>
           <td class="count-cell wins">{{ p.wins }}</td>
