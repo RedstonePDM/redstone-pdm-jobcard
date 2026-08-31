@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pub History — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+
+  .page { max-width: 1400px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+  .page-sub { font-size: 13px; color: #888; margin-top: 4px; }
+
+  .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
+
+  .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .hl-box { background: #fafbfc; border: 1.5px solid #f0f2f5; border-radius: 10px; padding: 16px 18px; }
+  .hl-label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .hl-value { font-size: 24px; color: #1a2332; font-weight: 800; margin-top: 5px; }
+  .hl-note { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+  .win-pill { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .win-pill.high { background: #effdf4; color: #1a7a4a; }
+  .win-pill.mid  { background: #fff8ef; color: #c77a10; }
+  .win-pill.low  { background: #fdf0ef; color: #c0392b; }
+  .win-pill.none { background: #f0f2f5; color: #888; }
+
+  .qm-pill { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #fdf0ef; color: #c0392b; white-space: nowrap; }
+
+  .trade-chip { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; background: #f4efff; color: #6c3fc5; margin: 1px 3px 1px 0; white-space: nowrap; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; cursor: default; }
+  td { font-size: 13px; padding: 10px; border-bottom: 1px solid #f5f5f5; vertical-align: top; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover { background: #fafbfc; }
+
+  .pub-name { font-weight: 700; color: #1a2332; }
+  .count-cell { font-weight: 700; }
+  .count-cell.wins { color: #1a7a4a; }
+  .count-cell.losses { color: #c0392b; }
+  .count-cell.cancellations { color: #c77a10; }
+  .count-cell.declined { color: #888; }
+
+  .empty-state { text-align: center; padding: 30px; color: #aaa; font-size: 14px; }
+  .search-box {
+    padding: 8px 14px; border-radius: 20px; border: 1.5px solid #e0e0e0;
+    font-size: 13px; width: 260px; outline: none;
+  }
+  .search-box:focus { border-color: #1a2332; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin">← Home</a>
+    <a href="/admin/reports">Quote Analytics</a>
+    <a href="/admin/survey-queue">Survey Queue</a>
+    <a href="/admin/awaiting-approval">Awaiting Approval</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h2>Pub History</h2>
+      <div class="page-sub">Every pub Redstone has ever quoted for — total quotes, win/loss record, and what's currently live. Spot the genuine quote machines.</div>
+    </div>
+    <input type="text" class="search-box" id="searchBox" placeholder="Search pub name..." onkeyup="filterPubs()">
+  </div>
+
+  <div class="section-card">
+    <div class="headline-grid">
+      <div class="hl-box">
+        <div class="hl-label">Pubs Tracked</div>
+        <div class="hl-value">{{ total_pubs }}</div>
+        <div class="hl-note">Every site with at least one quote, ever</div>
+      </div>
+      <div class="hl-box">
+        <div class="hl-label">Value Awaiting Approval</div>
+        <div class="hl-value">£{{ '{:,.2f}'.format(total_awaiting_approval_value) }}</div>
+        <div class="hl-note">Across all pubs right now</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">All Pubs — sorted by total quotes, busiest first</div>
+    {% if pubs %}
+    <table id="pubTable">
+      <thead>
+        <tr>
+          <th>Pub</th>
+          <th>Total Quotes</th>
+          <th>Won</th>
+          <th>Lost</th>
+          <th>Cancelled</th>
+          <th>Declined</th>
+          <th>Win Rate</th>
+          <th>Live: Awaiting Submission</th>
+          <th>Live: Awaiting Approval</th>
+          <th class="num">Awaiting Approval Value</th>
+          <th>Trade Types</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pubs %}
+        <tr class="pub-row" data-name="{{ p.pub_name|lower }}">
+          <td>
+            <div class="pub-name">{{ p.pub_name }}</div>
+            {% if p.is_quote_machine %}<span class="qm-pill">⚠ Quote Machine</span>{% endif %}
+          </td>
+          <td>{{ p.total_quotes }}</td>
+          <td class="count-cell wins">{{ p.wins }}</td>
+          <td class="count-cell losses">{{ p.losses }}</td>
+          <td class="count-cell cancellations">{{ p.cancellations }}</td>
+          <td class="count-cell declined">{{ p.declined }}</td>
+          <td>
+            {% if p.win_rate_pct is not none %}
+            <span class="win-pill {{ 'high' if p.win_rate_pct >= 60 else ('mid' if p.win_rate_pct >= 30 else 'low') }}">{{ p.win_rate_pct }}% ({{ p.decided_sample }})</span>
+            {% else %}
+            <span class="win-pill none">No decided history</span>
+            {% endif %}
+          </td>
+          <td>{{ p.awaiting_submission if p.awaiting_submission else '—' }}</td>
+          <td>{{ p.awaiting_approval if p.awaiting_approval else '—' }}</td>
+          <td class="num">{% if p.awaiting_approval_value %}£{{ '{:,.2f}'.format(p.awaiting_approval_value) }}{% else %}—{% endif %}</td>
+          <td>
+            {% for trade, cnt in p.top_trades[:4] %}<span class="trade-chip">{{ trade }} ({{ cnt }})</span>{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No pub history recorded yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  function filterPubs() {
+    const q = document.getElementById('searchBox').value.toLowerCase();
+    document.querySelectorAll('.pub-row').forEach(row => {
+      row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+    });
+  }
+</script>
+
+</body>
+</html>
