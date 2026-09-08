@@ -43,6 +43,18 @@
   .pct-down { color: #c0392b; font-weight: 700; }
   .pct-new { color: #1a4fa0; font-weight: 700; font-size: 11px; }
   .table-scroll { max-height: 520px; overflow-y: auto; }
+  .table-scroll th { position: sticky; top: 0; background: white; z-index: 5; box-shadow: 0 1.5px 0 #eee; }
+
+  .pub-scope-form { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .pub-scope-form select {
+    padding: 8px 12px; border-radius: 8px; border: 1.5px solid #e5e7eb; font-size: 13px; font-family: inherit;
+    min-width: 220px;
+  }
+  .pub-scope-chip {
+    font-size: 12px; background: #eff4ff; color: #1a4fa0; padding: 5px 12px; border-radius: 14px;
+    font-weight: 600; display: flex; align-items: center; gap: 6px;
+  }
+  .pub-scope-chip a { color: #1a4fa0; text-decoration: none; font-weight: 800; }
 
   .trend-legend { display: flex; gap: 18px; margin-bottom: 12px; font-size: 12px; color: #555; }
   .trend-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -204,6 +216,77 @@
     </table>
     </div>
   {% endmacro %}
+
+  {% macro trade_growth_table(rows, col_labels) %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Trade</th>
+          {% for label in col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          {% for i in range(col_labels|length - 1) %}
+          <th class="num">Δ {{ col_labels[i] }} → {{ col_labels[i+1] }}</th><th class="num">%</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in rows %}
+        <tr>
+          <td>{{ t.trade_type }}</td>
+          {% for v in t.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
+          {% for s in t.steps %}
+          <td class="num {{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</td>
+          <td class="num">
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.0f'|format(s.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 1 + (col_labels|length) + 2 * (col_labels|length - 1) }}" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endmacro %}
+
+  <!-- By trade: month (whole business) -->
+  <div class="section-card">
+    <div class="section-title">🔧 By Trade Type — Month Comparison (Whole Business)</div>
+    <div class="section-sub">Which trades are growing or declining, across every pub. Sorted by size of most recent change.</div>
+    {{ trade_growth_table(month_by_trade, month_col_labels) }}
+  </div>
+
+  <!-- By trade: FY (whole business) -->
+  <div class="section-card">
+    <div class="section-title">🔧 By Trade Type — Financial Year Comparison (Whole Business, Like for Like)</div>
+    <div class="section-sub">Same trade-type view, financial-year-to-date — good for spotting which parts of the business are genuinely growing versus quietly shrinking.</div>
+    {{ trade_growth_table(fy_by_trade, fy_col_labels) }}
+  </div>
+
+  <!-- By trade: scoped to one pub -->
+  <div class="section-card">
+    <div class="section-title">🔧 By Trade Type — For One Pub</div>
+    <div class="section-sub">Same trade breakdown as above, narrowed to a single pub — see exactly what's growing or dropping off at one site.</div>
+    <form class="pub-scope-form" method="get">
+      <select name="pub" onchange="this.form.submit()">
+        <option value="">Choose a pub...</option>
+        {% for p in all_pub_names %}
+        <option value="{{ p }}" {% if p == pub_filter %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      {% if pub_filter %}
+      <div class="pub-scope-chip">{{ pub_filter }} <a href="?">✕</a></div>
+      {% endif %}
+    </form>
+    {% if pub_filter %}
+      <div class="section-sub" style="margin-top:-6px">Month comparison, {{ pub_filter }} only:</div>
+      {{ trade_growth_table(month_by_trade_pub, month_col_labels) }}
+      <div class="section-sub" style="margin-top:16px">Financial year comparison, {{ pub_filter }} only:</div>
+      {{ trade_growth_table(fy_by_trade_pub, fy_col_labels) }}
+    {% else %}
+      <div style="text-align:center;color:#aaa;padding:20px;font-size:13px">Pick a pub above to see its trade breakdown.</div>
+    {% endif %}
+  </div>
 
   <!-- By pub: month -->
   <div class="section-card">
