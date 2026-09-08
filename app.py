@@ -333,6 +333,7 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE contractors_db ADD COLUMN IF NOT EXISTS show_in_planner BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE contractors_db ADD COLUMN IF NOT EXISTS company_name TEXT",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approval_submitted_at TIMESTAMPTZ",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_annual NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mot_cost NUMERIC(6,2) DEFAULT 0",
@@ -2637,22 +2638,28 @@ def admin_add_contractor():
     key = re.sub(r'[^a-z0-9]', '_', data.get("name","").lower().strip())
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO contractors_db (contractor_key,name,email,phone,address,utr,ni,sort_code,account_no,
-            day_rate,overtime_rate,redstone_vehicle,van_reg,mileage_rate,redstone_card,cis_rate,password,status,show_in_planner)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s)
-        ON CONFLICT (contractor_key) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, updated_at=NOW()
-    """, (key, data.get("name"), data.get("email"), data.get("phone"), data.get("address"),
-          data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
-          float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
-          data.get("redstone_vehicle")=="yes", data.get("van_reg"),
-          float(data.get("mileage_rate") or 0),
-          data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20), data.get("password"),
-          data.get("show_in_planner", "yes")=="yes"))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return redirect(url_for("admin_contractors"))
+    try:
+        cur.execute("""
+            INSERT INTO contractors_db (contractor_key,name,company_name,email,phone,address,utr,ni,sort_code,account_no,
+                day_rate,overtime_rate,redstone_vehicle,van_reg,mileage_rate,redstone_card,cis_rate,password,status,show_in_planner)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s)
+            ON CONFLICT (contractor_key) DO UPDATE SET name=EXCLUDED.name, company_name=EXCLUDED.company_name, email=EXCLUDED.email, updated_at=NOW()
+        """, (key, data.get("name"), data.get("company_name") or None, data.get("email"), data.get("phone"), data.get("address"),
+              data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
+              float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
+              data.get("redstone_vehicle")=="yes", data.get("van_reg"),
+              float(data.get("mileage_rate") or 0),
+              data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20), data.get("password"),
+              data.get("show_in_planner", "yes")=="yes"))
+        conn.commit()
+        return redirect(url_for("admin_contractors"))
+    except Exception as e:
+        conn.rollback()
+        print(f"admin_add_contractor failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/admin/contractors/<key>/edit", methods=["POST"])
@@ -2661,23 +2668,29 @@ def admin_edit_contractor(key):
     data = request.form
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        UPDATE contractors_db SET name=%s,email=%s,phone=%s,address=%s,utr=%s,ni=%s,
-            sort_code=%s,account_no=%s,day_rate=%s,overtime_rate=%s,
-            redstone_vehicle=%s,van_reg=%s,mileage_rate=%s,redstone_card=%s,
-            cis_rate=%s,password=%s,show_in_planner=%s,updated_at=NOW()
-        WHERE contractor_key=%s
-    """, (data.get("name"), data.get("email"), data.get("phone"), data.get("address"),
-          data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
-          float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
-          data.get("redstone_vehicle")=="yes", data.get("van_reg"),
-          float(data.get("mileage_rate") or 0),
-          data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20),
-          data.get("password"), data.get("show_in_planner", "yes")=="yes", key))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"ok": True})
+    try:
+        cur.execute("""
+            UPDATE contractors_db SET name=%s,company_name=%s,email=%s,phone=%s,address=%s,utr=%s,ni=%s,
+                sort_code=%s,account_no=%s,day_rate=%s,overtime_rate=%s,
+                redstone_vehicle=%s,van_reg=%s,mileage_rate=%s,redstone_card=%s,
+                cis_rate=%s,password=%s,show_in_planner=%s,updated_at=NOW()
+            WHERE contractor_key=%s
+        """, (data.get("name"), data.get("company_name") or None, data.get("email"), data.get("phone"), data.get("address"),
+              data.get("utr"), data.get("ni"), data.get("sort_code"), data.get("account_no"),
+              float(data.get("day_rate") or 0), float(data.get("day_rate") or 0)/10,
+              data.get("redstone_vehicle")=="yes", data.get("van_reg"),
+              float(data.get("mileage_rate") or 0),
+              data.get("redstone_card")=="yes", float(data.get("cis_rate") or 0.20),
+              data.get("password"), data.get("show_in_planner", "yes")=="yes", key))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        print(f"admin_edit_contractor failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/admin/contractors/<key>/archive", methods=["POST"])
