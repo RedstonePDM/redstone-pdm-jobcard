@@ -20,10 +20,21 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 .page-header h2 { font-size: 22px; font-weight: 700; color: #1a2332; }
 .page-header .sub { font-size: 13px; color: #888; margin-top: 3px; }
 
-/* Year selector */
-.year-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-.year-btn { padding: 7px 16px; border-radius: 20px; border: 1.5px solid #e0e0e0; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #666; transition: all 0.15s; }
-.year-btn.active { background: #1a2332; color: white; border-color: #1a2332; }
+/* Period selector — bigger, clearer tabs instead of small pills */
+.period-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+.year-tabs { display: flex; gap: 8px; }
+.year-tab {
+  padding: 12px 26px; border-radius: 10px; border: 2px solid #e0e0e0; background: white;
+  font-size: 15px; font-weight: 700; cursor: pointer; color: #555; transition: all 0.15s;
+}
+.year-tab:hover { border-color: #1a2332; }
+.year-tab.active { background: #1a2332; color: white; border-color: #1a2332; }
+.month-select {
+  padding: 12px 16px; border-radius: 10px; border: 2px solid #e0e0e0; background: white;
+  font-size: 14px; font-weight: 600; color: #555; cursor: pointer;
+}
+.month-select:focus { outline: none; border-color: #1a2332; }
+.period-active-label { font-size: 13px; color: #888; margin-left: 4px; }
 
 /* KPI cards */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
@@ -125,8 +136,14 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
     </div>
   </div>
 
-  <!-- Year selector -->
-  <div class="year-bar" id="year-bar"></div>
+  <!-- Period selector -->
+  <div class="period-bar">
+    <div class="year-tabs" id="year-tabs"></div>
+    <select class="month-select" id="month-select" onchange="setMonth(this.value)">
+      <option value="">Whole year</option>
+    </select>
+    <span class="period-active-label" id="period-active-label"></span>
+  </div>
 
   <!-- KPI row -->
   <div class="kpi-row" id="kpi-row">
@@ -213,34 +230,80 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 <script>
 let allOutcomes = [];
 let currentYear = new Date().getFullYear();
+let currentMonth = ''; // '' = whole year, else 'YYYY-MM'
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  buildYearBar();
+  buildYearTabs();
+  buildMonthOptions();
   loadAll();
 });
 
-function buildYearBar() {
-  const bar = document.getElementById('year-bar');
+function buildYearTabs() {
+  const bar = document.getElementById('year-tabs');
   const years = [];
-  for (let y = 2024; y <= currentYear + 1; y++) years.push(y);
+  for (let y = 2024; y <= new Date().getFullYear() + 1; y++) years.push(y);
   bar.innerHTML = years.map(y =>
-    `<button class="year-btn${y === currentYear ? ' active' : ''}" onclick="setYear(${y})">${y}</button>`
+    `<button class="year-tab${y === currentYear ? ' active' : ''}" onclick="setYear(${y})">${y}</button>`
   ).join('');
   document.getElementById('btn-cancel-pdf').href =
     `/admin/reports/cancellations/pdf?year=${currentYear}`;
 }
 
+// Populates the month dropdown with the last 12 calendar months, computed
+// client-side — always correct regardless of what year tab is selected,
+// since "last 12 months" is relative to today, not to the chosen year.
+function buildMonthOptions() {
+  const sel = document.getElementById('month-select');
+  const opts = ['<option value="">Whole year</option>'];
+  const d = new Date();
+  d.setDate(1);
+  for (let i = 0; i < 12; i++) {
+    const y = d.getFullYear(), m = d.getMonth() + 1;
+    const value = `${y}-${String(m).padStart(2,'0')}`;
+    const label = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    opts.push(`<option value="${value}">${label}</option>`);
+    d.setMonth(d.getMonth() - 1);
+  }
+  sel.innerHTML = opts.join('');
+}
+
 function setYear(y) {
   currentYear = y;
-  buildYearBar();
+  currentMonth = '';
+  document.getElementById('month-select').value = '';
+  buildYearTabs();
   loadAll();
 }
 
+function setMonth(monthValue) {
+  currentMonth = monthValue;
+  if (monthValue) {
+    // Keep the year tabs in sync with whichever month was picked.
+    currentYear = parseInt(monthValue.split('-')[0], 10);
+    buildYearTabs();
+  }
+  loadAll();
+}
+
+function updatePeriodLabel() {
+  const label = document.getElementById('period-active-label');
+  if (currentMonth) {
+    const [y, m] = currentMonth.split('-');
+    const d = new Date(parseInt(y,10), parseInt(m,10) - 1, 1);
+    label.textContent = 'Showing ' + d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  } else {
+    label.textContent = 'Showing all of ' + currentYear;
+  }
+}
+
 async function loadAll() {
+  updatePeriodLabel();
+  const params = new URLSearchParams({ year: currentYear });
+  if (currentMonth) params.set('month', currentMonth);
   const [summary, outcomes] = await Promise.all([
-    fetch('/api/reports/summary').then(r => r.json()),
-    fetch('/api/reports/outcomes').then(r => r.json()),
+    fetch('/api/reports/summary?' + params.toString()).then(r => r.json()),
+    fetch('/api/reports/outcomes?' + params.toString()).then(r => r.json()),
   ]);
   allOutcomes = outcomes;
   renderKPIs(summary);
@@ -267,7 +330,7 @@ function renderKPIs(d) {
     <div class="kpi amber">
       <div class="kpi-label">Cancelled</div>
       <div class="kpi-value">${d.cancellations || 0}</div>
-      <div class="kpi-sub">${d.cancellations_ytd || 0} this year</div>
+      <div class="kpi-sub">In the selected period</div>
     </div>
     <div class="kpi blue">
       <div class="kpi-label">Pipeline</div>
