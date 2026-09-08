@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Business Statistics by Site — Redstone PDM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  .topbar {
+    background: #1a2332; color: white; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .topbar-brand { font-weight: 700; font-size: 18px; cursor: pointer; }
+  .topbar-brand span { color: #c0392b; }
+  .topbar-right a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 7px 12px; border-radius: 6px; }
+  .topbar-right a:hover { color: white; background: rgba(255,255,255,0.1); }
+
+  .page { max-width: 1350px; margin: 0 auto; padding: 28px 20px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  h2 { font-size: 22px; color: #1a2332; font-weight: 700; }
+
+  .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
+  .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
+  td { font-size: 13px; padding: 9px 10px; border-bottom: 1px solid #f5f5f5; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover { background: #fafbfc; }
+  .pct-up { color: #1a7a4a; font-weight: 700; }
+  .pct-down { color: #c0392b; font-weight: 700; }
+  .pct-new { color: #1a4fa0; font-weight: 700; font-size: 11px; }
+  .table-scroll { max-height: 520px; overflow-y: auto; }
+  .table-scroll th { position: sticky; top: 0; background: white; z-index: 5; box-shadow: 0 1.5px 0 #eee; }
+
+  .pub-scope-form { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .pub-scope-form select {
+    padding: 8px 12px; border-radius: 8px; border: 1.5px solid #e5e7eb; font-size: 13px; font-family: inherit;
+    min-width: 220px;
+  }
+  .pub-scope-chip {
+    font-size: 12px; background: #eff4ff; color: #1a4fa0; padding: 5px 12px; border-radius: 14px;
+    font-weight: 600; display: flex; align-items: center; gap: 6px;
+  }
+  .pub-scope-chip a { color: #1a4fa0; text-decoration: none; font-weight: 800; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand" onclick="location.href='/admin'">Redstone <span>PDM</span></div>
+  <div class="topbar-right">
+    <a href="/admin/growth">← Growth</a>
+    <a href="/admin/growth/overview">Business Overview</a>
+    <a href="/admin/margin">Reports & Margin</a>
+    <a href="/logout">Sign Out</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <h2>🍺 Business Statistics by Site</h2>
+  </div>
+  <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT. Anchored on Payment Date, permanently. FY comparisons compare the exact same number of days into each year, so they're genuinely like-for-like.</div>
+
+  {% macro pub_growth_table(rows, col_labels) %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Pub</th>
+          {% for label in col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          {% for i in range(col_labels|length - 1) %}
+          <th class="num">Δ {{ col_labels[i] }} → {{ col_labels[i+1] }}</th><th class="num">%</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in rows %}
+        <tr>
+          <td>{{ p.pub_name }}</td>
+          {% for v in p.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
+          {% for s in p.steps %}
+          <td class="num {{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</td>
+          <td class="num">
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.0f'|format(s.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 1 + (col_labels|length) + 2 * (col_labels|length - 1) }}" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endmacro %}
+
+  {% macro trade_growth_table(rows, col_labels) %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Trade</th>
+          {% for label in col_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          {% for i in range(col_labels|length - 1) %}
+          <th class="num">Δ {{ col_labels[i] }} → {{ col_labels[i+1] }}</th><th class="num">%</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in rows %}
+        <tr>
+          <td>{{ t.trade_type }}</td>
+          {% for v in t.amounts %}<td class="num">£{{ '{:,.0f}'.format(v) }}</td>{% endfor %}
+          {% for s in t.steps %}
+          <td class="num {{ 'pct-up' if s.delta >= 0 else 'pct-down' }}">{{ '+' if s.delta >= 0 }}£{{ '{:,.0f}'.format(s.delta) }}</td>
+          <td class="num">
+            {% if s.pct is not none %}<span class="{{ 'pct-up' if s.pct >= 0 else 'pct-down' }}">{{ '+' if s.pct >= 0 }}{{ '%.0f'|format(s.pct) }}%</span>{% else %}<span class="pct-new">New</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 1 + (col_labels|length) + 2 * (col_labels|length - 1) }}" style="text-align:center;color:#aaa;padding:20px">No paid jobs in these periods.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endmacro %}
+
+  <!-- By pub: month -->
+  <div class="section-card">
+    <div class="section-title">🍺 By Pub — Month Comparison</div>
+    <div class="section-sub">Every pub shown, sorted by size of most recent change. Both year-over-year steps shown, not just the latest.</div>
+    {{ pub_growth_table(month_by_pub, month_col_labels) }}
+  </div>
+
+  <!-- By pub: FY -->
+  <div class="section-card">
+    <div class="section-title">🍺 By Pub — Financial Year Comparison (Like for Like)</div>
+    <div class="section-sub">Every pub shown, sorted by size of most recent change — good for spotting who's using you more (worth a call to grow) and who's gone quiet (worth checking in on). Both year-over-year steps shown.</div>
+    {{ pub_growth_table(fy_by_pub, fy_col_labels) }}
+  </div>
+
+  <!-- By trade: scoped to one pub -->
+  <div class="section-card">
+    <div class="section-title">🔧 By Trade Type — For One Pub</div>
+    <div class="section-sub">Trade breakdown for a single pub — see exactly what's growing or dropping off at one site.</div>
+    <form class="pub-scope-form" method="get">
+      <select name="pub" onchange="this.form.submit()">
+        <option value="">Choose a pub...</option>
+        {% for p in all_pub_names %}
+        <option value="{{ p }}" {% if p == pub_filter %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      {% if pub_filter %}
+      <div class="pub-scope-chip">{{ pub_filter }} <a href="?">✕</a></div>
+      {% endif %}
+    </form>
+    {% if pub_filter %}
+      <div class="section-sub" style="margin-top:-6px">Month comparison, {{ pub_filter }} only:</div>
+      {{ trade_growth_table(month_by_trade_pub, month_col_labels) }}
+      <div class="section-sub" style="margin-top:16px">Financial year comparison, {{ pub_filter }} only:</div>
+      {{ trade_growth_table(fy_by_trade_pub, fy_col_labels) }}
+    {% else %}
+      <div style="text-align:center;color:#aaa;padding:20px;font-size:13px">Pick a pub above to see its trade breakdown.</div>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
