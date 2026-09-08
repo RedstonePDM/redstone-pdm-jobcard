@@ -1811,6 +1811,26 @@ def pub_key(name):
     return re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
 
 
+def get_pub_postcodes_by_key(conn, cur):
+    """Normalised-pub-key -> postcode, sourced from pub_locations — a
+    permanent table that keeps a postcode for every pub ever seen, unlike
+    'jobs' which only covers currently-active jobs and loses a pub once its
+    last job is paid off. This is the authoritative source for pub-name
+    disambiguation; only falls back to nothing if the table isn't there yet
+    (a separate service's migration, not guaranteed to have run everywhere)."""
+    try:
+        cur.execute("""
+            SELECT UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key, postcode
+            FROM pub_locations
+            WHERE postcode IS NOT NULL AND postcode != ''
+        """)
+        return {r["pub_key"]: r["postcode"] for r in cur.fetchall()}
+    except Exception as e:
+        print(f"pub_locations lookup failed (table may not exist yet): {e}")
+        conn.rollback()
+        return {}
+
+
 def disambiguate_pub_name(pub_name, postcode):
     """Appends the postcode area to a pub name for display, so identically-
     named sites in different towns (several 'Moon Under Water's, several
@@ -2186,6 +2206,7 @@ def admin_pub_history():
         print(f"pub history awaiting-approval query failed: {e}")
         conn.rollback()
 
+    postcodes_by_key = get_pub_postcodes_by_key(conn, cur)
     cur.close()
     conn.close()
 
@@ -2205,7 +2226,7 @@ def admin_pub_history():
         top_trades = sorted(p["trades"].items(), key=lambda x: x[1], reverse=True)
         total_awaiting_approval_value += p["awaiting_approval_value"]
         pub_list.append({
-            "pub_name": disambiguate_pub_name(p["pub_name"] or pkey.title(), p.get("postcode")),
+            "pub_name": disambiguate_pub_name(p["pub_name"] or pkey.title(), postcodes_by_key.get(pkey)),
             "pub_key": pkey,
             "total_quotes": total_quotes,
             "wins": p["wins"], "losses": p["losses"],
@@ -2264,29 +2285,11 @@ def admin_pub_detail(pkey):
         print(f"pub detail query failed: {e}")
         conn.rollback()
 
+    postcodes_by_key = get_pub_postcodes_by_key(conn, cur)
     cur.close()
     conn.close()
 
-    # Best-effort postcode lookup (from any live job for this pub) purely to
-    # disambiguate the page title — same-named pubs in different towns.
-    postcode_for_title = None
-    try:
-        conn2 = get_db()
-        cur2 = conn2.cursor()
-        cur2.execute("""
-            SELECT postcode FROM jobs
-            WHERE UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) = %s
-            AND postcode IS NOT NULL AND TRIM(postcode) != ''
-            LIMIT 1
-        """, (pkey.upper(),))
-        row = cur2.fetchone()
-        postcode_for_title = row["postcode"] if row else None
-        cur2.close()
-        conn2.close()
-    except Exception as e:
-        print(f"pub detail postcode lookup failed: {e}")
-
-    pub_name_display = disambiguate_pub_name(pub_name_display, postcode_for_title)
+    pub_name_display = disambiguate_pub_name(pub_name_display, postcodes_by_key.get(pkey.upper()))
 
     lost_cancelled_value = sum(o["quote_total"] or 0 for o in outcomes if o["outcome"] in ("lost", "cancelled", "won_then_cancelled"))
 
@@ -5029,7 +5032,8 @@ def admin_growth():
         month_periods.append((start.strftime("%b %Y"), start, end))
     month_series = _period_series(cur, month_periods)
     month_by_pub = _period_series_by_pub(cur, month_periods)
-    month_by_trade = _period_series_by_trade(cur, month_periods, pub_name=pub_filter or None)
+    month_by_trade = _period_series_by_trade(cur, month_periods)
+    month_by_trade_pub = _period_series_by_trade(cur, month_periods, pub_name=pub_filter) if pub_filter else None
     month_col_labels = [p[0] for p in month_periods]
 
     # --- FY-to-date comparison: 3 years, same days-into-year cutoff ---
@@ -5043,8 +5047,17 @@ def admin_growth():
         fy_periods.append((label, fy_start_n, fy_end_n))
     fy_series = _period_series(cur, fy_periods)
     fy_by_pub = _period_series_by_pub(cur, fy_periods)
-    fy_by_trade = _period_series_by_trade(cur, fy_periods, pub_name=pub_filter or None)
+    fy_by_trade = _period_series_by_trade(cur, fy_periods)
+    fy_by_trade_pub = _period_series_by_trade(cur, fy_periods, pub_name=pub_filter) if pub_filter else None
     fy_col_labels = [p[0] for p in fy_periods]
+
+    # Postcode-based disambiguation for identically-named pubs in different
+    # towns — same approach as Pub History, applied here to both by-pub
+    # tables in one batch lookup.
+    postcode_by_key = get_pub_postcodes_by_key(conn, cur)
+    for row in month_by_pub + fy_by_pub:
+        pc = postcode_by_key.get(pub_key(row["pub_name"]))
+        row["pub_name"] = disambiguate_pub_name(row["pub_name"], pc)
 
     # Distinct pub list for the "view by pub" trade drill-down selector.
     cur.execute("""
@@ -5112,6 +5125,7 @@ def admin_growth():
         month_series=month_series, month_col_labels=month_col_labels, month_by_pub=month_by_pub,
         fy_series=fy_series, fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
         month_by_trade=month_by_trade, fy_by_trade=fy_by_trade,
+        month_by_trade_pub=month_by_trade_pub, fy_by_trade_pub=fy_by_trade_pub,
         pub_filter=pub_filter, all_pub_names=all_pub_names,
         trend=trend, trend_max=trend_max,
         monthly_matrix=monthly_matrix, matrix_col_labels=matrix_col_labels)
@@ -5323,22 +5337,16 @@ def api_reports_outcomes():
     conn = get_db()
     cur = conn.cursor()
     try:
-        # Postcode pulled via a best-effort LATERAL match on pub name, purely
-        # to disambiguate identically-named pubs in different towns on
-        # screen — matching logic for outcomes/win-rates elsewhere is
-        # untouched by this.
+        # Postcode from pub_locations (permanent, exact-keyed) rather than
+        # the 'jobs' table, purely to disambiguate identically-named pubs in
+        # different towns on screen — matching logic for outcomes/win-rates
+        # elsewhere is untouched by this.
+        postcode_by_key = get_pub_postcodes_by_key(conn, cur)
         cur.execute("""
             SELECT qo.*, sf.quote_total, sf.submitted_at as survey_date,
-                   sf.scope_of_works, jpc.postcode
+                   sf.scope_of_works
             FROM quote_outcomes qo
             LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
-            LEFT JOIN LATERAL (
-                SELECT postcode FROM jobs j2
-                WHERE UPPER(REGEXP_REPLACE(j2.pub_name, '[^A-Za-z0-9]', '', 'g'))
-                      = UPPER(REGEXP_REPLACE(qo.pub_name, '[^A-Za-z0-9]', '', 'g'))
-                AND j2.postcode IS NOT NULL AND TRIM(j2.postcode) != ''
-                LIMIT 1
-            ) jpc ON true
             WHERE COALESCE(qo.t3_decision, qo.detected_at) BETWEEN %s AND %s
             ORDER BY qo.detected_at DESC
             LIMIT 200
@@ -5351,7 +5359,7 @@ def api_reports_outcomes():
             # historic ones (no survey form exists for those) get it from
             # the approval email we captured it from.
             row["value"] = float(row.get("quote_total") or row.get("email_approved_value") or 0)
-            row["pub_name"] = disambiguate_pub_name(row.get("pub_name"), row.get("postcode"))
+            row["pub_name"] = disambiguate_pub_name(row.get("pub_name"), postcode_by_key.get(pub_key(row.get("pub_name"))))
             for k in ["t0_released","t1_surveyed","t2_quote_uploaded",
                       "t3_decision","t4_completed","detected_at","created_at",
                       "updated_at","survey_date"]:
