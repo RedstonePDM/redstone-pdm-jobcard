@@ -59,7 +59,29 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 .chart-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
 .chart-title { font-size: 13px; font-weight: 700; color: #1a2332; margin-bottom: 14px; }
 
-/* Outcomes table */
+/* Prominent nav tiles for the pages carrying the real substance */
+.nav-tile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.nav-tile {
+  background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  text-decoration: none; transition: box-shadow .15s, transform .15s; display: flex; flex-direction: column;
+}
+.nav-tile:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.12); transform: translateY(-2px); }
+.nav-tile-top { display: flex; align-items: center; justify-content: space-between; }
+.nav-tile-icon { font-size: 26px; }
+.nav-tile-arrow { font-size: 18px; font-weight: 800; color: #c7ccd4; }
+.nav-tile:hover .nav-tile-arrow { color: #1a2332; }
+.nav-tile-title { font-size: 16px; font-weight: 800; color: #1a2332; margin-top: 12px; }
+.nav-tile-sub { font-size: 12px; color: #888; margin-top: 6px; line-height: 1.4; flex: 1; }
+
+/* Pub tally table */
+.tally-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tally-table th { text-align: left; font-size: 11px; text-transform: uppercase; color: #888; padding: 8px 10px; border-bottom: 1.5px solid #eee; }
+.tally-table td { padding: 9px 10px; border-bottom: 1px solid #f5f5f5; }
+.tally-table tr:hover { background: #fafbfc; }
+.tally-num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.tally-won { color: #1b5e20; }
+.tally-lost { color: #c0392b; }
+.tally-cancelled { color: #856404; }
 .outcomes-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .outcomes-table th { background: #1a2332; color: white; padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
 .outcomes-table td { padding: 9px 12px; border-bottom: 1px solid #f0f2f5; color: #1a2332; vertical-align: top; }
@@ -128,12 +150,27 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
       <h2>📊 Quote Analytics</h2>
       <div class="sub">Quote pipeline, win/loss, cancellations and survey efficiency</div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <a href="/admin/survey-queue" class="btn btn-outline">🗺️ Survey Queue</a>
-      <a href="/admin/awaiting-approval" class="btn btn-outline">🕒 Awaiting Approval</a>
-      <a href="/admin/pub-history" class="btn btn-outline">🏠 Pub History</a>
-      <a id="btn-cancel-pdf" href="/admin/reports/cancellations/pdf?year=2026" target="_blank" class="btn btn-red">📄 Cancellation Register PDF</a>
-    </div>
+    <a id="btn-cancel-pdf" href="/admin/reports/cancellations/pdf" target="_blank" class="btn btn-red">📄 Cancellation Register PDF</a>
+  </div>
+
+  <!-- The pages carrying the real substance — front and centre, not tucked
+       into small buttons. -->
+  <div class="nav-tile-grid">
+    <a href="/admin/survey-queue" class="nav-tile">
+      <div class="nav-tile-top"><span class="nav-tile-icon">🗺️</span><span class="nav-tile-arrow">→</span></div>
+      <div class="nav-tile-title">Survey Queue</div>
+      <div class="nav-tile-sub">Every live quote request awaiting a survey, grouped by postcode area for efficient batching, with per-pub win rate.</div>
+    </a>
+    <a href="/admin/awaiting-approval" class="nav-tile">
+      <div class="nav-tile-top"><span class="nav-tile-icon">🕒</span><span class="nav-tile-arrow">→</span></div>
+      <div class="nav-tile-title">Awaiting Approval</div>
+      <div class="nav-tile-sub">Quotes already submitted, sitting with JDW for a decision — value, days waiting, by trade and by pub.</div>
+    </a>
+    <a href="/admin/pub-history" class="nav-tile">
+      <div class="nav-tile-top"><span class="nav-tile-icon">🏠</span><span class="nav-tile-arrow">→</span></div>
+      <div class="nav-tile-title">Pub History</div>
+      <div class="nav-tile-sub">Every pub's full quote history, forever — won/lost/cancelled tally, win rate, and genuine quote-machine flags.</div>
+    </a>
   </div>
 
   <!-- Period selector -->
@@ -144,6 +181,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
     </select>
     <span class="period-active-label" id="period-active-label"></span>
   </div>
+
+  <div style="font-size:15px;font-weight:700;color:#1a2332;margin-bottom:4px">📁 Historic Outcomes</div>
+  <div style="font-size:12px;color:#888;margin-bottom:16px">Decided quotes — won, lost, and cancelled — for the period selected below.</div>
 
   <!-- KPI row -->
   <div class="kpi-row" id="kpi-row">
@@ -190,10 +230,24 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
     <div class="qm-list" id="qm-list"></div>
   </div>
 
+  <!-- Won/Lost/Cancelled tally by pub -->
+  <div class="section-card">
+    <div class="section-title">🏆 Won vs Lost vs Cancelled — By Pub</div>
+    <div style="font-size:12px;color:#888;margin-top:-12px;margin-bottom:14px">Which pubs actually go ahead, and which don't — for the period selected above. For the full lifetime picture (not just this period), see Pub History.</div>
+    <div style="overflow-x:auto">
+      <table class="tally-table" id="tally-table">
+        <thead>
+          <tr><th>Pub</th><th style="text-align:right">Won</th><th style="text-align:right">Lost</th><th style="text-align:right">Cancelled</th><th style="text-align:right">Win Rate</th></tr>
+        </thead>
+        <tbody id="tally-tbody"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Outcomes detail table -->
   <div class="section-card">
     <div class="section-title">
-      All Outcomes
+      Full Detail List
       <div class="actions">
         <select id="filter-outcome" class="btn btn-outline" onchange="filterOutcomes()" style="font-weight:600;font-size:12px">
           <option value="">All outcomes</option>
@@ -229,8 +283,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100
 
 <script>
 let allOutcomes = [];
-let currentYear = new Date().getFullYear();
-let currentMonth = ''; // '' = whole year, else 'YYYY-MM'
+let currentFY = new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1; // FY start year (April), matches Growth
+let currentMonth = ''; // '' = whole FY, else 'YYYY-MM'
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -239,20 +293,27 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAll();
 });
 
+function fyLabel(fyStartYear) {
+  return 'FY' + fyStartYear + '/' + String(fyStartYear + 1).slice(-2);
+}
+
+// Same April-March financial year as Growth and Reports & Margin — "this
+// year" means the same thing everywhere on the platform.
 function buildYearTabs() {
   const bar = document.getElementById('year-tabs');
+  const thisFY = new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1;
   const years = [];
-  for (let y = 2024; y <= new Date().getFullYear() + 1; y++) years.push(y);
+  for (let y = 2024; y <= thisFY + 1; y++) years.push(y);
   bar.innerHTML = years.map(y =>
-    `<button class="year-tab${y === currentYear ? ' active' : ''}" onclick="setYear(${y})">${y}</button>`
+    `<button class="year-tab${y === currentFY ? ' active' : ''}" onclick="setYear(${y})">${fyLabel(y)}</button>`
   ).join('');
   document.getElementById('btn-cancel-pdf').href =
-    `/admin/reports/cancellations/pdf?year=${currentYear}`;
+    `/admin/reports/cancellations/pdf?fy=${currentFY}`;
 }
 
 // Populates the month dropdown with the last 12 calendar months, computed
-// client-side — always correct regardless of what year tab is selected,
-// since "last 12 months" is relative to today, not to the chosen year.
+// client-side — always correct regardless of what FY tab is selected,
+// since "last 12 months" is relative to today, not to the chosen FY.
 function buildMonthOptions() {
   const sel = document.getElementById('month-select');
   const opts = ['<option value="">Whole year</option>'];
@@ -269,7 +330,7 @@ function buildMonthOptions() {
 }
 
 function setYear(y) {
-  currentYear = y;
+  currentFY = y;
   currentMonth = '';
   document.getElementById('month-select').value = '';
   buildYearTabs();
@@ -279,8 +340,10 @@ function setYear(y) {
 function setMonth(monthValue) {
   currentMonth = monthValue;
   if (monthValue) {
-    // Keep the year tabs in sync with whichever month was picked.
-    currentYear = parseInt(monthValue.split('-')[0], 10);
+    // Keep the FY tabs in sync with whichever month was picked.
+    const y = parseInt(monthValue.split('-')[0], 10);
+    const m = parseInt(monthValue.split('-')[1], 10);
+    currentFY = m >= 4 ? y : y - 1;
     buildYearTabs();
   }
   loadAll();
@@ -293,13 +356,13 @@ function updatePeriodLabel() {
     const d = new Date(parseInt(y,10), parseInt(m,10) - 1, 1);
     label.textContent = 'Showing ' + d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   } else {
-    label.textContent = 'Showing all of ' + currentYear;
+    label.textContent = 'Showing all of ' + fyLabel(currentFY);
   }
 }
 
 async function loadAll() {
   updatePeriodLabel();
-  const params = new URLSearchParams({ year: currentYear });
+  const params = new URLSearchParams({ fy: currentFY });
   if (currentMonth) params.set('month', currentMonth);
   const [summary, outcomes] = await Promise.all([
     fetch('/api/reports/summary?' + params.toString()).then(r => r.json()),
@@ -309,6 +372,7 @@ async function loadAll() {
   renderKPIs(summary);
   renderCharts(summary);
   renderOutcomes(outcomes);
+  renderTally(outcomes);
   renderQuoteMachines(summary.quote_machines || []);
 }
 
@@ -440,6 +504,38 @@ function renderCharts(d) {
           <td style="color:#e6a817;font-weight:700">${t.cancellations||0}</td>
         </tr>`;
       }).join('');
+}
+
+// ── Won/Lost/Cancelled Tally by Pub ──────────────────────────────────────────
+function renderTally(outcomes) {
+  const tbody = document.getElementById('tally-tbody');
+  const byPub = {};
+  outcomes.forEach(o => {
+    const pub = o.pub_name || 'Unknown';
+    if (!byPub[pub]) byPub[pub] = { won: 0, lost: 0, cancelled: 0 };
+    if (o.outcome === 'won') byPub[pub].won++;
+    else if (o.outcome === 'lost') byPub[pub].lost++;
+    else if (o.outcome === 'cancelled' || o.outcome === 'won_then_cancelled') byPub[pub].cancelled++;
+  });
+  const rows = Object.entries(byPub).map(([pub, c]) => {
+    const decided = c.won + c.lost + c.cancelled;
+    const winRate = decided > 0 ? Math.round((c.won / decided) * 100) : null;
+    return { pub, ...c, decided, winRate };
+  }).sort((a, b) => b.decided - a.decided);
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No decided quotes in this period yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td style="font-weight:600">${r.pub}</td>
+      <td class="tally-num tally-won">${r.won}</td>
+      <td class="tally-num tally-lost">${r.lost}</td>
+      <td class="tally-num tally-cancelled">${r.cancelled}</td>
+      <td class="tally-num">${r.winRate !== null ? r.winRate + '%' : '—'}</td>
+    </tr>
+  `).join('');
 }
 
 // ── Quote Machines ────────────────────────────────────────────────────────────
