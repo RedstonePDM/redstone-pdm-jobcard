@@ -111,6 +111,7 @@
     <div class="contractor-card"
       data-key="{{ c.contractor_key }}"
       data-name="{{ c.name }}"
+      data-company-name="{{ c.company_name or '' }}"
       data-email="{{ c.email or '' }}"
       data-phone="{{ c.phone or '' }}"
       data-address="{{ c.address or '' }}"
@@ -131,6 +132,7 @@
         <div class="cc-avatar">{{ c.name[0] }}</div>
         <div>
           <div class="cc-name">{{ c.name }}</div>
+          {% if c.company_name %}<div class="cc-rate" style="color:#6c3fc5;font-weight:600">{{ c.company_name }}</div>{% endif %}
           <div class="cc-rate">£{{ c.day_rate }}/day</div>
         </div>
       </div>
@@ -217,6 +219,9 @@
 
     <div class="modal-section">Personal Details</div>
     <div class="form-group"><label>Full Name *</label><input type="text" id="add-name" placeholder="First Last"></div>
+    <div class="form-group"><label>Company Name</label><input type="text" id="add-company-name" placeholder="e.g. ABC Flooring Ltd — leave blank for an individual">
+      <div class="field-hint">Only needed if you send work to a company rather than a named individual.</div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Email</label><input type="email" id="add-email"></div>
       <div class="form-group"><label>Phone</label><input type="text" id="add-phone"></div>
@@ -293,6 +298,9 @@
 
     <div class="modal-section">Personal Details</div>
     <div class="form-group"><label>Full Name</label><input type="text" id="edit-name"></div>
+    <div class="form-group"><label>Company Name</label><input type="text" id="edit-company-name" placeholder="e.g. ABC Flooring Ltd — leave blank for an individual">
+      <div class="field-hint">Only needed if you send work to a company rather than a named individual.</div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Email</label><input type="email" id="edit-email"></div>
       <div class="form-group"><label>Phone</label><input type="text" id="edit-phone"></div>
@@ -392,6 +400,7 @@
     const d = card.dataset;
     document.getElementById('edit-key').value          = d.key;
     document.getElementById('edit-name').value         = d.name;
+    document.getElementById('edit-company-name').value = d.companyName || '';
     document.getElementById('edit-email').value        = d.email;
     document.getElementById('edit-phone').value        = d.phone;
     document.getElementById('edit-address').value      = d.address;
@@ -424,6 +433,7 @@
     const mileagePence = parseFloat(document.getElementById('add-mileage-rate').value || 0);
     const form = new FormData();
     form.append('name',             name);
+    form.append('company_name',     document.getElementById('add-company-name').value);
     form.append('email',            document.getElementById('add-email').value);
     form.append('phone',            document.getElementById('add-phone').value);
     form.append('address',          document.getElementById('add-address').value);
@@ -439,8 +449,16 @@
     form.append('redstone_card',    document.getElementById('add-card').value);
     form.append('password',         document.getElementById('add-password').value);
     form.append('show_in_planner',  document.getElementById('add-show-planner').value);
-    const res = await fetch('/admin/contractors/add', { method: 'POST', body: form });
-    if (res.ok || res.redirected) { closeModals(); location.reload(); }
+    try {
+      const res = await fetch('/admin/contractors/add', { method: 'POST', body: form });
+      if (res.ok || res.redirected) { closeModals(); location.reload(); }
+      else {
+        const text = await res.text().catch(() => '');
+        alert('Could not add contractor (server error ' + res.status + '). ' + (text ? text.substring(0, 300) : 'Check the Railway deploy logs for details.'));
+      }
+    } catch (err) {
+      alert('Could not add contractor — network or connection error: ' + err.message);
+    }
   }
 
   async function saveContractor() {
@@ -448,6 +466,7 @@
     const mileagePence = parseFloat(document.getElementById('edit-mileage-rate').value || 0);
     const form = new FormData();
     form.append('name',             document.getElementById('edit-name').value);
+    form.append('company_name',     document.getElementById('edit-company-name').value);
     form.append('email',            document.getElementById('edit-email').value);
     form.append('phone',            document.getElementById('edit-phone').value);
     form.append('address',          document.getElementById('edit-address').value);
@@ -463,10 +482,19 @@
     form.append('redstone_card',    document.getElementById('edit-card').value);
     form.append('password',         document.getElementById('edit-password').value);
     form.append('show_in_planner',  document.getElementById('edit-show-planner').value);
-    const res = await fetch(`/admin/contractors/${key}/edit`, { method: 'POST', body: form });
-    const data = await res.json();
-    if (data.ok) { closeModals(); location.reload(); }
-    else alert('Save failed');
+    try {
+      const res = await fetch(`/admin/contractors/${key}/edit`, { method: 'POST', body: form });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        alert('Save failed (server error ' + res.status + '). ' + (text ? text.substring(0, 300) : ''));
+        return;
+      }
+      const data = await res.json();
+      if (data.ok) { closeModals(); location.reload(); }
+      else alert('Save failed: ' + (data.error || 'unknown error'));
+    } catch (err) {
+      alert('Save failed — network or connection error: ' + err.message);
+    }
   }
 
   async function togglePlannerVisibility(key, btn) {
