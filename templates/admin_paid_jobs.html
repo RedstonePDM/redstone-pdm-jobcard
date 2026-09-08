@@ -28,6 +28,10 @@
     background: white; color: #555; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
   .period-tab.active { background: #1a2332; color: white; }
+  .month-select {
+    padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    background: white; color: #555; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer;
+  }
 
   .section-card { background: white; border-radius: 14px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }
   .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 4px; }
@@ -70,6 +74,7 @@
 
   .empty-state { text-align: center; padding: 24px; color: #aaa; font-size: 13px; }
   .table-scroll { max-height: 500px; overflow-y: auto; }
+  .table-scroll th { position: sticky; top: 0; background: white; z-index: 5; box-shadow: 0 1.5px 0 #eee; }
   .btn-link { font-size: 12px; color: #1a4fa0; text-decoration: none; font-weight: 600; }
 </style>
 </head>
@@ -91,6 +96,12 @@
       <a class="period-tab {% if period=='month' %}active{% endif %}" href="?period=month{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}">This Month</a>
       <a class="period-tab {% if period=='fy' or not period %}active{% endif %}" href="?period=fy{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}">This FY</a>
       <a class="period-tab {% if period=='all' %}active{% endif %}" href="?period=all{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}">All Time</a>
+      <select class="month-select" onchange="if(this.value) location.href='?period=' + this.value + '{% if pub_filter %}&pub={{ pub_filter|urlencode }}{% endif %}{% if trade_filter %}&trade={{ trade_filter|urlencode }}{% endif %}'">
+        <option value="">Pick a month...</option>
+        {% for value, label in available_months %}
+        <option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
   <div style="font-size:11px;color:#aaa;margin-top:-14px;margin-bottom:18px">All figures shown are net of VAT (as sourced directly from Wisdom).</div>
