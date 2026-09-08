@@ -4989,21 +4989,51 @@ def _period_series_by_trade(cur, periods, pub_name=None):
     return rows
 
 
+def _build_growth_periods(sel_year, sel_month, today):
+    """Builds the month-comparison and FY-comparison period lists shared by
+    both Growth sub-pages (Business Overview and By Site), so the two pages
+    can never drift out of sync on what 'this month' or 'this FY' means."""
+    month_periods = []
+    for offset in (2, 1, 0):
+        y = sel_year - offset
+        start = date(y, sel_month, 1)
+        end = date(y, sel_month, calendar.monthrange(y, sel_month)[1])
+        month_periods.append((start.strftime("%b %Y"), start, end))
+
+    this_fy_start, this_fy_end, this_fy_label = fy_bounds(today)
+    days_into_fy = (today - this_fy_start).days
+    fy_periods = []
+    for offset in (2, 1, 0):
+        fy_start_n = date(this_fy_start.year - offset, 4, 1)
+        fy_end_n = min(fy_start_n + timedelta(days=days_into_fy), date(this_fy_start.year - offset + 1, 3, 31))
+        label = f"FY{fy_start_n.year}/{str(fy_start_n.year+1)[2:]} (to {fy_end_n.strftime('%d %b')})"
+        fy_periods.append((label, fy_start_n, fy_end_n))
+
+    return month_periods, fy_periods, this_fy_start
+
+
 @app.route("/admin/growth")
 @admin_required
 def admin_growth():
-    """Year-on-year growth reporting — £ and % by pub, by month, and by FY,
-    across the last 3 years. Anchored permanently on payment_date: Wisdom
-    doesn't expose a genuine 'job raised' date on the billing feed for
-    historic jobs, so using anything else would mean the methodology
-    silently changes partway through the data and comparisons stop being
-    genuinely like-for-like. Payment date is slower than the work itself by
-    a roughly consistent lag, but consistent forever beats accurate-but-shifting.
+    """Growth reporting hub — two distinct views for two different jobs:
+    Business Overview (whole-company trends, for planning/forecasting) and
+    By Site (per-pub drill-down, for account management/relationship work).
+    Split into separate pages because a single page combining both grew
+    long enough that whichever one you actually wanted was always several
+    scrolls away."""
+    return render_template("admin_growth.html")
 
-    FY-to-date comparisons deliberately compare the SAME NUMBER OF DAYS
-    into each financial year, not partial-year-vs-full-year — comparing 4
-    months of this year against 12 months of last year would flatter
-    'last year' every single time regardless of actual performance."""
+
+@app.route("/admin/growth/overview")
+@admin_required
+def admin_growth_overview():
+    """Whole-business growth — £ by month and by FY across the last 3 years,
+    trade-type breakdown, and the full monthly matrix. Anchored permanently
+    on payment_date: Wisdom doesn't expose a genuine 'job raised' date on
+    the billing feed for historic jobs, so using anything else would mean
+    the methodology silently changes partway through the data. FY-to-date
+    comparisons compare the SAME NUMBER OF DAYS into each financial year,
+    not partial-year-vs-full-year."""
     today = date.today()
 
     month_param = request.args.get("month", "").strip()
@@ -5016,55 +5046,17 @@ def admin_growth():
         sel_year, sel_month = today.year, today.month
     selected_month = f"{sel_year}-{sel_month:02d}"
 
-    # Optional pub scope — when set, the trade breakdown below shows that
-    # one pub's trades growing/declining instead of the whole business.
-    pub_filter = request.args.get("pub", "").strip()
+    month_periods, fy_periods, this_fy_start = _build_growth_periods(sel_year, sel_month, today)
+    month_col_labels = [p[0] for p in month_periods]
+    fy_col_labels = [p[0] for p in fy_periods]
 
     conn = get_db()
     cur = conn.cursor()
 
-    # --- Month comparison: 3 years, oldest first ---
-    month_periods = []
-    for offset in (2, 1, 0):
-        y = sel_year - offset
-        start = date(y, sel_month, 1)
-        end = date(y, sel_month, calendar.monthrange(y, sel_month)[1])
-        month_periods.append((start.strftime("%b %Y"), start, end))
     month_series = _period_series(cur, month_periods)
-    month_by_pub = _period_series_by_pub(cur, month_periods)
-    month_by_trade = _period_series_by_trade(cur, month_periods)
-    month_by_trade_pub = _period_series_by_trade(cur, month_periods, pub_name=pub_filter) if pub_filter else None
-    month_col_labels = [p[0] for p in month_periods]
-
-    # --- FY-to-date comparison: 3 years, same days-into-year cutoff ---
-    this_fy_start, this_fy_end, this_fy_label = fy_bounds(today)
-    days_into_fy = (today - this_fy_start).days
-    fy_periods = []
-    for offset in (2, 1, 0):
-        fy_start_n = date(this_fy_start.year - offset, 4, 1)
-        fy_end_n = min(fy_start_n + timedelta(days=days_into_fy), date(this_fy_start.year - offset + 1, 3, 31))
-        label = f"FY{fy_start_n.year}/{str(fy_start_n.year+1)[2:]} (to {fy_end_n.strftime('%d %b')})"
-        fy_periods.append((label, fy_start_n, fy_end_n))
     fy_series = _period_series(cur, fy_periods)
-    fy_by_pub = _period_series_by_pub(cur, fy_periods)
+    month_by_trade = _period_series_by_trade(cur, month_periods)
     fy_by_trade = _period_series_by_trade(cur, fy_periods)
-    fy_by_trade_pub = _period_series_by_trade(cur, fy_periods, pub_name=pub_filter) if pub_filter else None
-    fy_col_labels = [p[0] for p in fy_periods]
-
-    # Postcode-based disambiguation for identically-named pubs in different
-    # towns — same approach as Pub History, applied here to both by-pub
-    # tables in one batch lookup.
-    postcode_by_key = get_pub_postcodes_by_key(conn, cur)
-    for row in month_by_pub + fy_by_pub:
-        pc = postcode_by_key.get(pub_key(row["pub_name"]))
-        row["pub_name"] = disambiguate_pub_name(row["pub_name"], pc)
-
-    # Distinct pub list for the "view by pub" trade drill-down selector.
-    cur.execute("""
-        SELECT DISTINCT pub_name FROM job_wetherspoons_costs
-        WHERE status='paid' AND pub_name IS NOT NULL ORDER BY pub_name
-    """)
-    all_pub_names = [r["pub_name"] for r in cur.fetchall()]
 
     # --- Monthly data source (3 years back, April-aligned) — feeds BOTH
     # the trend chart below (2-year) and the full monthly matrix table
@@ -5078,10 +5070,6 @@ def admin_growth():
     """, (trend_start,))
     trend_by_month = {r["ym"]: float(r["total"] or 0) for r in cur.fetchall()}
 
-    # Trend chart: aligned to the financial year (April-March), not a
-    # rolling window from today — so the shape of the chart always matches
-    # how the business actually plans and reports, and doesn't shift
-    # position every month.
     trend = []
     cursor_date = this_fy_start
     for i in range(12):
@@ -5093,16 +5081,9 @@ def admin_growth():
             "this_total": trend_by_month.get(this_key, 0.0),
             "last_total": trend_by_month.get(last_key, 0.0),
         })
-        # Bump the month, rolling the year over correctly at December —
-        # a prior version of this reset the year but left the month at 12,
-        # producing 'Dec 26, Dec 27, Dec 28...' instead of moving into Jan.
         cursor_date = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
     trend_max = max([max(t["this_total"], t["last_total"]) for t in trend], default=0) or 1
 
-    # Full monthly matrix — every month of the financial year (April to
-    # March) visible in one table, 3 years side by side. This is the 'all
-    # months on one view' Dave asked for, rather than picking one month at
-    # a time.
     matrix_fy_years = [this_fy_start.year - 2, this_fy_start.year - 1, this_fy_start.year]
     matrix_col_labels = [f"FY{y}/{str(y+1)[2:]}" for y in matrix_fy_years]
     fy_month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
@@ -5120,15 +5101,71 @@ def admin_growth():
     cur.close()
     conn.close()
 
-    return render_template("admin_growth.html",
+    return render_template("admin_growth_overview.html",
         selected_month=selected_month,
-        month_series=month_series, month_col_labels=month_col_labels, month_by_pub=month_by_pub,
-        fy_series=fy_series, fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
+        month_series=month_series, month_col_labels=month_col_labels,
+        fy_series=fy_series, fy_col_labels=fy_col_labels,
         month_by_trade=month_by_trade, fy_by_trade=fy_by_trade,
-        month_by_trade_pub=month_by_trade_pub, fy_by_trade_pub=fy_by_trade_pub,
-        pub_filter=pub_filter, all_pub_names=all_pub_names,
         trend=trend, trend_max=trend_max,
         monthly_matrix=monthly_matrix, matrix_col_labels=matrix_col_labels)
+
+
+@app.route("/admin/growth/sites")
+@admin_required
+def admin_growth_sites():
+    """Per-pub growth — every pub's £ by month and by FY across the last 3
+    years (who's using you more, who's gone quiet), plus a trade-type
+    breakdown for one selected pub. Same period logic as Business Overview,
+    kept in perfect sync via the shared _build_growth_periods helper."""
+    today = date.today()
+
+    month_param = request.args.get("month", "").strip()
+    if month_param:
+        try:
+            sel_year, sel_month = [int(x) for x in month_param.split("-")]
+        except (ValueError, IndexError):
+            sel_year, sel_month = today.year, today.month
+    else:
+        sel_year, sel_month = today.year, today.month
+    selected_month = f"{sel_year}-{sel_month:02d}"
+
+    pub_filter = request.args.get("pub", "").strip()
+
+    month_periods, fy_periods, _ = _build_growth_periods(sel_year, sel_month, today)
+    month_col_labels = [p[0] for p in month_periods]
+    fy_col_labels = [p[0] for p in fy_periods]
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    month_by_pub = _period_series_by_pub(cur, month_periods)
+    fy_by_pub = _period_series_by_pub(cur, fy_periods)
+    month_by_trade_pub = _period_series_by_trade(cur, month_periods, pub_name=pub_filter) if pub_filter else None
+    fy_by_trade_pub = _period_series_by_trade(cur, fy_periods, pub_name=pub_filter) if pub_filter else None
+
+    # Postcode-based disambiguation for identically-named pubs in different
+    # towns — same approach as Pub History, applied here in one batch lookup.
+    postcode_by_key = get_pub_postcodes_by_key(conn, cur)
+    for row in month_by_pub + fy_by_pub:
+        pc = postcode_by_key.get(pub_key(row["pub_name"]))
+        row["pub_name"] = disambiguate_pub_name(row["pub_name"], pc)
+
+    # Distinct pub list for the "view by pub" trade drill-down selector.
+    cur.execute("""
+        SELECT DISTINCT pub_name FROM job_wetherspoons_costs
+        WHERE status='paid' AND pub_name IS NOT NULL ORDER BY pub_name
+    """)
+    all_pub_names = [r["pub_name"] for r in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+
+    return render_template("admin_growth_sites.html",
+        selected_month=selected_month,
+        month_col_labels=month_col_labels, month_by_pub=month_by_pub,
+        fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
+        month_by_trade_pub=month_by_trade_pub, fy_by_trade_pub=fy_by_trade_pub,
+        pub_filter=pub_filter, all_pub_names=all_pub_names)
 
 
 
@@ -5141,29 +5178,37 @@ def admin_reports():
 @app.route("/api/reports/summary")
 @admin_required
 def api_reports_summary():
-    """Headline numbers for the reports dashboard. Filtered by year (and
-    optionally a specific month within it) via ?year=2026&month=2026-08 —
-    anchored on the outcome's decision date (t3_decision), falling back to
+    """Headline numbers for the reports dashboard. Filtered by financial
+    year (and optionally a specific month within it) via ?fy=2026&month=2026-08
+    — anchored on the outcome's decision date (t3_decision), falling back to
     detected_at for older rows backfilled before that field was captured.
+    Uses the same April-March financial year as Growth and Reports & Margin
+    — ?fy=2026 means FY2026/27 (1 Apr 2026 - 31 Mar 2027) — so 'this year'
+    means the same thing everywhere on the platform, not calendar year here
+    and financial year elsewhere.
     Pipeline (still-open quotes) and Quote Machine flags are deliberately
-    NOT year-filtered — both describe the current state of things, not a
+    NOT period-filtered — both describe the current state of things, not a
     historic period, same reasoning as the 'right now' pipeline snapshot on
     Reports & Margin."""
-    year_param = request.args.get("year", "").strip()
+    fy_param = request.args.get("fy", "").strip()
     month_param = request.args.get("month", "").strip()
     today = date.today()
+    _, _, current_fy_label = fy_bounds(today)
+    current_fy_year = today.year if today.month >= 4 else today.year - 1
     try:
-        selected_year = int(year_param) if year_param else today.year
+        selected_fy_year = int(fy_param) if fy_param else current_fy_year
     except ValueError:
-        selected_year = today.year
+        selected_fy_year = current_fy_year
+    fy_label = f"FY{selected_fy_year}/{str(selected_fy_year+1)[2:]}"
+    fy_date_start = date(selected_fy_year, 4, 1)
+    fy_date_end = date(selected_fy_year + 1, 3, 31)
 
     if re.match(r"^\d{4}-\d{2}$", month_param):
         y, m = [int(x) for x in month_param.split("-")]
         date_start = date(y, m, 1)
         date_end = date(y, m, calendar.monthrange(y, m)[1])
     else:
-        date_start = date(selected_year, 1, 1)
-        date_end = date(selected_year, 12, 31)
+        date_start, date_end = fy_date_start, fy_date_end
 
     conn = get_db()
     cur = conn.cursor()
@@ -5208,7 +5253,7 @@ def api_reports_summary():
 
         # Quote machine sites (3+ surveys, 0 wins) — current all-time
         # pattern, not period-filtered; this is about a pub's behaviour
-        # overall, not what happened in one selected year.
+        # overall, not what happened in one selected period.
         cur.execute("""
             SELECT pub_name, COUNT(*) as surveys
             FROM survey_forms
@@ -5247,8 +5292,9 @@ def api_reports_summary():
         """, (date_start, date_end))
         by_trade = [dict(r) for r in cur.fetchall()]
 
-        # Monthly win/loss trend — every month of the SELECTED year (Jan-Dec),
-        # not a rolling 12 months, so the chart matches the year tab chosen.
+        # Monthly win/loss trend — every month of the SELECTED financial
+        # year (April-March), matching the FY tab chosen and the same
+        # April-aligned convention used on the Growth page.
         cur.execute(f"""
             SELECT TO_CHAR({decision_date},'YYYY-MM') as month,
                    SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
@@ -5256,17 +5302,19 @@ def api_reports_summary():
             FROM quote_outcomes
             WHERE {decision_date} BETWEEN %s AND %s
             GROUP BY month ORDER BY month
-        """, (date(selected_year, 1, 1), date(selected_year, 12, 31)))
+        """, (fy_date_start, fy_date_end))
         trend_by_month = {r["month"]: r for r in cur.fetchall()}
         monthly_trend = []
-        for m in range(1, 13):
-            key = f"{selected_year}-{m:02d}"
+        cursor_date = fy_date_start
+        for _ in range(12):
+            key = f"{cursor_date.year}-{cursor_date.month:02d}"
             r = trend_by_month.get(key)
             monthly_trend.append({
-                "month": date(selected_year, m, 1).strftime("%b"),
+                "month": cursor_date.strftime("%b %y"),
                 "wins": r["wins"] if r else 0,
                 "losses": r["losses"] if r else 0,
             })
+            cursor_date = date(cursor_date.year + 1, 1, 1) if cursor_date.month == 12 else date(cursor_date.year, cursor_date.month + 1, 1)
 
         # Cancellations within the selected period.
         cur.execute(f"""
@@ -5288,7 +5336,8 @@ def api_reports_summary():
         survey_costs = cur.fetchone()
 
         return jsonify({
-            "selected_year": selected_year,
+            "selected_fy": selected_fy_year,
+            "fy_label": fy_label,
             "wins":          outcome_counts.get("won", 0),
             "losses":        outcome_counts.get("lost", 0),
             "cancellations": outcome_counts.get("cancelled", 0),
@@ -5316,23 +5365,24 @@ def api_reports_summary():
 @admin_required
 def api_reports_outcomes():
     """Full list of outcomes for the detail table. Filtered the same way as
-    /api/reports/summary — ?year=2026&month=2026-08 — so the table always
+    /api/reports/summary — ?fy=2026&month=2026-08 — so the table always
     matches whatever the KPIs and charts above it are showing."""
-    year_param = request.args.get("year", "").strip()
+    fy_param = request.args.get("fy", "").strip()
     month_param = request.args.get("month", "").strip()
     today = date.today()
+    current_fy_year = today.year if today.month >= 4 else today.year - 1
     try:
-        selected_year = int(year_param) if year_param else today.year
+        selected_fy_year = int(fy_param) if fy_param else current_fy_year
     except ValueError:
-        selected_year = today.year
+        selected_fy_year = current_fy_year
 
     if re.match(r"^\d{4}-\d{2}$", month_param):
         y, m = [int(x) for x in month_param.split("-")]
         date_start = date(y, m, 1)
         date_end = date(y, m, calendar.monthrange(y, m)[1])
     else:
-        date_start = date(selected_year, 1, 1)
-        date_end = date(selected_year, 12, 31)
+        date_start = date(selected_fy_year, 4, 1)
+        date_end = date(selected_fy_year + 1, 3, 31)
 
     conn = get_db()
     cur = conn.cursor()
@@ -5349,7 +5399,7 @@ def api_reports_outcomes():
             LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
             WHERE COALESCE(qo.t3_decision, qo.detected_at) BETWEEN %s AND %s
             ORDER BY qo.detected_at DESC
-            LIMIT 200
+            LIMIT 2000
         """, (date_start, date_end))
         rows = []
         for r in cur.fetchall():
@@ -5422,8 +5472,19 @@ def api_outcome_notes_post(outcome_id):
 @app.route("/admin/reports/cancellations/pdf")
 @admin_required
 def admin_cancellations_pdf():
-    """Generate a formal PDF document of all cancellations for the year — billing evidence."""
-    year = request.args.get("year", str(date.today().year))
+    """Generate a formal PDF document of all cancellations for the financial
+    year — billing evidence. Uses the same April-March FY as everywhere else
+    on the platform via ?fy=2026 (meaning FY2026/27)."""
+    today = date.today()
+    current_fy_year = today.year if today.month >= 4 else today.year - 1
+    fy_param = request.args.get("fy", request.args.get("year", str(current_fy_year)))
+    try:
+        fy_year = int(fy_param)
+    except ValueError:
+        fy_year = current_fy_year
+    fy_start = date(fy_year, 4, 1)
+    fy_end = date(fy_year + 1, 3, 31)
+    year = f"FY{fy_year}/{str(fy_year+1)[2:]}"
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -5433,9 +5494,9 @@ def admin_cancellations_pdf():
             FROM quote_outcomes qo
             LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
             WHERE qo.outcome = 'cancelled'
-            AND EXTRACT(YEAR FROM qo.detected_at) = %s
+            AND COALESCE(qo.t3_decision, qo.detected_at) BETWEEN %s AND %s
             ORDER BY qo.detected_at ASC
-        """, (year,))
+        """, (fy_start, fy_end))
         cancellations = [dict(r) for r in cur.fetchall()]
     finally:
         cur.close()
