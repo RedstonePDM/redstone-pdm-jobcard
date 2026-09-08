@@ -333,6 +333,7 @@ def init_db():
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_json JSONB DEFAULT '[]'",
         "ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS admin_materials_total NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE contractors_db ADD COLUMN IF NOT EXISTS show_in_planner BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approval_submitted_at TIMESTAMPTZ",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_annual NUMERIC(8,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mot_cost NUMERIC(6,2) DEFAULT 0",
         "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false",
@@ -1923,15 +1924,20 @@ def admin_awaiting_approval():
     try:
         # LATERAL join to the single most-recently-updated survey_forms row
         # per job — a job can pick up more than one survey_forms row over
-        # time (queried, then resubmitted), and the previous plain LEFT JOIN
-        # had no way to pick the right one, silently grabbing whichever row
-        # came back first (often an old draft with no total). Also falls
-        # back to job_wetherspoons_costs.total_agreed, which is Wisdom's own
-        # figure synced directly from Wisdom, for any job where our own
-        # quoting tool doesn't have a total recorded.
+        # time (queried, then resubmitted). Value falls through three
+        # sources in order: our own quoting tool (survey_forms.quote_total,
+        # once that's in regular use), then Wisdom's own TotalCost field —
+        # already captured on every sync inside jobs.raw_json but never
+        # read back out until now — then job_wetherspoons_costs.total_agreed
+        # as a last resort for jobs already further along the pipeline.
+        # days_waiting comes from jobs.approval_submitted_at, stamped by
+        # wisdom-sync the moment a job first enters this status — jobs that
+        # entered before that tracking existed will show as unknown until
+        # Wisdom moves them again.
         cur.execute("""
             SELECT j.job_id, j.display_id, j.pub_name, j.postcode, j.description,
-                   j.trade_type, j.sub_trade_type,
+                   j.trade_type, j.sub_trade_type, j.approval_submitted_at,
+                   NULLIF(j.raw_json->>'TotalCost', '')::numeric as wisdom_raw_total,
                    sf.updated_at as quote_updated_at, sf.quote_total as sf_quote_total,
                    jwc.total_agreed as wisdom_total_agreed
             FROM jobs j
@@ -1945,7 +1951,7 @@ def admin_awaiting_approval():
             LEFT JOIN job_wetherspoons_costs jwc ON jwc.job_id = j.job_id
             WHERE j.tab = 'QUOTEREQUEST'
             AND j.sub_tab = 'AWAITINGAPPROVAL'
-            ORDER BY sf.updated_at ASC NULLS LAST
+            ORDER BY j.approval_submitted_at ASC NULLS LAST
         """)
         rows = cur.fetchall()
     except Exception as e:
@@ -1963,17 +1969,18 @@ def admin_awaiting_approval():
     for r in rows:
         d = dict(r)
         days_waiting = None
-        updated = d.get("quote_updated_at")
-        if updated:
-            updated_date = updated.date() if hasattr(updated, "date") else updated
-            days_waiting = (today - updated_date).days
+        submitted = d.get("approval_submitted_at")
+        if submitted:
+            submitted_date = submitted.date() if hasattr(submitted, "date") else submitted
+            days_waiting = (today - submitted_date).days
         d["days_waiting"] = days_waiting
 
-        # Value: prefer our own quoting tool's total; fall back to Wisdom's
-        # own agreed figure if ours is missing or zero.
+        # Value: our own tool first, then Wisdom's own figure (from
+        # raw_json), then the billing-pipeline fallback.
         sf_total = float(d["sf_quote_total"]) if d.get("sf_quote_total") else 0.0
-        wisdom_total = float(d["wisdom_total_agreed"]) if d.get("wisdom_total_agreed") else 0.0
-        value = sf_total if sf_total > 0 else (wisdom_total if wisdom_total > 0 else None)
+        wisdom_raw = float(d["wisdom_raw_total"]) if d.get("wisdom_raw_total") else 0.0
+        wisdom_agreed = float(d["wisdom_total_agreed"]) if d.get("wisdom_total_agreed") else 0.0
+        value = sf_total if sf_total > 0 else (wisdom_raw if wisdom_raw > 0 else (wisdom_agreed if wisdom_agreed > 0 else None))
         d["quote_total"] = value
         if value:
             total_value += value
@@ -2082,13 +2089,13 @@ def admin_pub_history():
         print(f"pub history awaiting-submission query failed: {e}")
         conn.rollback()
 
-    # Currently live — awaiting approval, with quoted value. Same LATERAL +
-    # Wisdom-fallback approach as the Awaiting Approval page, so the two
-    # pages always agree on value.
+    # Currently live — awaiting approval, with quoted value. Same three-way
+    # fallback as the Awaiting Approval page, so the two pages always agree.
     try:
         cur.execute("""
             SELECT UPPER(REGEXP_REPLACE(j.pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
                    j.pub_name, j.trade_type,
+                   NULLIF(j.raw_json->>'TotalCost', '')::numeric as wisdom_raw_total,
                    sf.quote_total as sf_quote_total, jwc.total_agreed as wisdom_total_agreed
             FROM jobs j
             LEFT JOIN LATERAL (
@@ -2106,8 +2113,9 @@ def admin_pub_history():
             p = get_pub(r["pub_key"], r["pub_name"])
             p["awaiting_approval"] += 1
             sf_total = float(r["sf_quote_total"]) if r["sf_quote_total"] else 0.0
-            wisdom_total = float(r["wisdom_total_agreed"]) if r["wisdom_total_agreed"] else 0.0
-            p["awaiting_approval_value"] += sf_total if sf_total > 0 else wisdom_total
+            wisdom_raw = float(r["wisdom_raw_total"]) if r["wisdom_raw_total"] else 0.0
+            wisdom_agreed = float(r["wisdom_total_agreed"]) if r["wisdom_total_agreed"] else 0.0
+            p["awaiting_approval_value"] += sf_total if sf_total > 0 else (wisdom_raw if wisdom_raw > 0 else wisdom_agreed)
             if r["trade_type"]:
                 p["trades"][r["trade_type"]] += 1
     except Exception as e:
