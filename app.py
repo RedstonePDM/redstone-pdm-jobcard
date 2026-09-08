@@ -606,6 +606,48 @@ def fy_bounds(for_date=None):
     return start, end, label
 
 
+def resolve_period(period):
+    """Turns a period string into (start, end, label). Supports the
+    existing quick options (month/fy/all/last_month) plus any specific
+    'YYYY-MM' month — so a month picker covering the last 12 months can
+    feed straight into the same period-tabs logic every report already
+    uses, without each page needing its own date-parsing."""
+    today = date.today()
+    if period == "month":
+        return date(today.year, today.month, 1), today, today.strftime("%B %Y")
+    if period == "last_month":
+        last_day_prev = date(today.year, today.month, 1) - timedelta(days=1)
+        return date(last_day_prev.year, last_day_prev.month, 1), last_day_prev, last_day_prev.strftime("%B %Y")
+    if period == "all":
+        return date(2000, 1, 1), today, "All Time"
+    if re.match(r"^\d{4}-\d{2}$", period or ""):
+        try:
+            y, m = [int(x) for x in period.split("-")]
+            start = date(y, m, 1)
+            end = min(date(y, m, calendar.monthrange(y, m)[1]), today)
+            return start, end, start.strftime("%B %Y")
+        except ValueError:
+            pass
+    fy_start, fy_end, fy_label = fy_bounds()
+    return fy_start, fy_end, fy_label
+
+
+def last_12_months(today=None):
+    """List of (value, label) for the last 12 months, most recent first —
+    value is 'YYYY-MM' (matches resolve_period), label is e.g. 'Aug 2026'.
+    Used to populate a month picker on any period-tabs bar."""
+    today = today or date.today()
+    months = []
+    y, m = today.year, today.month
+    for _ in range(12):
+        months.append((f"{y}-{m:02d}", date(y, m, 1).strftime("%b %Y")))
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    return months
+
+
 # ── Mileage Calculation ───────────────────────────────────────────────────────
 
 def calculate_mileage(origin_address, destination_postcode):
@@ -1769,6 +1811,23 @@ def pub_key(name):
     return re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
 
 
+def disambiguate_pub_name(pub_name, postcode):
+    """Appends the postcode area to a pub name for display, so identically-
+    named sites in different towns (several 'Moon Under Water's, several
+    'J J Moons') don't read as one pub in reports. Left alone if the name
+    already carries its own qualifier from Wisdom (a comma, e.g. 'Moon Under
+    Water, London') — those are already unique. This only changes what's
+    shown on screen; nothing about how pubs are matched internally changes."""
+    if not pub_name:
+        return pub_name
+    if "," in pub_name:
+        return pub_name
+    area = postcode_area(postcode) if postcode else None
+    if area and area != "Unknown":
+        return f"{pub_name} ({area})"
+    return pub_name
+
+
 @app.route("/admin/survey-queue")
 @admin_required
 def admin_survey_queue():
@@ -2035,17 +2094,21 @@ def admin_pub_history():
 
     pubs = {}  # normalised pub key -> accumulated stats
 
-    def get_pub(pkey, display_name):
+    def get_pub(pkey, display_name, postcode=None):
         if pkey not in pubs:
             pubs[pkey] = {
                 "pub_name": display_name,
+                "postcode": postcode,
                 "wins": 0, "losses": 0, "cancellations": 0, "declined": 0,
                 "awaiting_submission": 0, "awaiting_approval": 0,
                 "awaiting_approval_value": 0.0,
                 "trades": defaultdict(int),
             }
-        elif display_name and not pubs[pkey]["pub_name"]:
-            pubs[pkey]["pub_name"] = display_name
+        else:
+            if display_name and not pubs[pkey]["pub_name"]:
+                pubs[pkey]["pub_name"] = display_name
+            if postcode and not pubs[pkey]["postcode"]:
+                pubs[pkey]["postcode"] = postcode
         return pubs[pkey]
 
     # Historic decided outcomes — the permanent record.
@@ -2076,13 +2139,13 @@ def admin_pub_history():
     try:
         cur.execute("""
             SELECT UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
-                   pub_name, trade_type
+                   pub_name, trade_type, postcode
             FROM jobs
             WHERE tab = 'QUOTEREQUEST' AND sub_tab = 'AWAITINGSUBMISSION'
             AND pub_name IS NOT NULL AND TRIM(pub_name) != ''
         """)
         for r in cur.fetchall():
-            p = get_pub(r["pub_key"], r["pub_name"])
+            p = get_pub(r["pub_key"], r["pub_name"], r["postcode"])
             p["awaiting_submission"] += 1
             if r["trade_type"]:
                 p["trades"][r["trade_type"]] += 1
@@ -2095,7 +2158,7 @@ def admin_pub_history():
     try:
         cur.execute("""
             SELECT UPPER(REGEXP_REPLACE(j.pub_name, '[^A-Za-z0-9]', '', 'g')) as pub_key,
-                   j.pub_name, j.trade_type,
+                   j.pub_name, j.trade_type, j.postcode,
                    NULLIF(j.raw_json->>'TotalCost', '')::numeric as wisdom_raw_total,
                    sf.quote_total as sf_quote_total, jwc.total_agreed as wisdom_total_agreed
             FROM jobs j
@@ -2111,7 +2174,7 @@ def admin_pub_history():
             AND j.pub_name IS NOT NULL AND TRIM(j.pub_name) != ''
         """)
         for r in cur.fetchall():
-            p = get_pub(r["pub_key"], r["pub_name"])
+            p = get_pub(r["pub_key"], r["pub_name"], r["postcode"])
             p["awaiting_approval"] += 1
             sf_total = float(r["sf_quote_total"]) if r["sf_quote_total"] else 0.0
             wisdom_raw = float(r["wisdom_raw_total"]) if r["wisdom_raw_total"] else 0.0
@@ -2142,7 +2205,7 @@ def admin_pub_history():
         top_trades = sorted(p["trades"].items(), key=lambda x: x[1], reverse=True)
         total_awaiting_approval_value += p["awaiting_approval_value"]
         pub_list.append({
-            "pub_name": p["pub_name"] or pkey.title(),
+            "pub_name": disambiguate_pub_name(p["pub_name"] or pkey.title(), p.get("postcode")),
             "pub_key": pkey,
             "total_quotes": total_quotes,
             "wins": p["wins"], "losses": p["losses"],
@@ -2203,6 +2266,27 @@ def admin_pub_detail(pkey):
 
     cur.close()
     conn.close()
+
+    # Best-effort postcode lookup (from any live job for this pub) purely to
+    # disambiguate the page title — same-named pubs in different towns.
+    postcode_for_title = None
+    try:
+        conn2 = get_db()
+        cur2 = conn2.cursor()
+        cur2.execute("""
+            SELECT postcode FROM jobs
+            WHERE UPPER(REGEXP_REPLACE(pub_name, '[^A-Za-z0-9]', '', 'g')) = %s
+            AND postcode IS NOT NULL AND TRIM(postcode) != ''
+            LIMIT 1
+        """, (pkey.upper(),))
+        row = cur2.fetchone()
+        postcode_for_title = row["postcode"] if row else None
+        cur2.close()
+        conn2.close()
+    except Exception as e:
+        print(f"pub detail postcode lookup failed: {e}")
+
+    pub_name_display = disambiguate_pub_name(pub_name_display, postcode_for_title)
 
     lost_cancelled_value = sum(o["quote_total"] or 0 for o in outcomes if o["outcome"] in ("lost", "cancelled", "won_then_cancelled"))
 
@@ -4411,18 +4495,9 @@ def admin_survey_pdf(survey_id):
 @admin_required
 def admin_margin():
     period = request.args.get("period", "fy")
+    p_start, p_end, period_label = resolve_period(period)
     fy_start, fy_end, fy_label = fy_bounds()
     today = date.today()
-    if period == "month":
-        p_start = date(today.year, today.month, 1)
-        p_end = today
-        period_label = today.strftime("%B %Y")
-    elif period == "all":
-        p_start = date(2020, 1, 1)
-        p_end = today
-        period_label = "All Time"
-    else:
-        p_start, p_end, period_label = fy_start, fy_end, fy_label
 
     conn = get_db()
     cur = conn.cursor()
@@ -4653,7 +4728,8 @@ def admin_margin():
         avg_payment_delay=avg_payment_delay, pay_delay_sample_size=len(pay_delays),
         paid_count=paid_summary["cnt"], paid_total=float(paid_summary["total"] or 0),
         paid_top_pubs=paid_top_pubs, paid_top_trades=paid_top_trades,
-        paid_period_count=paid_period_summary["cnt"], paid_period_total=float(paid_period_summary["total"] or 0))
+        paid_period_count=paid_period_summary["cnt"], paid_period_total=float(paid_period_summary["total"] or 0),
+        available_months=last_12_months())
 
 
 @app.route("/admin/margin/paid")
@@ -4663,18 +4739,9 @@ def admin_margin_paid():
     Wisdom. Supports pub / trade-type drill-down for customer and location
     analysis, since 'paid' can run into the thousands of rows."""
     period = request.args.get("period", "fy")
+    p_start, p_end, period_label = resolve_period(period)
     fy_start, fy_end, fy_label = fy_bounds()
     today = date.today()
-    if period == "month":
-        p_start = date(today.year, today.month, 1)
-        p_end = today
-        period_label = today.strftime("%B %Y")
-    elif period == "all":
-        p_start = date(2000, 1, 1)
-        p_end = today
-        period_label = "All Time"
-    else:
-        p_start, p_end, period_label = fy_start, fy_end, fy_label
 
     pub_filter = request.args.get("pub", "").strip()
     trade_filter = request.args.get("trade", "").strip()
@@ -4803,7 +4870,8 @@ def admin_margin_paid():
     return render_template("admin_paid_jobs.html", paid_jobs=paid_jobs, by_pub=by_pub, by_trade=by_trade,
         total_count=totals["cnt"], total_spend=float(totals["total"] or 0), site_count=site_count,
         by_trade_scoped_to_pub=by_trade_scoped_to_pub, trade_scope=trade_scope, by_job_type=by_job_type,
-        period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter)
+        period=period, period_label=period_label, pub_filter=pub_filter, trade_filter=trade_filter,
+        available_months=last_12_months())
 
 
 def _pct_change(this_val, last_val):
@@ -4879,6 +4947,45 @@ def _period_series_by_pub(cur, periods):
     return rows
 
 
+def _period_series_by_trade(cur, periods, pub_name=None):
+    """Same as _period_series_by_pub, but grouped by trade type instead of
+    pub — shows which trades as a whole are growing or declining. Pass
+    pub_name to scope the same breakdown to a single pub (used for the
+    'view by pub' drill-down), leave it None for the whole business."""
+    per_period_trade_totals = []
+    all_trades = set()
+    for label, start, end in periods:
+        where = ["status='paid'", "payment_date BETWEEN %s AND %s", "trade_type IS NOT NULL"]
+        params = [start, end]
+        if pub_name:
+            where.append("pub_name = %s")
+            params.append(pub_name)
+        cur.execute(f"""
+            SELECT trade_type, COALESCE(SUM(total_agreed),0) as total, COUNT(*) as cnt
+            FROM job_wetherspoons_costs
+            WHERE {" AND ".join(where)}
+            GROUP BY trade_type
+        """, params)
+        totals = {r["trade_type"]: {"total": float(r["total"] or 0), "cnt": r["cnt"]} for r in cur.fetchall()}
+        per_period_trade_totals.append(totals)
+        all_trades |= set(totals.keys())
+
+    rows = []
+    for trade in all_trades:
+        amounts = [p.get(trade, {}).get("total", 0.0) for p in per_period_trade_totals]
+        cnts = [p.get(trade, {}).get("cnt", 0) for p in per_period_trade_totals]
+        steps = []
+        for i in range(1, len(amounts)):
+            steps.append({
+                "delta": amounts[i] - amounts[i - 1],
+                "pct": _pct_change(amounts[i], amounts[i - 1]),
+            })
+        latest_delta = steps[-1]["delta"] if steps else None
+        rows.append({"trade_type": trade, "amounts": amounts, "cnts": cnts, "steps": steps, "delta": latest_delta})
+    rows.sort(key=lambda r: abs(r["delta"] or 0), reverse=True)
+    return rows
+
+
 @app.route("/admin/growth")
 @admin_required
 def admin_growth():
@@ -4906,6 +5013,10 @@ def admin_growth():
         sel_year, sel_month = today.year, today.month
     selected_month = f"{sel_year}-{sel_month:02d}"
 
+    # Optional pub scope — when set, the trade breakdown below shows that
+    # one pub's trades growing/declining instead of the whole business.
+    pub_filter = request.args.get("pub", "").strip()
+
     conn = get_db()
     cur = conn.cursor()
 
@@ -4918,6 +5029,7 @@ def admin_growth():
         month_periods.append((start.strftime("%b %Y"), start, end))
     month_series = _period_series(cur, month_periods)
     month_by_pub = _period_series_by_pub(cur, month_periods)
+    month_by_trade = _period_series_by_trade(cur, month_periods, pub_name=pub_filter or None)
     month_col_labels = [p[0] for p in month_periods]
 
     # --- FY-to-date comparison: 3 years, same days-into-year cutoff ---
@@ -4931,7 +5043,15 @@ def admin_growth():
         fy_periods.append((label, fy_start_n, fy_end_n))
     fy_series = _period_series(cur, fy_periods)
     fy_by_pub = _period_series_by_pub(cur, fy_periods)
+    fy_by_trade = _period_series_by_trade(cur, fy_periods, pub_name=pub_filter or None)
     fy_col_labels = [p[0] for p in fy_periods]
+
+    # Distinct pub list for the "view by pub" trade drill-down selector.
+    cur.execute("""
+        SELECT DISTINCT pub_name FROM job_wetherspoons_costs
+        WHERE status='paid' AND pub_name IS NOT NULL ORDER BY pub_name
+    """)
+    all_pub_names = [r["pub_name"] for r in cur.fetchall()]
 
     # --- Monthly data source (3 years back, April-aligned) — feeds BOTH
     # the trend chart below (2-year) and the full monthly matrix table
@@ -4991,6 +5111,8 @@ def admin_growth():
         selected_month=selected_month,
         month_series=month_series, month_col_labels=month_col_labels, month_by_pub=month_by_pub,
         fy_series=fy_series, fy_col_labels=fy_col_labels, fy_by_pub=fy_by_pub,
+        month_by_trade=month_by_trade, fy_by_trade=fy_by_trade,
+        pub_filter=pub_filter, all_pub_names=all_pub_names,
         trend=trend, trend_max=trend_max,
         monthly_matrix=monthly_matrix, matrix_col_labels=matrix_col_labels)
 
@@ -5005,19 +5127,45 @@ def admin_reports():
 @app.route("/api/reports/summary")
 @admin_required
 def api_reports_summary():
-    """Headline numbers for the reports dashboard."""
+    """Headline numbers for the reports dashboard. Filtered by year (and
+    optionally a specific month within it) via ?year=2026&month=2026-08 —
+    anchored on the outcome's decision date (t3_decision), falling back to
+    detected_at for older rows backfilled before that field was captured.
+    Pipeline (still-open quotes) and Quote Machine flags are deliberately
+    NOT year-filtered — both describe the current state of things, not a
+    historic period, same reasoning as the 'right now' pipeline snapshot on
+    Reports & Margin."""
+    year_param = request.args.get("year", "").strip()
+    month_param = request.args.get("month", "").strip()
+    today = date.today()
+    try:
+        selected_year = int(year_param) if year_param else today.year
+    except ValueError:
+        selected_year = today.year
+
+    if re.match(r"^\d{4}-\d{2}$", month_param):
+        y, m = [int(x) for x in month_param.split("-")]
+        date_start = date(y, m, 1)
+        date_end = date(y, m, calendar.monthrange(y, m)[1])
+    else:
+        date_start = date(selected_year, 1, 1)
+        date_end = date(selected_year, 12, 31)
+
     conn = get_db()
     cur = conn.cursor()
     try:
-        # Win/loss counts
-        cur.execute("""
+        decision_date = "COALESCE(t3_decision, detected_at)"
+
+        # Win/loss/cancelled counts, within the selected period.
+        cur.execute(f"""
             SELECT outcome, COUNT(*) as cnt
             FROM quote_outcomes
+            WHERE {decision_date} BETWEEN %s AND %s
             GROUP BY outcome
-        """)
+        """, (date_start, date_end))
         outcome_counts = {r["outcome"]: r["cnt"] for r in cur.fetchall()}
 
-        # Pipeline value (awaiting approval)
+        # Pipeline value (awaiting approval) — current snapshot, not period-filtered.
         cur.execute("""
             SELECT COUNT(*) as cnt, COALESCE(SUM(sf.quote_total),0) as value
             FROM survey_forms sf
@@ -5025,24 +5173,28 @@ def api_reports_summary():
         """)
         pipeline = cur.fetchone()
 
-        # Total won value
-        cur.execute("""
+        # Total won value, within the selected period.
+        cur.execute(f"""
             SELECT COALESCE(SUM(sf.quote_total),0) as value
             FROM survey_forms sf
-            WHERE sf.status = 'won'
-        """)
+            JOIN quote_outcomes qo ON qo.survey_form_id = sf.id
+            WHERE qo.outcome = 'won' AND {decision_date.replace('t3_decision','qo.t3_decision').replace('detected_at','qo.detected_at')} BETWEEN %s AND %s
+        """, (date_start, date_end))
         won_value = cur.fetchone()
 
-        # Average time to survey (T0 -> T1) in days
+        # Average time to survey (T0 -> T1) in days, within the period.
         cur.execute("""
             SELECT AVG(EXTRACT(EPOCH FROM (sf.submitted_at - j.first_seen))/86400) as avg_days
             FROM survey_forms sf
             JOIN jobs j ON j.job_id = sf.job_id OR j.display_id = sf.job_id
             WHERE sf.submitted_at IS NOT NULL AND j.first_seen IS NOT NULL
-        """)
+            AND sf.submitted_at BETWEEN %s AND %s
+        """, (date_start, date_end))
         avg_survey_time = cur.fetchone()
 
-        # Quote machine sites (3+ surveys, 0 wins)
+        # Quote machine sites (3+ surveys, 0 wins) — current all-time
+        # pattern, not period-filtered; this is about a pub's behaviour
+        # overall, not what happened in one selected year.
         cur.execute("""
             SELECT pub_name, COUNT(*) as surveys
             FROM survey_forms
@@ -5054,61 +5206,75 @@ def api_reports_summary():
         """)
         quote_machines = [dict(r) for r in cur.fetchall()]
 
-        # Lost reasons breakdown
-        cur.execute("""
+        # Lost reasons breakdown, within the selected period.
+        cur.execute(f"""
             SELECT wisdom_reason, COUNT(*) as cnt
             FROM quote_outcomes
             WHERE outcome='lost' AND wisdom_reason IS NOT NULL AND wisdom_reason != ''
+            AND {decision_date} BETWEEN %s AND %s
             GROUP BY wisdom_reason
             ORDER BY cnt DESC
             LIMIT 10
-        """)
+        """, (date_start, date_end))
         lost_reasons = [dict(r) for r in cur.fetchall()]
 
-        # Win/loss by trade type
-        cur.execute("""
+        # Win/loss by trade type, within the selected period.
+        cur.execute(f"""
             SELECT trade_type,
                    SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
                    SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses,
                    SUM(CASE WHEN outcome='cancelled' THEN 1 ELSE 0 END) as cancellations
             FROM quote_outcomes
             WHERE trade_type IS NOT NULL AND trade_type != ''
+            AND {decision_date} BETWEEN %s AND %s
             GROUP BY trade_type
             ORDER BY (wins + losses + cancellations) DESC
             LIMIT 10
-        """)
+        """, (date_start, date_end))
         by_trade = [dict(r) for r in cur.fetchall()]
 
-        # Monthly win trend (last 12 months)
-        cur.execute("""
-            SELECT TO_CHAR(t3_decision,'YYYY-MM') as month,
+        # Monthly win/loss trend — every month of the SELECTED year (Jan-Dec),
+        # not a rolling 12 months, so the chart matches the year tab chosen.
+        cur.execute(f"""
+            SELECT TO_CHAR({decision_date},'YYYY-MM') as month,
                    SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) as wins,
                    SUM(CASE WHEN outcome='lost' THEN 1 ELSE 0 END) as losses
             FROM quote_outcomes
-            WHERE t3_decision >= NOW() - INTERVAL '12 months'
+            WHERE {decision_date} BETWEEN %s AND %s
             GROUP BY month ORDER BY month
-        """)
-        monthly_trend = [dict(r) for r in cur.fetchall()]
+        """, (date(selected_year, 1, 1), date(selected_year, 12, 31)))
+        trend_by_month = {r["month"]: r for r in cur.fetchall()}
+        monthly_trend = []
+        for m in range(1, 13):
+            key = f"{selected_year}-{m:02d}"
+            r = trend_by_month.get(key)
+            monthly_trend.append({
+                "month": date(selected_year, m, 1).strftime("%b"),
+                "wins": r["wins"] if r else 0,
+                "losses": r["losses"] if r else 0,
+            })
 
-        # Cancellations this year
-        cur.execute("""
+        # Cancellations within the selected period.
+        cur.execute(f"""
             SELECT COUNT(*) as cnt
             FROM quote_outcomes
             WHERE outcome='cancelled'
-            AND EXTRACT(YEAR FROM detected_at) = EXTRACT(YEAR FROM NOW())
-        """)
+            AND {decision_date} BETWEEN %s AND %s
+        """, (date_start, date_end))
         cancellations_ytd = cur.fetchone()
 
-        # Survey cost estimate (mileage @ 45p + 4hrs @ day_rate/8 per survey)
+        # Survey cost estimate, within the selected period.
         cur.execute("""
             SELECT COUNT(*) as cnt,
                    COALESCE(SUM(survey_mileage * 0.45), 0) as mileage_cost
             FROM survey_forms
             WHERE survey_mileage IS NOT NULL AND survey_mileage > 0
-        """)
+            AND submitted_at BETWEEN %s AND %s
+        """, (date_start, date_end))
         survey_costs = cur.fetchone()
 
         return jsonify({
+            "selected_year": selected_year,
             "wins":          outcome_counts.get("won", 0),
             "losses":        outcome_counts.get("lost", 0),
             "cancellations": outcome_counts.get("cancelled", 0),
@@ -5135,18 +5301,48 @@ def api_reports_summary():
 @app.route("/api/reports/outcomes")
 @admin_required
 def api_reports_outcomes():
-    """Full list of outcomes for the detail table."""
+    """Full list of outcomes for the detail table. Filtered the same way as
+    /api/reports/summary — ?year=2026&month=2026-08 — so the table always
+    matches whatever the KPIs and charts above it are showing."""
+    year_param = request.args.get("year", "").strip()
+    month_param = request.args.get("month", "").strip()
+    today = date.today()
+    try:
+        selected_year = int(year_param) if year_param else today.year
+    except ValueError:
+        selected_year = today.year
+
+    if re.match(r"^\d{4}-\d{2}$", month_param):
+        y, m = [int(x) for x in month_param.split("-")]
+        date_start = date(y, m, 1)
+        date_end = date(y, m, calendar.monthrange(y, m)[1])
+    else:
+        date_start = date(selected_year, 1, 1)
+        date_end = date(selected_year, 12, 31)
+
     conn = get_db()
     cur = conn.cursor()
     try:
+        # Postcode pulled via a best-effort LATERAL match on pub name, purely
+        # to disambiguate identically-named pubs in different towns on
+        # screen — matching logic for outcomes/win-rates elsewhere is
+        # untouched by this.
         cur.execute("""
             SELECT qo.*, sf.quote_total, sf.submitted_at as survey_date,
-                   sf.scope_of_works
+                   sf.scope_of_works, jpc.postcode
             FROM quote_outcomes qo
             LEFT JOIN survey_forms sf ON sf.id = qo.survey_form_id
+            LEFT JOIN LATERAL (
+                SELECT postcode FROM jobs j2
+                WHERE UPPER(REGEXP_REPLACE(j2.pub_name, '[^A-Za-z0-9]', '', 'g'))
+                      = UPPER(REGEXP_REPLACE(qo.pub_name, '[^A-Za-z0-9]', '', 'g'))
+                AND j2.postcode IS NOT NULL AND TRIM(j2.postcode) != ''
+                LIMIT 1
+            ) jpc ON true
+            WHERE COALESCE(qo.t3_decision, qo.detected_at) BETWEEN %s AND %s
             ORDER BY qo.detected_at DESC
             LIMIT 200
-        """)
+        """, (date_start, date_end))
         rows = []
         for r in cur.fetchall():
             row = dict(r)
@@ -5155,6 +5351,7 @@ def api_reports_outcomes():
             # historic ones (no survey form exists for those) get it from
             # the approval email we captured it from.
             row["value"] = float(row.get("quote_total") or row.get("email_approved_value") or 0)
+            row["pub_name"] = disambiguate_pub_name(row.get("pub_name"), row.get("postcode"))
             for k in ["t0_released","t1_surveyed","t2_quote_uploaded",
                       "t3_decision","t4_completed","detected_at","created_at",
                       "updated_at","survey_date"]:
